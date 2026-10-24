@@ -96,3 +96,33 @@ model SeoRankObservation {
   @@index([shop, observedAt])
   @@index([shop, keyword])
 }
+
+model StoreRecommendation {
+  id           String   @id @default(cuid())
+  shop         String
+  sourceKey    String
+  agent        String
+  kind         String
+  targetId     String
+  title        String
+  rationale    String
+  evidence     String   @default("")
+  priority     Int      @default(50)
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  decidedAt    DateTime?
+  @@unique([shop, sourceKey])
+  @@index([shop, status, priority])
+}
+
+model StoreActivity {
+  id                String   @id @default(cuid())
+  shop              String
+  recommendationId  String?
+  action            String
+  outcome           String
+  detail            String   @default("")
+  createdAt         DateTime @default(now())
+  @@index([shop, createdAt])
+}

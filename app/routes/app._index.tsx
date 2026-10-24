@@ -106,7 +106,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }).catch(error => console.error("Could not sync manager inbox", error));
       }
       await logStoreAction(shop, null, "article.publish", result.ok ? "applied" : "reconciliation_required",
-        result.message).catch(error => console.error("Could not append store activity", error));
+        result.message, session.userId?.toString()).catch(error => console.error("Could not append store activity", error));
       return result;
     }
     return { ok: false, message: "Unknown action." };

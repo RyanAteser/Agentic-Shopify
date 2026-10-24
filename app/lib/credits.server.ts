@@ -1,6 +1,6 @@
 import db from "../db.server";
 
-export const FREE_LIFETIME_GENERATIONS = 3;
+import { FREE_LIFETIME_GENERATIONS } from "./pricing";
 
 /**
  * Reserve a lifetime Free-plan credit atomically before creating a job.

@@ -1,6 +1,6 @@
 import db from "../db.server";
 
-type Admin = {graphql: (query:string,options?:unknown)=>Promise<{json:()=>Promise<any>}>};
+type Admin = {graphql: (...args:any[])=>Promise<any>};
 
 /**
  * The only article publisher; called on a verified merchant POST, never by n8n.

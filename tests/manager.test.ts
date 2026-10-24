@@ -27,6 +27,10 @@ test("manager ranks factual SEO findings, editorial drafts and comparable rank d
    {keyword:"boots",position:1,observedAt:new Date("2026-10-24"),country:"CA",device:"desktop",engine:"google",targetUrl:"https://store.example/boots"},
  ]);
  assert.equal(ranked.length,1);
+ assert.equal(buildRankTasks([
+   {keyword:"old keyword",position:12,observedAt:new Date("2026-07-01"),country:"US",device:"desktop",engine:"google",targetUrl:"https://store.example/a"},
+   {keyword:"old keyword",position:2,observedAt:new Date("2026-06-30"),country:"US",device:"desktop",engine:"google",targetUrl:"https://store.example/a"},
+ ],new Date("2026-10-24")).length,0);
  assert.match(ranked[0].rationale,/from 4 to 11/);
  assert.equal(buildRankTasks([{keyword:"test",position:null,observedAt:new Date(),country:"US",device:"mobile",engine:"google",targetUrl:""}]).length,0);
 });

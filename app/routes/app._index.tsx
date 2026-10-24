@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { dispatchArticleJob } from "../lib/agent.server";
+import { createCreditedJob, failCreditedJob, FREE_LIFETIME_GENERATIONS } from "../lib/credits.server";
 
 function value(form: FormData, key: string, max = 500) {
   return String(form.get(key) ?? "").trim().slice(0, max);
@@ -72,12 +73,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         where: { shop, status: { in: ["queued", "running"] }, createdAt: { gte: new Date(Date.now() - 3_600_000) } },
       });
       if (pending >= 3) return { ok: false, message: "Three drafts are already queued. Try again after they finish." };
-      const job = await db.contentJob.create({ data: { shop, topic } });
+      const job = await createCreditedJob(shop, topic);
       try {
         await dispatchArticleJob(job.id, shop);
         return { ok: true, message: "Draft requested. Refresh shortly to see the completed article." };
       } catch (error) {
-        await db.contentJob.update({ where: { id: job.id }, data: { status: "failed", error: String(error).slice(0, 400) } });
+        await failCreditedJob(shop, job.id, error);
         throw error;
       }
     }
@@ -159,6 +160,7 @@ export default function BlogAgent() {
       </Form>
     </s-section>
     <s-section heading="Request a blog draft">
+      <p>Free plan: {Math.max(0, FREE_LIFETIME_GENERATIONS - config.freeDraftsUsed)} of {FREE_LIFETIME_GENERATIONS} lifetime generations remaining. Paid subscriptions will be enabled after Shopify billing setup.</p>
       <Form method="post" style={{display:"flex",gap:10,flexWrap:"wrap"}}>
         <input type="hidden" name="intent" value="generate"/>
         <input name="topic" minLength={6} maxLength={140} placeholder="e.g. How to choose a shade for ..." style={{minWidth:300,flex:1}} required/>

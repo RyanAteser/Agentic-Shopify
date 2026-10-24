@@ -41,6 +41,7 @@ model StoreConfig {
   brandVoice       String   @default("")
   seedTopics       String   @default("")
   cadenceDays      Int      @default(7)
+  topicCursor       Int      @default(0)
   nextRunAt        DateTime?
   enabled          Boolean  @default(false)
   createdAt        DateTime @default(now())

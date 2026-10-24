@@ -18,12 +18,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const next = new Date(now.getTime() + cadence * 86400000);
     const claimed = await db.storeConfig.updateMany({
       where: { shop: config.shop, enabled: true, nextRunAt: config.nextRunAt },
-      data: { nextRunAt: next },
+      data: { nextRunAt: next, topicCursor: { increment: 1 } },
     });
     if (!claimed.count) continue;
     const topics = config.seedTopics.split(",").map(t => t.trim()).filter(Boolean);
     const topic = topics.length
-      ? topics[Math.floor(now.getTime() / 86400000) % topics.length]
+      ? topics[config.topicCursor % topics.length]
       : "Helpful practical guide for " + (config.audience || "our customers");
     const job = await db.contentJob.create({ data: { shop: config.shop, topic: topic.slice(0, 140) } });
     try {

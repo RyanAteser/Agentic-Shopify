@@ -4,7 +4,8 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { dispatchArticleJob } from "../lib/agent.server";
-import { createCreditedJob, failCreditedJob, FREE_LIFETIME_GENERATIONS } from "../lib/credits.server";
+import { createCreditedJob, failCreditedJob } from "../lib/credits.server";
+import { FREE_LIFETIME_GENERATIONS } from "../lib/pricing";
 
 function value(form: FormData, key: string, max = 500) {
   return String(form.get(key) ?? "").trim().slice(0, max);

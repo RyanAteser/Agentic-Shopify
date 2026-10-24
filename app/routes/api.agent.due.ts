@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import db from "../db.server";
 import { authorizedBridge, dispatchArticleJob } from "../lib/agent.server";
+import { createCreditedJob, failCreditedJob } from "../lib/credits.server";
 
 // Called hourly by an authenticated n8n Schedule Trigger.
 // Lock each due row by comparing its existing nextRunAt before advancing it.
@@ -25,12 +26,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const topic = topics.length
       ? topics[config.topicCursor % topics.length]
       : "Helpful practical guide for " + (config.audience || "our customers");
-    const job = await db.contentJob.create({ data: { shop: config.shop, topic: topic.slice(0, 140) } });
+    let job;
+    try { job = await createCreditedJob(config.shop, topic.slice(0, 140)); }
+    catch { continue; }
     try {
       await dispatchArticleJob(job.id, config.shop);
       launched++;
     } catch (error) {
-      await db.contentJob.update({ where: { id: job.id }, data: { status: "failed", error: String(error).slice(0, 400) } });
+      await failCreditedJob(config.shop, job.id, error);
       console.error("Scheduled blog dispatch failed for", config.shop);
     }
   }

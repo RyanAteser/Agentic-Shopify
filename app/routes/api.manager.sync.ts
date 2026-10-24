@@ -1,8 +1,8 @@
 import type { ActionFunctionArgs } from "react-router";
-import { authenticate } from "../shopify.server";
+import { unauthenticated } from "../shopify.server";
 import db from "../db.server";
 import { authorizedBridge } from "../lib/agent.server";
-import { readMerchantProductSample, syncManagerTasks, logStoreAction } from "../lib/manager.server";
+import { readMerchantProductSample, syncManagerTasks } from "../lib/manager.server";
 
 /**
  * Read-only background coordinator. n8n may invoke this route, but cannot
@@ -27,7 +27,6 @@ export const action=async ({request}:ActionFunctionArgs)=>{
     if(!claimed.count)continue;
     try{
       // Offline Admin requires a previously authorized merchant session.
-      const {unauthenticated}=await import("../shopify.server");
       const {admin}=await unauthenticated.admin(config.shop);
       const {products,warning}=await readMerchantProductSample(admin);
       const count=await syncManagerTasks(config.shop,products);

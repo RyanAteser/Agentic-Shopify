@@ -32,7 +32,7 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
 export const action=async ({request}:ActionFunctionArgs)=>{
   const {admin,session}=await authenticate.admin(request);
   const shop=session.shop;
-  const actorId=session.userId?.toString();
+  const actorId=String(session.onlineAccessInfo?.id ?? session.id);
   const form=await request.formData();
   const intent=String(form.get("intent")||"");
   const id=String(form.get("id")||"").slice(0,120);

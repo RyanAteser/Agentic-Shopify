@@ -14,7 +14,7 @@ export default function Team() {
     <s-section heading="Store operating system">
       <p>Shop: {shop}</p>
       <p>This directory describes the platform roadmap. A prototype is not a connected or running agent. Changes to live store content require merchant review; prohibited operations stay blocked.</p>
-      <p><Link to="/app">Open Blog Agent</Link> · <Link to="/app/seo">Open SEO workspace</Link></p>
+      <p><Link to="/app/manager">Open Store Manager</Link> · <Link to="/app">Open Blog Agent</Link> · <Link to="/app/seo">Open SEO workspace</Link></p>
     </s-section>
     <s-section heading="Specialist agents">
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:12}}>

@@ -49,6 +49,6 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[]) {
   return tasks.length;
 }
 
-export async function logStoreAction(shop:string,recommendationId:string|null,action:string,outcome:string,detail="") {
-  await db.storeActivity.create({data:{shop,recommendationId,action,outcome,detail:detail.slice(0,500)}});
+export async function logStoreAction(shop:string,recommendationId:string|null,action:string,outcome:string,detail="",actorId?:string) {
+  await db.storeActivity.create({data:{shop,recommendationId,action,outcome,actorId,detail:detail.slice(0,500)}});
 }

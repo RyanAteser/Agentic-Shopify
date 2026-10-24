@@ -29,3 +29,14 @@ test("hourly scheduler is inert until configured", () => {
   assert.ok(raw.includes("YOUR-PUBLISHED-SHOPIFY-APP.example"));
   assert.ok(raw.includes("httpHeaderAuth"));
 });
+
+test("Store Manager hourly workflow only calls the bounded read-only task refresh endpoint",()=>{
+  const raw=readFileSync("n8n/shopify-store-manager.json","utf8");
+  const workflow=load("n8n/shopify-store-manager.json");
+  assert.equal(workflow.active,false);
+  assert.equal(workflow.nodes.length,2);
+  assert.ok(raw.includes("/api/manager/sync"));
+  assert.ok(raw.includes("httpHeaderAuth"));
+  assert.doesNotMatch(raw,/shpat_[a-zA-Z0-9]{12,}/);
+  assert.doesNotMatch(raw,/\bsk-proj-[a-zA-Z0-9]{12,}/);
+});

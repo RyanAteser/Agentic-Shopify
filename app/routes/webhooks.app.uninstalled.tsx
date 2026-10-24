@@ -4,6 +4,8 @@ import db from "../db.server";
 export const action = async ({request}:ActionFunctionArgs) => {
  const {shop} = await authenticate.webhook(request);
  await db.$transaction([
+   db.storeActivity.deleteMany({where:{shop}}),
+   db.storeRecommendation.deleteMany({where:{shop}}),
    db.articleDraft.deleteMany({where:{shop}}),
    db.seoRankObservation.deleteMany({where:{shop}}),
    db.contentJob.deleteMany({where:{shop}}),

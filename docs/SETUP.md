@@ -27,7 +27,8 @@ In **n8n**, import both `n8n/*.json` workflows and connect credentials:
 ## 3. Safe smoke test
 1. Ensure the app was granted `read_products` so the agent can ground product links in actual published catalog URLs. No customer order data is required.
 2. In your dev Shopify store, save the correct blog and merchant brief.
-3. Leave `Automatically create drafts` unchecked; request one draft manually.
+3. Note that the Free plan allows three lifetime generations; paid plans remain disabled until Shopify App Pricing integration.
+4. Leave `Automatically create drafts` unchecked; request one draft manually.
 3. Inspect the n8n run: intake -> first-pass writer -> editorial rewrite -> callback. No Shopify credentials should appear in the execution.
 4. Check the resulting draft and structural score in the app. Missing essentials should get `needs_review`.
 5. Test reject with feedback, generate another draft, and confirm the next brief includes the rejection reason.

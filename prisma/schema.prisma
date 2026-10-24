@@ -79,3 +79,20 @@ model ArticleDraft {
   updatedAt        DateTime @updatedAt
   @@index([shop, status])
 }
+
+model SeoRankObservation {
+  id          String   @id @default(cuid())
+  shop        String
+  keyword     String
+  engine      String   @default("google")
+  country     String   @default("US")
+  device      String   @default("desktop")
+  position    Int?
+  targetUrl   String   @default("")
+  source      String   @default("brightdata-serp")
+  observedAt  DateTime
+  receivedAt  DateTime @default(now())
+  @@unique([shop, keyword, engine, country, device, observedAt])
+  @@index([shop, observedAt])
+  @@index([shop, keyword])
+}

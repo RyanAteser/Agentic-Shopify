@@ -1,4 +1,5 @@
 import db from "../db.server";
+import * as crypto from "node:crypto";
 
 export async function dispatchArticleJob(jobId: string, shop: string) {
   const config = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
@@ -43,7 +44,7 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
     signal: AbortSignal.timeout(12_000),
   });
   if (!response.ok) throw new Error("n8n rejected generation request (" + response.status + ")");
-  await db.contentJob.update({ where: { id: jobId }, data: { status: "running" } });
+  await db.contentJob.updateMany({ where: { id: jobId, status: "queued" }, data: { status: "running" } });
 }
 
 export function authorizedBridge(request: Request) {
@@ -51,11 +52,8 @@ export function authorizedBridge(request: Request) {
   const expected = process.env.N8N_CALLBACK_SECRET ?? "";
   if (!actual || !expected) return false;
   // Constant-time comparison with equal-sized digests.
-  const crypto = requireCrypto();
   const left = crypto.createHash("sha256").update(actual).digest();
   const right = crypto.createHash("sha256").update(expected).digest();
   return crypto.timingSafeEqual(left, right);
 }
 
-import * as crypto from "node:crypto";
-function requireCrypto() { return crypto; }

@@ -28,7 +28,7 @@ export function buildBlogTasks(drafts:DraftLike[]):SuggestedTask[] {
     priority:d.status==="ready" && d.seoScore>=70?75:55,
   }));
 }
-export function buildRankTasks(records: RankLike[]):SuggestedTask[] {
+export function buildRankTasks(records: RankLike[], now=new Date()):SuggestedTask[] {
   // Compare equal keyword+country+device+engine only; ignore stale or incomparable observations.
   const groups=new Map<string,RankLike[]>();
   for(const r of records){
@@ -41,6 +41,7 @@ export function buildRankTasks(records: RankLike[]):SuggestedTask[] {
       .filter((r,i,arr)=>i===0||r.observedAt.getTime()!==arr[i-1].observedAt.getTime());
     const latest=distinct[0],previous=distinct[1];
     if(!latest||!previous||latest.position===null||previous.position===null) continue;
+    if(now.getTime()-latest.observedAt.getTime()>14*86400000)continue;
     if(latest.observedAt.getTime()-previous.observedAt.getTime()>28*86400000)continue;
     const lost=latest.position-previous.position;
     if(lost<3)continue;

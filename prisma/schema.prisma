@@ -121,6 +121,7 @@ model StoreActivity {
   id                String   @id @default(cuid())
   shop              String
   recommendationId  String?
+  actorId           String?
   action            String
   outcome           String
   detail            String   @default("")

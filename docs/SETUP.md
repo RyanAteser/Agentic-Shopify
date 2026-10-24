@@ -24,6 +24,10 @@ In **n8n**, import both `n8n/*.json` workflows and connect credentials:
 - Replace the placeholder URL in Scheduled Dispatcher > Request Due Drafts with your real `https://YOUR_APP_HOST/api/agent/due`.
 - Save and **publish** the n8n workflows to activate production webhook and hourly schedule. The app's webhook URL must use the production webhook path, not the ephemeral test URL.
 
+### SEO agent integration
+
+The ranking workflow shown in the merchant-provided n8n screenshot can send normalized Bright Data SERP observations to `/api/seo/rankings`. Configure `N8N_RANKING_SECRET` in the app server and outbound n8n Header Auth credential, then follow `docs/SEO-AGENTS.md`. The `/app/seo` workspace is read-only and only displays source-backed ranking snapshots. The `/app/team` directory represents code status, not live activity.
+
 ## 3. Safe smoke test
 1. Ensure the app was granted `read_products` so the agent can ground product links in actual published catalog URLs. No customer order data is required.
 2. In your dev Shopify store, save the correct blog and merchant brief.

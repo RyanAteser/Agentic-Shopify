@@ -53,7 +53,7 @@ export const action=async ({request}:ActionFunctionArgs)=>{
       }
       const result=await publishApprovedArticle(shop,task.targetId,admin);
       if(result.ok){
-        await db.storeRecommendation.updateMany({where:{id,shop,status:"pending"},data:{status:"applied",decidedAt:new Date()}});
+        await db.storeRecommendation.updateMany({where:{id,shop,status:"pending"},data:{status:"applied",decidedAt:new Date()}}).catch(error=>console.error("Published article inbox sync failed",error));
       }
       await logStoreAction(shop,id,"article.publish",result.ok?"applied":"reconciliation_required",result.message,actorId).catch(error=>console.error("Activity recording failed",error));
       return result;

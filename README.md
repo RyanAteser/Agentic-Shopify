@@ -14,3 +14,11 @@ See [setup](docs/SETUP.md). Run with Node >=22.12 and Shopify CLI.
 - `/app/team` team directory and `/app/seo` read-only product SEO audit / ranking history.
 
 Only the Blog Agent is a substantive code prototype; other specialist agents are in development or planned. Neither Shopify OAuth nor n8n is connected in the repository, and there are no confirmed live autonomous store actions. Review n8n's commercial use conditions before exposing configurable automation to merchants.
+
+## Store Manager · Unified Inbox
+
+- `/app/manager`: shop-scoped, prioritized tasks from Blog Agent, SEO catalog checks and observed Bright Data keyword drops, with explicit merchant review, dismissals, historical decisions and guarded blog publishing.
+- `n8n/shopify-store-manager.json`: optional hourly schedule asking the app to refresh up to 10 shops' **read-only** recommendations. Inactive until imported and secured.
+- `app/routes/api.manager.sync.ts`: secret-authenticated server task coordinator, zero Shopify mutation privileges; requires active merchant installations.
+- An SEO recommendation accepted by the merchant is **not** automatically applied to Shopify. Publishing blog posts still requires merchant verification and consent.
+- Setup: [Store Manager](docs/MANAGER-SETUP.md) and [Store OS](docs/STORE_OS.md).

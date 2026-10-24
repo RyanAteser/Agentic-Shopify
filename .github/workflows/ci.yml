@@ -13,6 +13,7 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npx prisma generate
+      - run: npx prisma db push --skip-generate
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

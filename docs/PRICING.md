@@ -1,12 +1,12 @@
 # Agentic Shopify — Pricing & Unit Economics (proposal, 2026-10-24)
 
-**Status: pricing proposal only.** Billing and subscription enforcement are NOT activated in this branch. No paid merchant plans exist yet.
+**Status: pricing proposal only.** Paid billing and subscription enforcement are NOT activated in this branch. Free-plan usage is capped at three lifetime generations, reserved server-side. No paid merchant plans exist yet.
 
 ## Merchants pay for managed content outcomes, not workflow nodes
 
 | Plan | Monthly USD | Draft generations | Positioning | Ship gate |
 | --- | ---: | ---: | --- | --- |
-| Free | 0 | 3 lifetime | Trial and brand setup | MVP (must implement server-side quota) |
+| Free | 0 | 3 lifetime | Trial and brand setup | MVP (atomic Free-plan reservation implemented) |
 | Starter | 19 | 15/month | Weekly content workflow | Only after end-to-end QA |
 | Growth | 39 | 50/month | Shop catalog & performance-led refresh | Requires Search Console + product linking |
 | Scale | 99 | 150/month | High-volume operators | Requires robust workflow reliability, reporting & quota enforcement |

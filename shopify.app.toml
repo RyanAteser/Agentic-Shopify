@@ -1,0 +1,12 @@
+# Link to your Shopify app with "npm run config:link".
+client_id = ""
+[access_scopes]
+scopes = "write_content"
+[webhooks]
+api_version = "2026-10"
+[[webhooks.subscriptions]]
+uri = "/webhooks/app/uninstalled"
+topics = ["app/uninstalled"]
+[[webhooks.subscriptions]]
+uri = "/webhooks/app/scopes_update"
+topics = ["app/scopes_update"]

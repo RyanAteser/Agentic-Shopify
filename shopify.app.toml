@@ -1,7 +1,7 @@
 # Link to your Shopify app with "npm run config:link".
 client_id = ""
 [access_scopes]
-scopes = "write_content"
+scopes = "write_content,read_products"
 [webhooks]
 api_version = "2026-10"
 [[webhooks.subscriptions]]

@@ -6,7 +6,7 @@ Starter implementation committed to the `feat/n8n-shopify-blog-agent` branch. Ne
 ## 1. Shopify app
 - Use Node.js 22.12+ and Shopify CLI. Install dependencies with `npm install`, then run `npx prisma db push` for a local prototype (not production migration strategy).
 - Create a Shopify dev store and link a new app via `npm run config:link` or the current Shopify CLI creation flow.
-- Verify `shopify.app.toml` has `write_content`, API version 2026-10, and URLs matching your hosted app. Run `npm run dev` to install into the development store.
+- Verify `shopify.app.toml` has `write_content,read_products`, API version 2026-10, and URLs matching your hosted app. Run `npm run dev` to install into the development store.
 - Create or select an existing Shopify blog. Configure audience, brand voice, author and seed topics in the embedded app.
 
 ## 2. Credentials: never commit real values
@@ -25,8 +25,9 @@ In **n8n**, import both `n8n/*.json` workflows and connect credentials:
 - Save and **publish** the n8n workflows to activate production webhook and hourly schedule. The app's webhook URL must use the production webhook path, not the ephemeral test URL.
 
 ## 3. Safe smoke test
-1. In your dev Shopify store, save the correct blog and merchant brief.
-2. Leave `Automatically create drafts` unchecked; request one draft manually.
+1. Ensure the app was granted `read_products` so the agent can ground product links in actual published catalog URLs. No customer order data is required.
+2. In your dev Shopify store, save the correct blog and merchant brief.
+3. Leave `Automatically create drafts` unchecked; request one draft manually.
 3. Inspect the n8n run: intake -> first-pass writer -> editorial rewrite -> callback. No Shopify credentials should appear in the execution.
 4. Check the resulting draft and structural score in the app. Missing essentials should get `needs_review`.
 5. Test reject with feedback, generate another draft, and confirm the next brief includes the rejection reason.

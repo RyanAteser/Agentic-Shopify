@@ -32,6 +32,7 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
 export const action=async ({request}:ActionFunctionArgs)=>{
   const {admin,session}=await authenticate.admin(request);
   const shop=session.shop;
+  const actorId=session.userId?.toString();
   const form=await request.formData();
   const intent=String(form.get("intent")||"");
   const id=String(form.get("id")||"").slice(0,120);
@@ -54,14 +55,14 @@ export const action=async ({request}:ActionFunctionArgs)=>{
       if(result.ok){
         await db.storeRecommendation.updateMany({where:{id,shop,status:"pending"},data:{status:"applied",decidedAt:new Date()}});
       }
-      await logStoreAction(shop,id,"article.publish",result.ok?"applied":"reconciliation_required",result.message);
+      await logStoreAction(shop,id,"article.publish",result.ok?"applied":"reconciliation_required",result.message,actorId).catch(error=>console.error("Activity recording failed",error));
       return result;
     }
     if(intent==="dismiss"){
       const result=await db.storeRecommendation.updateMany({where:{id,shop,status:{in:["pending","approved"]}},
         data:{status:"dismissed",decidedAt:new Date()}});
       if(!result.count)return {ok:false,message:"Already handled."};
-      await logStoreAction(shop,id,"recommendation.dismiss","dismissed",task.title);
+      await logStoreAction(shop,id,"recommendation.dismiss","dismissed",task.title,actorId).catch(error=>console.error("Activity recording failed",error));
       return {ok:true,message:"Recommendation dismissed; no store content was changed."};
     }
     if(intent==="approve"){
@@ -69,13 +70,13 @@ export const action=async ({request}:ActionFunctionArgs)=>{
       const result=await db.storeRecommendation.updateMany({where:{id,shop,status:"pending"},
         data:{status:"approved",decidedAt:new Date()}});
       if(!result.count)return {ok:false,message:"Already handled."};
-      await logStoreAction(shop,id,"recommendation.approve","approved",task.title);
+      await logStoreAction(shop,id,"recommendation.approve","approved",task.title,actorId).catch(error=>console.error("Activity recording failed",error));
       return {ok:true,message:"Recommendation accepted for manual follow-up. No store changes were made."};
     }
     const result=await db.storeRecommendation.updateMany({where:{id,shop,status:"approved"},
       data:{status:"resolved",decidedAt:new Date()}});
     if(!result.count)return {ok:false,message:"Only approved items can be marked completed."};
-    await logStoreAction(shop,id,"recommendation.resolve","resolved",task.title);
+    await logStoreAction(shop,id,"recommendation.resolve","resolved",task.title,actorId).catch(error=>console.error("Activity recording failed",error));
     return {ok:true,message:"Marked completed. This confirms your review, not a verified ranking improvement."};
   }catch(err){
     console.error("Store manager action error",err);

@@ -113,7 +113,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             } },
           }
         );
-        const json = await response.json();
+        const json: any = await response.json();
         const errors = [...(json.errors ?? []), ...(json.data?.articleCreate?.userErrors ?? [])];
         const article = json.data?.articleCreate?.article;
         if (errors.length || !article?.id) throw new Error(errors.map((e: {message:string}) => e.message).join("; ") || "Shopify refused article");

@@ -6,6 +6,8 @@ import db from "../db.server";
 import { dispatchArticleJob } from "../lib/agent.server";
 import { createCreditedJob, failCreditedJob } from "../lib/credits.server";
 import { FREE_LIFETIME_GENERATIONS } from "../lib/pricing";
+import { publishApprovedArticle } from "../lib/publish.server";
+import { logStoreAction } from "../lib/manager.server";
 
 function value(form: FormData, key: string, max = 500) {
   return String(form.get(key) ?? "").trim().slice(0, max);
@@ -95,38 +97,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     if (intent === "publish") {
       const id = value(form, "draftId", 100);
-      const claim = await db.articleDraft.updateMany({
-        where: { id, shop, status: "ready", seoScore: { gte: 70 } },
-        data: { status: "publishing" },
-      });
-      if (!claim.count) return { ok: false, message: "Draft is not approved for publication. Resolve quality warnings first." };
-      const draft = await db.articleDraft.findUniqueOrThrow({ where: { id } });
-      const config = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
-      try {
-        // Each merchant explicitly clicks Publish. No AI/n8n token may call this action.
-        const response = await admin.graphql(
-          "mutation AgenticShopifyArticleCreate($article: ArticleCreateInput!) { articleCreate(article: $article) { article { id title handle } userErrors { field message } } }",
-          {
-            variables: { article: {
-              blogId: config.blogId, title: draft.title, body: draft.body,
-              summary: draft.summary, author: { name: config.authorName },
-              tags: draft.tags.split(",").map(x => x.trim()).filter(Boolean),
-              isPublished: true,
-            } },
-          }
-        );
-        const json: any = await response.json();
-        const errors = [...(json.errors ?? []), ...(json.data?.articleCreate?.userErrors ?? [])];
-        const article = json.data?.articleCreate?.article;
-        if (errors.length || !article?.id) throw new Error(errors.map((e: {message:string}) => e.message).join("; ") || "Shopify refused article");
-        await db.articleDraft.update({ where: { id }, data: { status: "published", shopifyArticleId: article.id, publishedAt: new Date() } });
-        return { ok: true, message: "Published to Shopify: " + article.title };
-      } catch (error) {
-        // If Shopify succeeds but DB write fails, manual reconciliation is required before retrying.
-        await db.articleDraft.updateMany({ where: { id, shop, status: "publishing" }, data: { status: "needs_reconciliation" } });
-        console.error("Publish requires reconciliation", error);
-        return { ok: false, message: "Publishing was not fully confirmed. Check Shopify Articles before retrying." };
+      const result = await publishApprovedArticle(shop, id, admin);
+      // The publisher is shared with the Store Manager inbox.
+      if (result.ok) {
+        await db.storeRecommendation.updateMany({
+          where: { shop, sourceKey: "blog:" + id, status: { in: ["pending", "approved"] } },
+          data: { status: "applied", decidedAt: new Date() },
+        }).catch(error => console.error("Could not sync manager inbox", error));
       }
+      await logStoreAction(shop, null, "article.publish", result.ok ? "applied" : "reconciliation_required",
+        result.message).catch(error => console.error("Could not append store activity", error));
+      return result;
     }
     return { ok: false, message: "Unknown action." };
   } catch (error) {
@@ -142,7 +123,7 @@ export default function BlogAgent() {
   const busy = navigation.state !== "idle";
   return <s-page heading="Agentic Shopify · Blog Agent">
     <s-section heading="Content automation">
-      <p><a href="/app/team">AI Store Team</a> · <a href="/app/seo">SEO Intelligence</a></p>
+      <p><a href="/app/manager">Store Manager</a> · <a href="/app/team">AI Store Team</a> · <a href="/app/seo">SEO Intelligence</a></p>
       <p>Connected store: <strong>{shop}</strong></p>
       <p>n8n researches and writes a draft; you inspect the content before publishing. Automatic generation creates drafts only.</p>
       {result && <p role="status"><strong>{result.ok ? "Success:" : "Attention:"}</strong> {result.message}</p>}

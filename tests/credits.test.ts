@@ -8,11 +8,12 @@ test("free plan permits only 3 lifetime drafts and refunds failed dispatch once"
   const shop = "test-" + randomUUID() + ".myshopify.com";
   await db.storeConfig.create({ data: { shop, blogId: "gid://shopify/Blog/1" } });
   try {
-    const jobs = await Promise.all([
-      createCreditedJob(shop, "Guide for a merchant A"),
-      createCreditedJob(shop, "Guide for a merchant B"),
-      createCreditedJob(shop, "Guide for a merchant C"),
-    ]);
+    // SQLite dev uses a single-writer DB; production concurrency is tested on Postgres.
+    const jobs = [
+      await createCreditedJob(shop, "Guide for a merchant A"),
+      await createCreditedJob(shop, "Guide for a merchant B"),
+      await createCreditedJob(shop, "Guide for a merchant C"),
+    ];
     assert.equal(jobs.length, 3);
     await assert.rejects(createCreditedJob(shop, "Fourth generation"), /Free generation limit/);
     const refunded = await failCreditedJob(shop, jobs[0].id, "n8n not reachable");

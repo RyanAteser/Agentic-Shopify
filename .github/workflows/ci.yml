@@ -11,7 +11,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npx prisma generate
       - run: npx prisma db push --skip-generate
       - run: npm run typecheck
@@ -41,7 +41,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npx prisma migrate deploy --schema prisma/schema.postgresql.prisma
       - run: npx prisma generate --schema prisma/schema.postgresql.prisma
       - run: npm run typecheck

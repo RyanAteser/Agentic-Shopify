@@ -1,6 +1,6 @@
 import db from "../db.server";
 import {decryptToken,encryptToken} from "./gsc-crypto.server";
-import {matchesPrimaryDomain,parseSearchConsoleRows} from "./growth";
+import {gscReportingWindow,matchesPrimaryDomain,parseSearchConsoleRows} from "./growth";
 
 const SCOPE="https://www.googleapis.com/auth/webmasters.readonly";
 const GOOGLE_AUTHORIZE="https://accounts.google.com/o/oauth2/v2/auth";
@@ -80,11 +80,9 @@ export async function syncOrganicMetrics(shop:string,now=new Date()){
   try{
     const connection=await db.searchConsoleConnection.findUniqueOrThrow({where:{shop}});
     const token=await googleRefresh(decryptToken(connection.encryptedRefresh));
-    // 56 complete UTC days, excluding three days of Google reporting latency.
-    const start=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-58));
-    const end=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-3));
-    const toDay=(date:Date)=>date.toISOString().slice(0,10);
-    const startDate=toDay(start),endDate=toDay(end);
+    // 56 Pacific calendar days, excluding the three most recent days.
+    // Google may still omit finalized dates; the scorecard abstains on gaps.
+    const {startDate,endDate}=gscReportingWindow(now);
     const result=await googleFetch(GSC_BASE+"/sites/"+encodeURIComponent(connection.property)+"/searchAnalytics/query",{
       method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},
       body:JSON.stringify({startDate,endDate,dimensions:["date"],type:"web",

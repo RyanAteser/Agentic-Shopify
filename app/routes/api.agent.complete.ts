@@ -18,7 +18,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!jobId || !shop) return Response.json({ error: "Missing job identifiers" }, { status: 400 });
     const job = await db.contentJob.findUnique({ where: { id: jobId } });
     if (!job || job.shop !== shop) return Response.json({ error: "Unknown job" }, { status: 404 });
-    if (!["queued", "running", "completed"].includes(job.status)) {
+    if (!["queued", "running", "completed", "dispatch_uncertain"].includes(job.status)) {
       return Response.json({ error: "Job cannot receive articles" }, { status: 409 });
     }
     const checked = evaluateArticle(payload.article);

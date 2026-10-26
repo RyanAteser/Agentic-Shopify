@@ -3,7 +3,7 @@ import { Form, useActionData, useLoaderData, useNavigation } from "react-router"
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { dispatchArticleJob } from "../lib/agent.server";
+import { dispatchArticleJob, UncertainDispatchError } from "../lib/agent.server";
 import { createCreditedJob, failCreditedJob } from "../lib/credits.server";
 import { FREE_LIFETIME_GENERATIONS } from "../lib/pricing";
 import { publishApprovedArticle } from "../lib/publish.server";
@@ -81,7 +81,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         await dispatchArticleJob(job.id, shop);
         return { ok: true, message: "Draft requested. Refresh shortly to see the completed article." };
       } catch (error) {
-        await failCreditedJob(shop, job.id, error);
+        if (!(error instanceof UncertainDispatchError)) await failCreditedJob(shop, job.id, error);
         throw error;
       }
     }

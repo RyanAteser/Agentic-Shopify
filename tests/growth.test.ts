@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {matchesPrimaryDomain,parseSearchConsoleRows,compareOrganicWindows} from "../app/lib/growth";
+import {gscReportingWindow,matchesPrimaryDomain,parseSearchConsoleRows,compareOrganicWindows} from "../app/lib/growth";
 import {encryptToken,decryptToken,randomOAuthState,hashState} from "../app/lib/gsc-crypto.server";
 
 test("Search Console OAuth property must match Shopify primary host",()=>{
@@ -39,6 +39,38 @@ test("28 day growth windows are observation based and refuse weak baselines",()=
   const weak=compareOrganicWindows(metrics.slice(0,20),now);
   assert.equal(weak.comparable,false);
   assert.equal(weak.clicksChangePct,null);
+});
+test("Google reporting window uses Pacific calendar dates around midnight and DST",()=>{
+  const beforeMidnight=gscReportingWindow(new Date("2026-10-26T06:30:00Z"));
+  const afterMidnight=gscReportingWindow(new Date("2026-10-26T07:30:00Z"));
+  assert.deepEqual(beforeMidnight,{startDate:"2026-08-28",endDate:"2026-10-22"});
+  assert.deepEqual(afterMidnight,{startDate:"2026-08-29",endDate:"2026-10-23"});
+  // The fall DST transition repeats 01:30 locally; both instants are Nov 1.
+  assert.equal(gscReportingWindow(new Date("2026-11-01T08:30:00Z")).endDate,"2026-10-29");
+  assert.equal(gscReportingWindow(new Date("2026-11-01T09:30:00Z")).endDate,"2026-10-29");
+  const before=compareOrganicWindows([],new Date("2026-10-26T06:30:00Z"));
+  const after=compareOrganicWindows([],new Date("2026-10-26T07:30:00Z"));
+  assert.equal(before.comparable,false);
+  assert.equal(after.comparable,false);
+});
+test("growth scorecard abstains rather than inflating 28-day totals on missing dates",()=>{
+  const now=new Date("2026-10-26T12:00:00Z");
+  const start=Date.parse("2026-08-29T00:00:00Z");
+  const full=Array.from({length:56},(_,i)=>({
+    date:new Date(start+i*86400000).toISOString().slice(0,10),
+    clicks:i>=28?20:10,impressions:100,ctr:i>=28?0.2:0.1,position:10
+  }));
+  const missingCurrent=compareOrganicWindows(full.filter((_,i)=>i!==55),now);
+  assert.equal(missingCurrent.current.days,27);
+  assert.equal(missingCurrent.comparable,false);
+  assert.equal(missingCurrent.clicksChangePct,null);
+  const missingPrevious=compareOrganicWindows(full.filter((_,i)=>i!==1),now);
+  assert.equal(missingPrevious.previous.days,27);
+  assert.equal(missingPrevious.impressionsChangePct,null);
+  const duplicate=compareOrganicWindows([...full,full[0]],now);
+  assert.equal(duplicate.comparable,false);
+  const observedZero=full.map((r,i)=>i===55?{...r,clicks:0,impressions:0,ctr:0,position:0}:r);
+  assert.equal(compareOrganicWindows(observedZero,now).comparable,true);
 });
 test("AES-GCM ciphertext roundtrip and tamper rejection",()=>{
   const previous=process.env.GSC_ENCRYPTION_KEY;

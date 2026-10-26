@@ -76,7 +76,7 @@ export default function GrowthDashboard(){
       </>}
     </s-section>
     <s-section heading="Organic growth scorecard · Last 28 days versus previous 28 days">
-      {!comparison.comparable?<p>Not enough verified daily measurements yet. We need at least 21 recorded days in each comparison window. No growth claim can be made.</p>:<>
+      {!comparison.comparable?<p>Not enough comparable Search Console dates yet. We require all 28 observed dates in each window; Google can omit no-traffic dates, which are not assumed to be zero. No growth claim can be made.</p>:<>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:16}}>
           <div><strong>Organic clicks</strong><p style={{fontSize:24}}>{number(comparison.current.clicks)}</p><p>Previous: {number(comparison.previous.clicks)} · {pct(comparison.clicksChangePct)}</p></div>
           <div><strong>Search impressions</strong><p style={{fontSize:24}}>{number(comparison.current.impressions)}</p><p>Previous: {number(comparison.previous.impressions)} · {pct(comparison.impressionsChangePct)}</p></div>
@@ -84,7 +84,8 @@ export default function GrowthDashboard(){
           <div><strong>Average position</strong><p style={{fontSize:24}}>{comparison.current.avgPosition?.toFixed(1)??"—"}</p><p>Impression-weighted across available dates</p></div>
         </div>
       </>}
-      <p>These windows exclude the three most recent UTC days because Google reporting can be delayed. Incomplete coverage and seasonality can affect comparisons.</p>
+      <p>Observed coverage: {comparison.current.days}/28 current dates and {comparison.previous.days}/28 baseline dates.</p>
+      <p>Both windows use Google Search Console's Pacific reporting dates and exclude the three most recent calendar days. Finalized Google data can still be delayed; coverage and seasonality affect interpretation.</p>
     </s-section>
     <s-section heading="Recent recorded days">
       {!recent.length?<p>No authenticated Search Console observations yet.</p>:

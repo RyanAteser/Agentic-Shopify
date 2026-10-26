@@ -124,7 +124,7 @@ export default function BlogAgent() {
   const busy = navigation.state !== "idle";
   return <s-page heading="Agentic Shopify · Blog Agent">
     <s-section heading="Content automation">
-      <p><a href="/app/manager">Store Manager</a> · <a href="/app/team">AI Store Team</a> · <a href="/app/seo">SEO Intelligence</a></p>
+      <p><a href="/app/manager">Store Manager</a> · <a href="/app/team">AI Store Team</a> · <a href="/app/seo">SEO Intelligence</a> · <a href="/app/growth">Verified Growth</a></p>
       <p>Connected store: <strong>{shop}</strong></p>
       <p>n8n researches and writes a draft; you inspect the content before publishing. Automatic generation creates drafts only.</p>
       {result && <p role="status"><strong>{result.ok ? "Success:" : "Attention:"}</strong> {result.message}</p>}

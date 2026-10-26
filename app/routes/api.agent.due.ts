@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs } from "react-router";
 import db from "../db.server";
-import { authorizedBridge, dispatchArticleJob } from "../lib/agent.server";
+import { authorizedBridge, dispatchArticleJob, UncertainDispatchError } from "../lib/agent.server";
 import { createCreditedJob, failCreditedJob } from "../lib/credits.server";
 
 // Called hourly by an authenticated n8n Schedule Trigger.
@@ -33,7 +33,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       await dispatchArticleJob(job.id, config.shop);
       launched++;
     } catch (error) {
-      await failCreditedJob(config.shop, job.id, error);
+      if (!(error instanceof UncertainDispatchError)) await failCreditedJob(config.shop, job.id, error);
       console.error("Scheduled blog dispatch failed for", config.shop);
     }
   }

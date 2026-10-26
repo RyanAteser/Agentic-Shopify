@@ -47,3 +47,9 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --pull --tag agentic-shopify:ci .

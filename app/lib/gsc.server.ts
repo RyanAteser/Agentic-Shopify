@@ -92,6 +92,19 @@ export async function syncOrganicMetrics(shop:string,now=new Date()){
     });
     const rows=parseSearchConsoleRows(result.rows||[],startDate,endDate);
     await db.$transaction(async tx=>{
+      // Revalidate consent and the exact lease before writing any observations.
+      // This conditional UPDATE locks the connection row until commit on PostgreSQL.
+      // A concurrent disconnect/redaction then deletes the imported rows after
+      // this transaction, or wins first and causes this transaction to roll back.
+      // It also rejects results from an obsolete OAuth token or stolen sync lease.
+      const active=await tx.searchConsoleConnection.updateMany({
+        where:{
+          shop,status:"active",property:connection.property,
+          encryptedRefresh:connection.encryptedRefresh,lastSyncStartedAt:now
+        },
+        data:{lastSyncedAt:now,lastSyncStartedAt:null}
+      });
+      if(active.count!==1)throw new Error("Search Console consent or sync lease changed during import");
       for(const row of rows){
         await tx.organicDailyMetric.upsert({
           where:{shop_property_date:{shop,property:connection.property,date:row.date}},
@@ -99,10 +112,6 @@ export async function syncOrganicMetrics(shop:string,now=new Date()){
           update:{clicks:row.clicks,impressions:row.impressions,ctr:row.ctr,position:row.position,importedAt:new Date()}
         });
       }
-      await tx.searchConsoleConnection.updateMany({
-        where:{shop,lastSyncStartedAt:now},
-        data:{lastSyncedAt:now,lastSyncStartedAt:null}
-      });
     });
     return {rows:rows.length,property:connection.property};
   }catch(error){

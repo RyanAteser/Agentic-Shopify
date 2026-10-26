@@ -40,3 +40,13 @@ test("Store Manager hourly workflow only calls the bounded read-only task refres
   assert.doesNotMatch(raw,/shpat_[a-zA-Z0-9]{12,}/);
   assert.doesNotMatch(raw,/\bsk-proj-[a-zA-Z0-9]{12,}/);
 });
+
+test("Growth workflow imports verified GSC data but cannot modify Shopify",()=>{
+  const raw=readFileSync("n8n/shopify-growth-gsc-sync.json","utf8");
+  const workflow=load("n8n/shopify-growth-gsc-sync.json");
+  assert.equal(workflow.active,false);
+  assert.equal(workflow.nodes.length,2);
+  assert.ok(raw.includes("/api/growth/sync"));
+  assert.ok(raw.includes("httpHeaderAuth"));
+  assert.doesNotMatch(raw,/shpat_[a-zA-Z0-9]{12,}/);
+});

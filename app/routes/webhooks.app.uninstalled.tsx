@@ -5,8 +5,10 @@ export const action = async ({request}:ActionFunctionArgs) => {
  const {shop} = await authenticate.webhook(request);
  await db.$transaction([
    db.googleAuthState.deleteMany({where:{shop}}),
-   db.organicDailyMetric.deleteMany({where:{shop}}),
+   // Delete the connection before metrics so an in-flight GSC import cannot
+   // reinsert observations after the redaction transaction has deleted them.
    db.searchConsoleConnection.deleteMany({where:{shop}}),
+   db.organicDailyMetric.deleteMany({where:{shop}}),
    db.storeActivity.deleteMany({where:{shop}}),
    db.storeRecommendation.deleteMany({where:{shop}}),
    db.articleDraft.deleteMany({where:{shop}}),

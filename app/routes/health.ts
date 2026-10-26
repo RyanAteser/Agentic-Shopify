@@ -1,0 +1,13 @@
+import type {LoaderFunctionArgs} from "react-router";
+import db from "../db.server";
+
+/** Sanitized readiness endpoint for deployment load balancers. */
+export const loader=async (_args:LoaderFunctionArgs)=>{
+  try{
+    await db.$queryRawUnsafe("SELECT 1");
+    return Response.json({status:"ready"},{headers:{"Cache-Control":"no-store"}});
+  }catch(error){
+    console.error("Readiness database check failed",error instanceof Error?error.message:"unknown");
+    return Response.json({status:"unavailable"},{status:503,headers:{"Cache-Control":"no-store"}});
+  }
+};

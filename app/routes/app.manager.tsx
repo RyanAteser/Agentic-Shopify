@@ -94,7 +94,7 @@ export default function StoreManager(){
   return <s-page heading="Store Manager · Approval Inbox">
     <s-section heading="Your store, one team">
       <p>Connected merchant: <strong>{shop}</strong></p>
-      <p><Link to="/app/team">Your AI Team</Link> · <Link to="/app/seo">SEO Intelligence</Link> · <Link to="/app">Blog Agent</Link></p>
+      <p><Link to="/app/team">Your AI Team</Link> · <Link to="/app/seo">SEO Intelligence</Link> · <Link to="/app/growth">Growth Analytics</Link> · <Link to="/app">Blog Agent</Link></p>
       <p>This manager consolidates evidence-backed SEO findings, ranking changes, and editorial drafts. It cannot set prices, spend on ads, or edit products by itself.</p>
       {warning&&<p role="status">{warning}</p>}
       {outcome&&<p role="status"><strong>{outcome.ok?"Success":"Attention"}:</strong> {outcome.message}</p>}

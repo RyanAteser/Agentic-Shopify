@@ -22,19 +22,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return Response.json({ error: "Job cannot receive articles" }, { status: 409 });
     }
     const checked = evaluateArticle(payload.article);
-    const existing = await db.articleDraft.findUnique({ where: { jobId } });
-    if (existing) return Response.json({ ok: true, draftId: existing.id, duplicate: true });
-    const draft = await db.articleDraft.create({
-      data: {
-        jobId, shop, topic: job.topic, title: checked.article.title,
-        summary: checked.article.summary, body: checked.article.body,
-        tags: checked.article.tags.join(","), keyword: checked.article.keyword,
-        seoScore: checked.score,
-        status: checked.score >= 70 ? "ready" : "needs_review",
-        reviewNotes: checked.warnings.join("\n"),
+    // One upsert guards simultaneous/retried callbacks against duplicate drafts.
+    const draft = await db.articleDraft.upsert({
+      where:{jobId},
+      create:{
+        jobId,shop,topic:job.topic,title:checked.article.title,
+        summary:checked.article.summary,body:checked.article.body,
+        tags:checked.article.tags.join(","),keyword:checked.article.keyword,
+        seoScore:checked.score,status:checked.score>=70?"ready":"needs_review",
+        reviewNotes:checked.warnings.join("\n")
       },
+      update:{} // never overwrite an edited or published article on callback retry
     });
-    await db.contentJob.update({ where: { id: jobId }, data: { status: "completed" } });
+    await db.contentJob.updateMany({
+      where:{id:jobId,shop,status:{in:["queued","running","dispatch_uncertain"]}},
+      data:{status:"completed"}
+    });
     return Response.json({ ok: true, draftId: draft.id, score: checked.score });
   } catch (error) {
     console.error("Article callback failed", error);

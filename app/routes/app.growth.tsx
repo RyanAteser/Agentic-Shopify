@@ -13,11 +13,12 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
     where:{shop},select:{property:true,status:true,lastSyncedAt:true,connectedAt:true}
   });
   const rows=connection?await db.organicDailyMetric.findMany({
-    where:{shop,property:connection.property},orderBy:{date:"asc"},take:90,
+    where:{shop,property:connection.property},orderBy:{date:"desc"},take:90,
     select:{date:true,clicks:true,impressions:true,ctr:true,position:true}
   }):[];
-  const comparison=compareOrganicWindows(rows);
-  return {shop,connection,comparison,recent:rows.slice(-14),connected:new URL(request.url).searchParams.has("connected")};
+  const chronological=rows.slice().reverse();
+  const comparison=compareOrganicWindows(chronological);
+  return {shop,connection,comparison,recent:chronological.slice(-14),connected:new URL(request.url).searchParams.has("connected")};
 };
 
 export const action=async ({request}:ActionFunctionArgs)=>{

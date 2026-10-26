@@ -1,0 +1,102 @@
+import db from "../db.server";
+import {decryptToken,encryptToken} from "./gsc-crypto.server";
+import {matchesPrimaryDomain,parseSearchConsoleRows} from "./growth";
+
+const SCOPE="https://www.googleapis.com/auth/webmasters.readonly";
+const GOOGLE_AUTHORIZE="https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN="https://oauth2.googleapis.com/token";
+const GSC_BASE="https://www.googleapis.com/webmasters/v3";
+
+function secrets(){
+  const clientId=process.env.GSC_CLIENT_ID,clientSecret=process.env.GSC_CLIENT_SECRET;
+  const appUrl=process.env.SHOPIFY_APP_URL;
+  if(!clientId||!clientSecret||!appUrl)throw new Error("Search Console OAuth is not configured");
+  const origin=new URL(appUrl);
+  if(origin.protocol!=="https:" && origin.hostname!=="localhost")throw new Error("HTTPS required for Google OAuth");
+  return {clientId,clientSecret,callback:origin.origin+"/auth/google/callback"};
+}
+export function googleAuthorizationUrl(state:string){
+  const {clientId,callback}=secrets();
+  const url=new URL(GOOGLE_AUTHORIZE);
+  url.searchParams.set("response_type","code");
+  url.searchParams.set("client_id",clientId);
+  url.searchParams.set("redirect_uri",callback);
+  url.searchParams.set("scope",SCOPE);
+  url.searchParams.set("access_type","offline");
+  url.searchParams.set("prompt","consent");
+  url.searchParams.set("state",state);
+  return url.toString();
+}
+async function googleFetch(url:string,options:RequestInit) {
+  const result=await fetch(url,{...options,signal:AbortSignal.timeout(15000)});
+  if(!result.ok)throw new Error("Google API request failed (HTTP "+result.status+")");
+  return result.json();
+}
+export async function googleExchangeCode(code:string){
+  const {clientId,clientSecret,callback}=secrets();
+  const value=await googleFetch(GOOGLE_TOKEN,{
+    method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},
+    body:new URLSearchParams({code,client_id:clientId,client_secret:clientSecret,
+      redirect_uri:callback,grant_type:"authorization_code"}),
+  });
+  if(!value.access_token||!value.refresh_token)throw new Error("Google did not issue offline tokens");
+  return {accessToken:String(value.access_token),refreshToken:String(value.refresh_token)};
+}
+export async function verifyGoogleSite(accessToken:string,primaryHost:string) {
+  const result=await googleFetch(GSC_BASE+"/sites",{headers:{Authorization:"Bearer "+accessToken}});
+  const options=(Array.isArray(result.siteEntry)?result.siteEntry:[])
+    .filter((x:any)=>x?.permissionLevel!=="siteUnverifiedUser"&&
+      typeof x.siteUrl==="string"&&matchesPrimaryDomain(x.siteUrl,primaryHost));
+  if(!options.length)throw new Error("No verified Google Search Console property matches your Shopify primary domain");
+  // Prefer the HTTPS URL-prefix property if available; otherwise use the matching domain property.
+  options.sort((a:any,b:any)=>Number(b.siteUrl.startsWith("https:"))-Number(a.siteUrl.startsWith("https:")));
+  return String(options[0].siteUrl);
+}
+export async function storeGoogleConnection(shop:string,property:string,refreshToken:string) {
+  const encryptedRefresh=encryptToken(refreshToken);
+  await db.searchConsoleConnection.upsert({
+    where:{shop},create:{shop,property,encryptedRefresh,status:"active"},
+    update:{property,encryptedRefresh,status:"active",lastSyncedAt:null}
+  });
+}
+async function googleRefresh(refreshToken:string){
+  const {clientId,clientSecret}=secrets();
+  const response=await googleFetch(GOOGLE_TOKEN,{
+    method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},
+    body:new URLSearchParams({grant_type:"refresh_token",refresh_token:refreshToken,
+      client_id:clientId,client_secret:clientSecret})
+  });
+  if(!response.access_token)throw new Error("Google refresh response missing access token");
+  return String(response.access_token);
+}
+export async function syncOrganicMetrics(shop:string,now=new Date()){
+  const connection=await db.searchConsoleConnection.findUnique({where:{shop}});
+  if(!connection||connection.status!=="active")throw new Error("Search Console is not connected");
+  const token=await googleRefresh(decryptToken(connection.encryptedRefresh));
+  // 56 complete days, excluding 3 days of Google reporting latency.
+  const start=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-58));
+  const end=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-3));
+  const toDay=(date:Date)=>date.toISOString().slice(0,10);
+  const startDate=toDay(start),endDate=toDay(end);
+  const result=await googleFetch(GSC_BASE+"/sites/"+encodeURIComponent(connection.property)+"/searchAnalytics/query",{
+    method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},
+    body:JSON.stringify({startDate,endDate,dimensions:["date"],type:"web",
+      dataState:"final",rowLimit:250,aggregationType:"byProperty"})
+  });
+  const rows=parseSearchConsoleRows(result.rows||[],startDate,endDate);
+  for(const row of rows){
+    await db.organicDailyMetric.upsert({
+      where:{shop_property_date:{shop,property:connection.property,date:row.date}},
+      create:{shop,property:connection.property,...row},
+      update:{clicks:row.clicks,impressions:row.impressions,ctr:row.ctr,position:row.position,importedAt:new Date()}
+    });
+  }
+  await db.searchConsoleConnection.update({where:{shop},data:{lastSyncedAt:now}});
+  return {rows:rows.length,property:connection.property};
+}
+export async function disconnectGoogle(shop:string){
+  await db.$transaction([
+    db.organicDailyMetric.deleteMany({where:{shop}}),
+    db.searchConsoleConnection.deleteMany({where:{shop}})
+  ]);
+}

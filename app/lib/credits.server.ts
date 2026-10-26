@@ -1,42 +1,34 @@
 import db from "../db.server";
-
 import { FREE_LIFETIME_GENERATIONS } from "./pricing";
 
 /**
- * Reserve a lifetime Free-plan credit atomically before creating a job.
- * Paid entitlements are intentionally not enabled until Shopify App Pricing is linked.
+ * One transaction: reserve a free credit and create the job, or roll both back.
+ * Paid entitlements remain disabled until Shopify App Pricing integration.
  */
-export async function createCreditedJob(shop: string, topic: string) {
-  const claim = await db.storeConfig.updateMany({
-    where: { shop, freeDraftsUsed: { lt: FREE_LIFETIME_GENERATIONS } },
-    data: { freeDraftsUsed: { increment: 1 } },
-  });
-  if (!claim.count) {
-    throw new Error("Free generation limit reached (3 lifetime drafts). Paid plans are not yet available.");
-  }
-  try {
-    return await db.contentJob.create({ data: { shop, topic } });
-  } catch (error) {
-    // Revert only our reservation when inserting the job fails.
-    await db.storeConfig.update({
-      where: { shop },
-      data: { freeDraftsUsed: { decrement: 1 } },
+export async function createCreditedJob(shop:string,topic:string){
+  return db.$transaction(async tx=>{
+    const claim=await tx.storeConfig.updateMany({
+      where:{shop,freeDraftsUsed:{lt:FREE_LIFETIME_GENERATIONS}},
+      data:{freeDraftsUsed:{increment:1}}
     });
-    throw error;
-  }
+    if(!claim.count)throw new Error("Free generation limit reached (3 lifetime drafts). Paid plans are not yet available.");
+    return tx.contentJob.create({data:{shop,topic}});
+  });
 }
 
-/** Refund a reservation exactly once when n8n dispatch definitively fails. */
-export async function failCreditedJob(shop: string, id: string, error: unknown) {
-  const result = await db.contentJob.updateMany({
-    where: { id, shop, status: { in: ["queued", "running"] } },
-    data: { status: "failed", error: String(error).slice(0, 400) },
-  });
-  if (result.count) {
-    await db.storeConfig.update({
-      where: { shop },
-      data: { freeDraftsUsed: { decrement: 1 } },
+/**
+ * Refund only a definitively rejected job. A network timeout after HTTP POST
+ * cannot prove whether n8n accepted the work and must NOT refund automatically.
+ */
+export async function failCreditedJob(shop:string,id:string,error:unknown){
+  return db.$transaction(async tx=>{
+    const result=await tx.contentJob.updateMany({
+      where:{id,shop,status:{in:["queued","running"]}},
+      data:{status:"failed",error:String(error).slice(0,400)}
     });
-  }
-  return result.count > 0;
+    if(result.count){
+      await tx.storeConfig.update({where:{shop},data:{freeDraftsUsed:{decrement:1}}});
+    }
+    return result.count>0;
+  });
 }

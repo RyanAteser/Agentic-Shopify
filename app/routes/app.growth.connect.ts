@@ -9,6 +9,7 @@ import {googleAuthorizationUrl} from "../lib/gsc.server";
 export const loader=async ({request}:LoaderFunctionArgs)=>{
   const {session}=await authenticate.admin(request);
   const shop=session.shop;
+  await db.googleAuthState.deleteMany({where:{expiresAt:{lt:new Date()}}});
   const pending=await db.googleAuthState.count({where:{shop,expiresAt:{gt:new Date()}}});
   if(pending>=3)return redirect("/app/growth?error=rate");
   // Check configuration before creating a state.

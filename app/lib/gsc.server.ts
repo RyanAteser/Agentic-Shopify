@@ -113,8 +113,22 @@ export async function syncOrganicMetrics(shop:string,now=new Date()){
   }
 }
 export async function disconnectGoogle(shop:string){
+  const connection=await db.searchConsoleConnection.findUnique({where:{shop}});
+  // Erase local data even if Google revocation is temporarily unavailable.
   await db.$transaction([
     db.organicDailyMetric.deleteMany({where:{shop}}),
-    db.searchConsoleConnection.deleteMany({where:{shop}})
+    db.searchConsoleConnection.deleteMany({where:{shop}}),
+    db.googleAuthState.deleteMany({where:{shop}})
   ]);
+  if(connection){
+    try{
+      const token=decryptToken(connection.encryptedRefresh);
+      await fetch("https://oauth2.googleapis.com/revoke",{
+        method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},
+        body:new URLSearchParams({token}),signal:AbortSignal.timeout(5000)
+      });
+    }catch{
+      console.warn("Google token revocation could not be confirmed; local credential deleted");
+    }
+  }
 }

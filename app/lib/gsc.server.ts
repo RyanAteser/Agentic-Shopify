@@ -124,9 +124,11 @@ export async function syncOrganicMetrics(shop:string,now=new Date()){
 export async function disconnectGoogle(shop:string){
   const connection=await db.searchConsoleConnection.findUnique({where:{shop}});
   // Erase local data even if Google revocation is temporarily unavailable.
+  // Delete the connection FIRST. The importer locks that row before inserting
+  // metrics; this ordering serializes revocation against any in-flight import.
   await db.$transaction([
-    db.organicDailyMetric.deleteMany({where:{shop}}),
     db.searchConsoleConnection.deleteMany({where:{shop}}),
+    db.organicDailyMetric.deleteMany({where:{shop}}),
     db.googleAuthState.deleteMany({where:{shop}})
   ]);
   if(connection){

@@ -97,6 +97,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     if (intent === "publish") {
       const id = value(form, "draftId", 100);
+      if (form.get("verified") !== "on") return { ok: false, message: "Review the full article and verify claims, links and brand fit before publishing." };
       const result = await publishApprovedArticle(shop, id, admin);
       // The publisher is shared with the Store Manager inbox.
       if (result.ok) {
@@ -165,6 +166,7 @@ export default function BlogAgent() {
         }}>
           <input type="hidden" name="intent" value="publish"/>
           <input type="hidden" name="draftId" value={d.id}/>
+          <label><input type="checkbox" name="verified" required/> I have reviewed all facts, links and brand claims</label>
           <button type="submit" disabled={busy}>Publish to Shopify</button>
         </Form>}
         {["ready", "needs_review"].includes(d.status) && <Form method="post" style={{display:"flex",gap:8,marginTop:8}}>

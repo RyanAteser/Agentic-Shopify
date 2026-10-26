@@ -56,7 +56,7 @@ export default function SeoDashboard(){
   return <s-page heading="Agentic Shopify · SEO Intelligence">
     <s-section heading="SEO agents">
       <p>This dashboard connects product-page checks with your Bright Data ranking workflow. All detected issues are recommendations; nothing on this page edits your store.</p>
-      <p>Connected store: <strong>{shop}</strong> · <Link to="/app">Blog Agent</Link> · <Link to="/app/manager">Manager Inbox</Link></p>
+      <p>Connected store: <strong>{shop}</strong> · <Link to="/app">Blog Agent</Link> · <Link to="/app/manager">Manager Inbox</Link> · <Link to="/app/growth">Verified Growth</Link></p>
     </s-section>
     <s-section heading="Product metadata audit">
       <p>Scanned the first <strong>{productCount}</strong> active Shopify products. This is an initial metadata check, not a complete crawl or Google ranking score.</p>

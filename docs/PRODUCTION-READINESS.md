@@ -1,0 +1,98 @@
+# Production release gates — Agentic Shopify
+
+**Release posture (2026-10-26): NOT production ready.** Code validation is not the same as real merchant success. Keep PR #1 draft and do not accept paying stores until every launch gate below is satisfied.
+
+## What has actually been implemented
+- Shopify embedded app skeleton, OAuth-protected merchant routes and guarded blog publishing.
+- Three AI generation trial credits enforced with transactional reservations.
+- n8n writer/editor, scheduled blog drafts, Store Manager scan, and Google Search Console sync workflows: importable JSON, **inactive by default**.
+- Product SEO sample audit, logged Bright Data rank observations, manager inbox and approvals.
+- Search Console read-only OAuth flow with one-time state, Shopify domain check, AES-256-GCM encrypted refresh tokens, site-level daily analytics and 28-day comparable baseline.
+- Shopify privacy webhooks erase app data, OAuth tokens, organic metrics and recommendation history.
+- Local SQLite development schema; PostgreSQL production schema with generated migration chain; Docker runtime as unprivileged user; DB readiness endpoint; CI for SQLite and Postgres.
+
+## Hard go/no-go gates
+
+| Gate | Current status | Completion proof required |
+|---|---|---|
+| Partner registration / app client ID | BLOCKED | Verified Shopify Partner app linked to repository and installed on a chosen dev store |
+| Public HTTPS deployment | BLOCKED | Stable URL, TLS, separate secrets, availability and rollback plan |
+| Managed PostgreSQL | Migration committed; NOT provisioned | Migration job runs on actual database with backup/restore test |
+| Google OAuth | Code implemented; NOT connected | OAuth consent screen configured, allowed callback domain, verified store property, Google policy review |
+| n8n | JSON ready; NOT connected | Authenticated instance, secure credential scopes, workflow publishing, end-to-end callback verification |
+| Bright Data ranking connector | Normalization endpoint ready | Original workflow JSON mapped and legitimate SERP samples imported under authorized shop |
+| Real Shopify publishing | Mock-tested only | Development store draft -> manual review -> one published article; confirm exactly-once behavior |
+| Pricing | Proposed only | Shopify App Pricing setup and billing / entitlement webhooks verified |
+| n8n commercial rights | Not yet confirmed | Written n8n guidance for configurable merchant automations or appropriate Enterprise/OEM contract |
+| Privacy compliance | Handlers implemented; not validated live | Shopify HMAC failures return 401; uninstall and all mandatory compliance topics pass live replay |
+| Security review | Partial | Third-party dependency audit, pentest, abuse and IDOR tests, CSP, CSRF, rate-limit verification |
+| Operations | Partial | Error monitoring, job dead-letter/reconciliation queue, secret rotation, on-call response, incident playbook |
+| Customer benefit | Not yet measured | Cohort of consented stores with before/after GSC coverage, retention, editor acceptance and merchant satisfaction |
+
+No merchant traffic, sales, ranking improvement or revenue attribution has yet been established.
+
+## Deployment
+
+Use a **separate managed PostgreSQL production instance**, not the local Windows SQLite database or a database used for another business.
+
+Production database operations (release job run **once**, not on every app pod):
+\`\`\`sh
+npm ci
+npx prisma migrate deploy --schema prisma/schema.postgresql.prisma
+npx prisma generate --schema prisma/schema.postgresql.prisma
+npm run typecheck
+npm run build
+npm start
+\`\`\`
+
+Set \`DATABASE_URL\` to a PostgreSQL TLS connection string in the host's secret manager.
+Create an \`SSL\`-enforcing connection configuration appropriate for your provider.
+Run \`GET /health\` from your platform load balancer; HTTP 200 indicates database reachable; HTTP 503 indicates unavailable.
+Store app API key/secret and \`GSC_CLIENT_ID\`, \`GSC_CLIENT_SECRET\`, \`GSC_ENCRYPTION_KEY\`, \`N8N_OUTBOUND_KEY\`, \`N8N_CALLBACK_SECRET\`, and \`N8N_RANKING_SECRET\` ONLY in secure runtime secrets. Never commit them.
+
+For Google OAuth, register an HTTPS Web Application redirect URI:
+\`https://YOUR_APP_HOST/auth/google/callback\`.
+Request only \`https://www.googleapis.com/auth/webmasters.readonly\`, offline consent.
+The stored property is selected from \`sites.list\` only if it matches the Shopify primary domain. In production, verify connection/disconnection and token rotation and review Google's OAuth verification obligations.
+
+For n8n:
+- Import and configure \`n8n/shopify-blog-writer.json\`,
+  \`n8n/shopify-blog-scheduler.json\`,
+  \`n8n/shopify-store-manager.json\`,
+  and \`n8n/shopify-growth-gsc-sync.json\`.
+- Set credentials in n8n's **Credential UI**, not JSON.
+- Only enable after app deployment, production URL replacement and smoke tests.
+- Use tight budgets and execution limits per merchant. n8n should never receive Shopify tokens or Google OAuth refresh tokens.
+
+## Growth evaluation design
+
+The primary outcome is **qualified organic search traffic and useful merchant actions**, not raw article output. Track:
+1. Prelaunch baseline: 56 days of actual GSC site-level search clicks and impressions (two 28-day periods).
+2. After publishing: monthly clicks/impressions and search position from the same verified property, engine and country.
+3. Merchant behavior: useful draft acceptance, manual edit effort, approvals, repeat use, unsubscribes.
+4. Once analytics permissions and consent exist: revenue attributed to organic search, add-to-cart, checkout conversion and repeat purchases. Never infer commerce revenue from GSC rankings alone.
+5. Counterfactual: compare edited and similar unedited pages and account for seasonality, page age, promotions and Google indexing lag. Treat such comparisons as observational unless a controlled experiment is possible.
+6. Stop conditions: inaccurate articles, trust incidents, negative conversion signals, runaway generation costs or unintended Shopify mutations.
+
+**No performance guarantee**: agents can improve execution and measurement; rankings and sales depend on external factors.
+
+## Backend reliability / privacy
+
+- All merchant API mutations require authenticated Shopify sessions and explicit approval.
+- Callback, manager and scheduler traffic require shared server-to-server secrets; rotate regularly and consider per-merchant keys before scale.
+- Uncertain n8n POST outcomes enter \`dispatch_uncertain\` and do not automatically refund credits or blindly retry.
+- Upserts are idempotent and never overwrite reviewed articles on callback retry.
+- Background tasks cap shops per run; OAuth states expire; Google token storage is encrypted at rest.
+- Manager approvals are decisions, not automatic product edits.
+- Privacy webhooks erase raw token and measurement tables. Test mandatory callbacks in Shopify Partner dashboard before submission.
+
+## Commerce pricing recommendation (hypothesis only)
+Standalone blog starter: $19/month. All-in-one launch: $49/month (blog + SEO + manager), Growth: $149, Operator: $399. Do not enable billing until app entitlement and usage reconciliation is implemented and priced against actual costs.
+
+## Official documentation
+- Shopify mandatory privacy: https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
+- Shopify app pricing: https://shopify.dev/docs/apps/launch/billing/shopify-app-pricing
+- Google OAuth server-side: https://developers.google.com/identity/protocols/oauth2/web-server
+- GSC site access: https://developers.google.com/webmaster-tools/v1/sites/list
+- GSC Search Analytics query: https://developers.google.com/webmaster-tools/v1/searchanalytics/query
+- n8n licensing: https://support.n8n.io/article/can-i-use-your-license-for-my-use-case

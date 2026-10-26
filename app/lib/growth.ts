@@ -30,21 +30,38 @@ export type WindowResult={
   clicksChangePct:number|null;impressionsChangePct:number|null;comparable:boolean;
 };
 const toYMD=(day:Date)=>day.toISOString().slice(0,10);
+const DAY_MS=86400000;
+/** Google Search Console date boundaries are Pacific calendar dates, including DST. */
+export function gscReportingWindow(now=new Date()){
+  const parts=new Intl.DateTimeFormat("en-US",{
+    timeZone:"America/Los_Angeles",year:"numeric",month:"2-digit",day:"2-digit"
+  }).formatToParts(now);
+  const dateParts=Object.fromEntries(parts.map(part=>[part.type,part.value]));
+  const pacificDay=Date.UTC(Number(dateParts.year),Number(dateParts.month)-1,Number(dateParts.day));
+  return {
+    startDate:toYMD(new Date(pacificDay-58*DAY_MS)),
+    endDate:toYMD(new Date(pacificDay-3*DAY_MS))
+  };
+}
 function bucket(metrics:OrganicMetric[],from:string,to:string){
   const rows=metrics.filter(x=>x.date>=from&&x.date<=to);
   const clicks=rows.reduce((sum,x)=>sum+x.clicks,0),impressions=rows.reduce((sum,x)=>sum+x.impressions,0);
   const weighted=impressions?rows.reduce((sum,x)=>sum+x.position*x.impressions,0)/impressions:null;
-  return {days:rows.length,clicks,impressions,ctr:impressions?clicks/impressions:0,avgPosition:weighted};
+  // API omits dates with no observations. Do not silently treat missing days as zero.
+  const days=new Set(rows.map(x=>x.date)).size;
+  return {days,clicks,impressions,ctr:impressions?clicks/impressions:0,
+    avgPosition:weighted,complete:days===28&&rows.length===28};
 }
 export function compareOrganicWindows(metrics:OrganicMetric[],now=new Date()):WindowResult {
-  // Search Console observations typically lag: exclude three most recent UTC days.
-  const end=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-3));
+  // Both imported and compared windows must use Google's Pacific reporting dates.
+  const {endDate}=gscReportingWindow(now);
+  const end=new Date(endDate+"T00:00:00.000Z");
   const prevEnd=new Date(end.getTime()-28*86400000);
   const currFrom=new Date(end.getTime()-27*86400000);
   const prevFrom=new Date(end.getTime()-55*86400000);
   const current=bucket(metrics,toYMD(currFrom),toYMD(end));
   const previous=bucket(metrics,toYMD(prevFrom),toYMD(prevEnd));
-  const comparable=current.days>=21&&previous.days>=21;
+  const comparable=current.complete&&previous.complete;
   const change=(a:number,b:number)=>comparable&&b>0?(a-b)/b*100:null;
   return {current,previous,clicksChangePct:change(current.clicks,previous.clicks),
     impressionsChangePct:change(current.impressions,previous.impressions),comparable};

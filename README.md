@@ -22,3 +22,13 @@ Only the Blog Agent is a substantive code prototype; other specialist agents are
 - `app/routes/api.manager.sync.ts`: secret-authenticated server task coordinator, zero Shopify mutation privileges; requires active merchant installations.
 - An SEO recommendation accepted by the merchant is **not** automatically applied to Shopify. Publishing blog posts still requires merchant verification and consent.
 - Setup: [Store Manager](docs/MANAGER-SETUP.md) and [Store OS](docs/STORE_OS.md).
+
+## Verified Growth (new)
+
+- `/app/growth` merchant dashboard: actual Google Search Console 28-day comparisons, only when verified OAuth connection has enough daily observations; no modeled or fabricated SEO gains.
+- `/app/growth/connect` read-only Google consent, property/Shopify-primary-domain verification, encrypted OAuth refresh token.
+- `/api/growth/sync` and `n8n/shopify-growth-gsc-sync.json`: optional scheduled, bounded Search Console importer. No Shopify write permissions.
+- `prisma/schema.postgresql.prisma` + committed PostgreSQL migrations for hosted production database; local SQLite stays in `prisma/schema.prisma`.
+- [Release gates and deployment](docs/PRODUCTION-READINESS.md)
+
+**Important:** This branch is not yet deployed. Real merchants must authorize Shopify and Google; current local test output must not be represented as actual traffic or sales growth.

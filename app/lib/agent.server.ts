@@ -27,6 +27,9 @@ async function publishedProducts(shop: string) {
 }
 
 
+export class UncertainDispatchError extends Error {
+  constructor(){super("Could not confirm n8n acceptance. This job is awaiting reconciliation; no credit was refunded.");this.name="UncertainDispatchError";}
+}
 export async function dispatchArticleJob(jobId: string, shop: string) {
   const config = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
   const job = await db.contentJob.findUniqueOrThrow({ where: { id: jobId } });
@@ -61,17 +64,36 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
     callbackUrl: appUrl.replace(/\/$/, "") + "/api/agent/complete",
     productCatalog: await publishedProducts(shop),
   };
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Agent-Key": secret,
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!response.ok) throw new Error("n8n rejected generation request (" + response.status + ")");
-  await db.contentJob.updateMany({ where: { id: jobId, status: "queued" }, data: { status: "running" } });
+  // Set running before network dispatch: webhook responses and callbacks may race.
+  await db.contentJob.updateMany({where:{id:jobId,shop,status:"queued"},data:{status:"running"}});
+  let response:Response;
+  try{
+    response=await fetch(url,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","X-Agent-Key":secret},
+      body:JSON.stringify(body),
+      signal:AbortSignal.timeout(12_000),
+    });
+  }catch(err){
+    // A timeout is NOT proof that the workflow failed: n8n may still generate
+    // and send the callback. Preserve the credit and accept a later callback.
+    await db.contentJob.updateMany({
+      where:{id:jobId,shop,status:"running"},
+      data:{status:"dispatch_uncertain",error:"Transport outcome unknown; manual reconciliation needed"}
+    });
+    throw new UncertainDispatchError();
+  }
+  if(!response.ok){
+    if(response.status>=500){
+      await db.contentJob.updateMany({
+        where:{id:jobId,shop,status:"running"},
+        data:{status:"dispatch_uncertain",error:"n8n returned a server error; acceptance unknown"}
+      });
+      throw new UncertainDispatchError();
+    }
+    // 4xx is a definitive rejection; the caller refunds via failCreditedJob.
+    throw new Error("n8n rejected generation request (HTTP "+response.status+")");
+  }
 }
 
 export function authorizedBridge(request: Request) {

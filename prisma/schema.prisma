@@ -128,3 +128,35 @@ model StoreActivity {
   createdAt         DateTime @default(now())
   @@index([shop, createdAt])
 }
+
+model GoogleAuthState {
+  stateHash   String   @id
+  shop        String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  @@index([shop, expiresAt])
+}
+
+model SearchConsoleConnection {
+  shop               String   @id
+  property           String
+  encryptedRefresh   String
+  status             String   @default("active")
+  connectedAt        DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  lastSyncedAt       DateTime?
+}
+
+model OrganicDailyMetric {
+  id             String   @id @default(cuid())
+  shop           String
+  property       String
+  date           String
+  clicks         Float
+  impressions    Float
+  ctr            Float
+  position       Float
+  importedAt     DateTime @default(now())
+  @@unique([shop, property, date])
+  @@index([shop, date])
+}

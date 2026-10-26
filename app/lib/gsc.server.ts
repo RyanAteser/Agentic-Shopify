@@ -70,29 +70,47 @@ async function googleRefresh(refreshToken:string){
   return String(response.access_token);
 }
 export async function syncOrganicMetrics(shop:string,now=new Date()){
-  const connection=await db.searchConsoleConnection.findUnique({where:{shop}});
-  if(!connection||connection.status!=="active")throw new Error("Search Console is not connected");
-  const token=await googleRefresh(decryptToken(connection.encryptedRefresh));
-  // 56 complete days, excluding 3 days of Google reporting latency.
-  const start=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-58));
-  const end=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-3));
-  const toDay=(date:Date)=>date.toISOString().slice(0,10);
-  const startDate=toDay(start),endDate=toDay(end);
-  const result=await googleFetch(GSC_BASE+"/sites/"+encodeURIComponent(connection.property)+"/searchAnalytics/query",{
-    method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},
-    body:JSON.stringify({startDate,endDate,dimensions:["date"],type:"web",
-      dataState:"final",rowLimit:250,aggregationType:"byProperty"})
+  // Claim the shared merchant import lease BEFORE spending Google API quota.
+  const stale=new Date(now.getTime()-20*60000);
+  const claim=await db.searchConsoleConnection.updateMany({
+    where:{shop,status:"active",OR:[{lastSyncStartedAt:null},{lastSyncStartedAt:{lt:stale}}]},
+    data:{lastSyncStartedAt:now}
   });
-  const rows=parseSearchConsoleRows(result.rows||[],startDate,endDate);
-  for(const row of rows){
-    await db.organicDailyMetric.upsert({
-      where:{shop_property_date:{shop,property:connection.property,date:row.date}},
-      create:{shop,property:connection.property,...row},
-      update:{clicks:row.clicks,impressions:row.impressions,ctr:row.ctr,position:row.position,importedAt:new Date()}
+  if(!claim.count)throw new Error("Search Console synchronization is already in progress");
+  try{
+    const connection=await db.searchConsoleConnection.findUniqueOrThrow({where:{shop}});
+    const token=await googleRefresh(decryptToken(connection.encryptedRefresh));
+    // 56 complete UTC days, excluding three days of Google reporting latency.
+    const start=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-58));
+    const end=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-3));
+    const toDay=(date:Date)=>date.toISOString().slice(0,10);
+    const startDate=toDay(start),endDate=toDay(end);
+    const result=await googleFetch(GSC_BASE+"/sites/"+encodeURIComponent(connection.property)+"/searchAnalytics/query",{
+      method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},
+      body:JSON.stringify({startDate,endDate,dimensions:["date"],type:"web",
+        dataState:"final",rowLimit:250,aggregationType:"byProperty"})
     });
+    const rows=parseSearchConsoleRows(result.rows||[],startDate,endDate);
+    await db.$transaction(async tx=>{
+      for(const row of rows){
+        await tx.organicDailyMetric.upsert({
+          where:{shop_property_date:{shop,property:connection.property,date:row.date}},
+          create:{shop,property:connection.property,...row},
+          update:{clicks:row.clicks,impressions:row.impressions,ctr:row.ctr,position:row.position,importedAt:new Date()}
+        });
+      }
+      await tx.searchConsoleConnection.updateMany({
+        where:{shop,lastSyncStartedAt:now},
+        data:{lastSyncedAt:now,lastSyncStartedAt:null}
+      });
+    });
+    return {rows:rows.length,property:connection.property};
+  }catch(error){
+    await db.searchConsoleConnection.updateMany({
+      where:{shop,lastSyncStartedAt:now},data:{lastSyncStartedAt:null}
+    }).catch(()=>{});
+    throw error;
   }
-  await db.searchConsoleConnection.update({where:{shop},data:{lastSyncedAt:now}});
-  return {rows:rows.length,property:connection.property};
 }
 export async function disconnectGoogle(shop:string){
   await db.$transaction([

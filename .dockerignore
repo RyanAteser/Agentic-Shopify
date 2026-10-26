@@ -1,0 +1,11 @@
+node_modules
+.git
+.env
+.env.*
+!.env.example
+build
+*.sqlite
+*.sqlite-journal
+*.log
+coverage
+prisma/init_postgres_generated.sql

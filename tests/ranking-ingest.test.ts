@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
 import { parseRanking } from "../app/lib/seo";
 import { primaryDomainForShop, saveRankingsForShop } from "../app/lib/ranking-ingest.server";
+import { rotateRankingConnectorKey, rankingKeyHash } from "../app/lib/ranking-credentials.server";
 
 const now = new Date("2026-10-26T12:00:00.000Z");
 const rank = parseRanking({ keyword: "boots", position: 5,
@@ -25,16 +26,18 @@ test("rank batches are idempotent, tenant-scoped and blocked after uninstall", a
   const shopB = "ranking-" + randomUUID() + ".myshopify.com";
   await db.storeConfig.createMany({ data: [{ shop: shopA }, { shop: shopB }] });
   try {
-    await saveRankingsForShop(shopA, [rank]);
-    await saveRankingsForShop(shopA, [rank]);
+    const keyHash = rankingKeyHash(await rotateRankingConnectorKey(shopA))!;
+    await saveRankingsForShop(shopA, [rank], keyHash);
+    await saveRankingsForShop(shopA, [rank], keyHash);
     assert.equal(await db.seoRankObservation.count({ where: { shop: shopA } }), 1);
     assert.equal(await db.seoRankObservation.count({ where: { shop: shopB } }), 0);
     await db.storeConfig.delete({ where: { shop: shopA } });
-    await assert.rejects(saveRankingsForShop(shopA, [{...rank,keyword:"other"}]),
+    await assert.rejects(saveRankingsForShop(shopA, [{...rank,keyword:"other"}], keyHash),
       /Store disconnected/);
     assert.equal(await db.seoRankObservation.count({ where: { shop: shopA } }), 1);
   } finally {
     await db.seoRankObservation.deleteMany({ where: { shop: { in: [shopA, shopB] } } });
+    await db.rankingConnectorCredential.deleteMany({ where: { shop: { in: [shopA, shopB] } } });
     await db.storeConfig.deleteMany({ where: { shop: { in: [shopA, shopB] } } });
   }
 });
@@ -43,12 +46,14 @@ test("database failure rolls back the entire ranking batch", async () => {
   const shop = "ranking-" + randomUUID() + ".myshopify.com";
   await db.storeConfig.create({ data: { shop } });
   try {
+    const keyHash = rankingKeyHash(await rotateRankingConnectorKey(shop))!;
     await assert.rejects(saveRankingsForShop(shop, [rank, {
       ...rank, keyword: "bad-date", observedAt: new Date(NaN)
-    }]));
+    }], keyHash));
     assert.equal(await db.seoRankObservation.count({ where: { shop } }), 0);
   } finally {
     await db.seoRankObservation.deleteMany({ where: { shop } });
+    await db.rankingConnectorCredential.deleteMany({ where: { shop } });
     await db.storeConfig.deleteMany({ where: { shop } });
   }
 });

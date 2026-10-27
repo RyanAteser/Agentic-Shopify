@@ -4,6 +4,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import db from "../app/db.server";
 import { saveRankingsForShop } from "../app/lib/ranking-ingest.server";
 import { parseRanking } from "../app/lib/seo";
+import { rotateRankingConnectorKey, rankingKeyHash } from "../app/lib/ranking-credentials.server";
 
 /**
  * Exercise Shopify's actual authenticate.webhook(request) integration, not a
@@ -47,6 +48,8 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
     // credentials before its singleton is initialized.
     const { action } = await import("../app/routes/webhooks.shop.redact");
     await db.storeConfig.createMany({ data: [{ shop }, { shop: otherShop }] });
+    const rankingKey = rankingKeyHash(await rotateRankingConnectorKey(shop))!;
+    await rotateRankingConnectorKey(otherShop);
     await db.organicDailyMetric.createMany({
       data: [
         { shop, property, date: "2026-10-01", clicks: 1, impressions: 10, ctr: 0.1, position: 5 },
@@ -73,6 +76,7 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
         error instanceof Response && error.status === 401,
       );
       assert.equal(await db.storeConfig.count({ where: { shop } }), 1);
+      assert.equal(await db.rankingConnectorCredential.count({ where: { shop } }), 1);
       assert.equal(await db.searchConsoleConnection.count({ where: { shop } }), 1);
       assert.equal(await db.organicDailyMetric.count({ where: { shop } }), 1);
       assert.equal(await db.seoRankObservation.count({ where: { shop } }), 1);
@@ -81,15 +85,17 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
     const response = await action(args(request(raw, signature(raw))));
     assert.equal(response.status, 200);
     assert.equal(await db.storeConfig.count({ where: { shop } }), 0);
+    assert.equal(await db.rankingConnectorCredential.count({ where: { shop } }), 0);
     assert.equal(await db.googleAuthState.count({ where: { shop } }), 0);
     assert.equal(await db.searchConsoleConnection.count({ where: { shop } }), 0);
     assert.equal(await db.organicDailyMetric.count({ where: { shop } }), 0);
     assert.equal(await db.seoRankObservation.count({ where: { shop } }), 0);
     const lateRank = parseRanking({ keyword: "late boots", position: 7,
       observedAt: rankAt.toISOString(), targetUrl: "https://example.test/boots" }, rankAt);
-    await assert.rejects(saveRankingsForShop(shop, [lateRank]), /Store disconnected/);
+    await assert.rejects(saveRankingsForShop(shop, [lateRank], rankingKey), /Store disconnected/);
     assert.equal(await db.seoRankObservation.count({ where: { shop } }), 0);
     assert.equal(await db.storeConfig.count({ where: { shop: otherShop } }), 1);
+    assert.equal(await db.rankingConnectorCredential.count({ where: { shop: otherShop } }), 1);
     assert.equal(await db.organicDailyMetric.count({ where: { shop: otherShop } }), 1);
     assert.equal(await db.seoRankObservation.count({ where: { shop: otherShop } }), 1);
 
@@ -106,6 +112,7 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
     await db.storeRecommendation.deleteMany({ where });
     await db.articleDraft.deleteMany({ where });
     await db.seoRankObservation.deleteMany({ where });
+    await db.rankingConnectorCredential.deleteMany({ where });
     await db.contentJob.deleteMany({ where });
     await db.storeConfig.deleteMany({ where });
     await db.session.deleteMany({ where });

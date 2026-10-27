@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import db from "../app/db.server";
+import { saveRankingsForShop } from "../app/lib/ranking-ingest.server";
+import { parseRanking } from "../app/lib/seo";
 
 /**
  * Exercise Shopify's actual authenticate.webhook(request) integration, not a
@@ -51,6 +53,11 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
         { shop: otherShop, property, date: "2026-10-01", clicks: 2, impressions: 20, ctr: 0.1, position: 7 },
       ],
     });
+    const rankAt = new Date("2026-10-26T12:00:00Z");
+    await db.seoRankObservation.createMany({ data: [
+      { shop, keyword: "boots", position: 5, targetUrl: "https://example.test/boots", observedAt: rankAt },
+      { shop: otherShop, keyword: "boots", position: 3, targetUrl: "https://example.test/boots", observedAt: rankAt },
+    ] });
     await db.googleAuthState.create({
       data: { stateHash: randomUUID(), shop, expiresAt: new Date(Date.now() + 60_000) },
     });
@@ -68,6 +75,7 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
       assert.equal(await db.storeConfig.count({ where: { shop } }), 1);
       assert.equal(await db.searchConsoleConnection.count({ where: { shop } }), 1);
       assert.equal(await db.organicDailyMetric.count({ where: { shop } }), 1);
+      assert.equal(await db.seoRankObservation.count({ where: { shop } }), 1);
     }
 
     const response = await action(args(request(raw, signature(raw))));
@@ -76,8 +84,14 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
     assert.equal(await db.googleAuthState.count({ where: { shop } }), 0);
     assert.equal(await db.searchConsoleConnection.count({ where: { shop } }), 0);
     assert.equal(await db.organicDailyMetric.count({ where: { shop } }), 0);
+    assert.equal(await db.seoRankObservation.count({ where: { shop } }), 0);
+    const lateRank = parseRanking({ keyword: "late boots", position: 7,
+      observedAt: rankAt.toISOString(), targetUrl: "https://example.test/boots" }, rankAt);
+    await assert.rejects(saveRankingsForShop(shop, [lateRank]), /Store disconnected/);
+    assert.equal(await db.seoRankObservation.count({ where: { shop } }), 0);
     assert.equal(await db.storeConfig.count({ where: { shop: otherShop } }), 1);
     assert.equal(await db.organicDailyMetric.count({ where: { shop: otherShop } }), 1);
+    assert.equal(await db.seoRankObservation.count({ where: { shop: otherShop } }), 1);
 
     // Shopify retries deliveries; deletion must be idempotent.
     const retried = await action(args(request(raw, signature(raw))));

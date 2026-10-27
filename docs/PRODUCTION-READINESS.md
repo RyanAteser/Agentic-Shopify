@@ -302,3 +302,36 @@ exact 2026-10 GraphQL response and a live storefront before release.
 
 Primary API contract:
 https://shopify.dev/docs/api/admin-graphql/2026-10/mutations/articleCreate
+
+
+## Manager recommendation privacy race (2026-10-27)
+
+A background Store Manager sync or an in-flight merchant page load can finish
+reading product evidence after Shopify uninstalls the app. Previously,
+`syncManagerTasks` wrote recommendations without checking the merchant's
+continued existence, and `logStoreAction` could append audit entries after
+the redaction transaction. These are potential post-deletion data re-creation
+paths, not confirmed merchant incidents.
+
+Both write paths now first update/lock the shop's `StoreConfig` row within
+the same transaction as their merchant-owned writes. If that row has already
+been deleted, sync returns zero and logging does nothing. If redaction starts
+later, it waits for the row lock and deletes all writes before committing.
+The lock order matches the shared `eraseMerchantData` routine, preventing
+recommendations and activity from surviving an uninstall race.
+
+Tests: `tests/manager.test.ts` covers delayed writes after deletion;
+`tests/manager-redaction-postgres.test.ts` runs five synthetic concurrent
+sync/log/redaction rounds against real PostgreSQL and checks isolation of an
+unrelated merchant. No live store, webhook delivery, or external credentials
+are used. PostgreSQL documents conflicting row-level locks:
+https://www.postgresql.org/docs/current/explicit-locking.html .
+Shopify's required shop redaction behavior:
+https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance .
+
+**Remaining limitations:** Real Shopify signed uninstall delivery, multiple
+worker processes, slow Shopify API responses, tenant-wide deletion auditing,
+and database backups/retention need development-store and operations testing.
+The row lock does not prevent an already-started external Shopify API request;
+no external calls occur inside these manager transactions. The test harness
+must pass full CI before this change is considered verified.

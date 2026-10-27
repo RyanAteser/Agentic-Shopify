@@ -43,6 +43,7 @@ The ranking workflow shown in the merchant-provided n8n screenshot can send norm
 
 ## Architecture & boundaries
 - Shopify OAuth/session storage stays in the app backend. n8n has neither Shopify API token nor publishing action.
+- App-to-n8n webhook dispatch also rejects HTTP redirects so its outbound credential cannot follow a 3xx response to another host. Redirect failures enter the existing uncertain-dispatch reconciliation path rather than blindly refunding credits.
 - The writer callback URL is operator-configured in the n8n workflow, not provided by the app's job payload or the model. This removes a dynamic-URL SSRF/credential-forwarding path. It does **not** replace network egress policy, n8n instance access controls, or a live test of redirect handling. See [OWASP SSRF prevention](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html) and [n8n HTTP Request redirects](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/).
 - Each saved draft and job is scoped by the Shopify shop domain; callback checks the job/shop pair and requires a secret. Callback duplicates return the same draft rather than creating duplicates.
 - The quality score is a simple structural checklist, **not** a factual verification, ranking predictor or Google score.

@@ -16,6 +16,7 @@ export const action = async ({request}:ActionFunctionArgs) => {
    db.organicDailyMetric.deleteMany({where:{shop}}),
    db.storeActivity.deleteMany({where:{shop}}),
    db.storeRecommendation.deleteMany({where:{shop}}),
+   db.editorialReview.deleteMany({where:{shop}}),
    db.articleDraft.deleteMany({where:{shop}}),
    db.seoRankObservation.deleteMany({where:{shop}}),
    db.contentJob.deleteMany({where:{shop}}),

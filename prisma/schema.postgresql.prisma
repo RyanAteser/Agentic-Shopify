@@ -172,3 +172,16 @@ model OrganicDailyMetric {
   @@unique([shop, property, date])
   @@index([shop, date])
 }
+
+
+model EditorialReview {
+  id            String   @id @default(cuid())
+  shop          String
+  draftId       String
+  decision      String
+  reviewMinutes Int?
+  feedback      String   @default("")
+  reviewedAt    DateTime @default(now())
+  @@unique([shop, draftId])
+  @@index([shop, reviewedAt])
+}

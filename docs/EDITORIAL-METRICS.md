@@ -54,3 +54,32 @@ References:
   https://shopify.dev/docs/apps/build/analytics
 - Shopify App Events privacy and preview:
   https://shopify.dev/docs/apps/build/app-events
+
+## Explicit review evidence (2026-10-27)
+
+The Blog Agent now records **usable as written** or **rejected** decisions,
+separately from publishing. Usable reviews require a human checkbox and a
+`ready` draft; `needs_review` drafts cannot be marked usable without
+corrections. Rejection still prevents publishing. Neither action publishes or
+edits Shopify content; direct publishing remains separately approved and may
+occur without a review event.
+
+One `EditorialReview` row per (shop, draftId) is stored transactionally.
+Optional self-reported review minutes must be 1–240 whole minutes. They are
+**not** a timer, verified work time, or estimated time saved. Rejection
+feedback is limited to 1,000 characters. Uninstall/redaction deletes review
+records and the transaction locks store configuration first to fence off late
+reviews after erasure.
+
+Growth reporting groups **review decisions made in the past 28 x 24 hours**,
+independent of the draft-creation cohort. Usable share is displayed only with
+at least five decisions; mean self-reported minutes always includes its sample
+size. This is a voluntary subset, not a population acceptance rate: direct
+publication and missing reviews introduce selection bias. No productivity,
+SEO or revenue improvement is claimed.
+
+Next pilot: pre-register eligible drafts, track review participation and
+minutes coverage, blind-score factual quality and product links, and compare
+review time against human-written controls. Google's people-first guidance
+prioritizes usefulness over raw automated article volume:
+https://developers.google.com/search/docs/fundamentals/creating-helpful-content

@@ -8,6 +8,7 @@ import { createCreditedJob, failCreditedJob } from "../lib/credits.server";
 import { FREE_LIFETIME_GENERATIONS } from "../lib/pricing";
 import { publishApprovedArticle } from "../lib/publish.server";
 import { logStoreAction } from "../lib/manager.server";
+import { parseReviewMinutes, recordEditorialReview } from "../lib/editorial-review.server";
 
 function value(form: FormData, key: string, max = 500) {
   return String(form.get(key) ?? "").trim().slice(0, max);
@@ -29,7 +30,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.articleDraft.findMany({ where: { shop: session.shop }, orderBy: { createdAt: "desc" }, take: 30 }),
     db.contentJob.findMany({ where: { shop: session.shop }, orderBy: { createdAt: "desc" }, take: 10 }),
   ]);
-  return { shop: session.shop, blogs, config, drafts, jobs };
+  const reviews = await db.editorialReview.findMany({
+    where: {shop: session.shop, draftId: {in: drafts.map(d => d.id)}},
+    select: {draftId: true, decision: true, reviewMinutes: true}
+  });
+  return { shop: session.shop, blogs, config, drafts, jobs, reviews };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -85,15 +90,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         throw error;
       }
     }
-    if (intent === "reject") {
+    if (intent === "review" || intent === "reject") {
       const id = value(form, "draftId", 100);
-      const notes = value(form, "feedback", 1000);
-      if (!notes) return { ok: false, message: "Explain what should improve so the agent can learn." };
-      const result = await db.articleDraft.updateMany({
-        where: { id, shop, status: { in: ["ready", "needs_review"] } },
-        data: { status: "rejected", reviewNotes: notes },
-      });
-      return { ok: result.count === 1, message: result.count ? "Rejected draft feedback saved for future briefs." : "Draft not found or already processed." };
+      const decision = intent === "reject" ? "rejected" : value(form, "decision", 20);
+      if (decision !== "usable" && decision !== "rejected") {
+        return {ok: false, message: "Invalid review decision."};
+      }
+      if (decision === "usable" && form.get("reviewed") !== "on") {
+        return {ok: false, message: "Confirm you inspected the complete draft."};
+      }
+      return await recordEditorialReview(
+        shop, id, decision, parseReviewMinutes(form.get("reviewMinutes")),
+        value(form, "feedback", 1000)
+      );
     }
     if (intent === "publish") {
       const id = value(form, "draftId", 100);
@@ -118,7 +127,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function BlogAgent() {
-  const { shop, blogs, config, drafts, jobs } = useLoaderData<typeof loader>();
+  const { shop, blogs, config, drafts, jobs, reviews } = useLoaderData<typeof loader>();
+  const reviewMap = new Map(reviews.map(review => [review.draftId, review]));
   const result = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -161,6 +171,15 @@ export default function BlogAgent() {
           <div style={{padding:10,border:"1px solid #ddd",maxHeight:400,overflow:"auto"}} dangerouslySetInnerHTML={{__html:d.body}}/>
           <pre style={{whiteSpace:"pre-wrap"}}>{d.reviewNotes}</pre>
         </details>
+        {reviewMap.has(d.id) && <p><strong>Editorial review:</strong> {reviewMap.get(d.id)?.decision === "usable" ? "Usable" : "Rejected"} · {reviewMap.get(d.id)?.reviewMinutes ?? "No"} self-reported review minutes. This review does not publish.</p>}
+        {d.status === "ready" && !reviewMap.has(d.id) && <Form method="post" style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginTop:8}}>
+          <input type="hidden" name="intent" value="review"/>
+          <input type="hidden" name="decision" value="usable"/>
+          <input type="hidden" name="draftId" value={d.id}/>
+          <label>Review minutes (optional, self-reported) <input type="number" name="reviewMinutes" min={1} max={240} step={1} style={{width:85}}/></label>
+          <label><input type="checkbox" name="reviewed" required/> I inspected the full draft and consider it usable as written</label>
+          <button type="submit" disabled={busy}>Record usable review (do not publish)</button>
+        </Form>}
         {d.status === "ready" && <Form method="post" onSubmit={e => {
           if (!window.confirm("Publish this article immediately to your Shopify store? You must have verified all claims and source links.")) e.preventDefault();
         }}>
@@ -169,10 +188,11 @@ export default function BlogAgent() {
           <label><input type="checkbox" name="verified" required/> I have reviewed all facts, links and brand claims</label>
           <button type="submit" disabled={busy}>Publish to Shopify</button>
         </Form>}
-        {["ready", "needs_review"].includes(d.status) && <Form method="post" style={{display:"flex",gap:8,marginTop:8}}>
+        {["ready", "needs_review"].includes(d.status) && !reviewMap.has(d.id) && <Form method="post" style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
           <input type="hidden" name="intent" value="reject"/>
           <input type="hidden" name="draftId" value={d.id}/>
-          <input name="feedback" placeholder="Why should this draft be improved?" required maxLength={1000} style={{flex:1}}/>
+          <input name="feedback" placeholder="Why is this draft unusable?" required maxLength={1000} style={{flex:1}}/>
+          <label>Review minutes (optional) <input type="number" name="reviewMinutes" min={1} max={240} step={1} style={{width:85}}/></label>
           <button type="submit" disabled={busy}>Reject and teach agent</button>
         </Form>}
       </article>)}

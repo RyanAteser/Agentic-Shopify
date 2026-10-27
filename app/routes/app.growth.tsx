@@ -4,7 +4,7 @@ import {boundary} from "@shopify/shopify-app-react-router/server";
 import {authenticate} from "../shopify.server";
 import db from "../db.server";
 import {compareOrganicWindows} from "../lib/growth";
-import {summarizeEditorialCohort} from "../lib/editorial-funnel";
+import {summarizeEditorialCohort,summarizeEditorialReviews} from "../lib/editorial-funnel";
 import {disconnectGoogle,syncOrganicMetrics} from "../lib/gsc.server";
 
 export const loader=async ({request}:LoaderFunctionArgs)=>{
@@ -22,19 +22,27 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
   const now=new Date();
   const since=new Date(now.getTime()-28*86400000);
   // Only authenticated shop-scoped aggregates; no buyer/order data or new permissions.
-  const [jobGroups,draftGroups]=await Promise.all([
+  const [jobGroups,draftGroups,reviewGroups]=await Promise.all([
     db.contentJob.groupBy({
       by:["status"],where:{shop,createdAt:{gte:since,lt:now}},_count:{_all:true}
     }),
     db.articleDraft.groupBy({
       by:["status"],where:{shop,createdAt:{gte:since,lt:now}},_count:{_all:true}
+    }),
+    db.editorialReview.groupBy({
+      by:["decision"],where:{shop,reviewedAt:{gte:since,lt:now}},
+      _count:{_all:true,reviewMinutes:true},_sum:{reviewMinutes:true}
     })
   ]);
   const editorial=summarizeEditorialCohort(
     jobGroups.map(row=>({status:row.status,count:row._count._all})),
     draftGroups.map(row=>({status:row.status,count:row._count._all}))
   );
-  return {shop,connection,comparison,editorial,recent:chronological.slice(-14),connected:new URL(request.url).searchParams.has("connected")};
+  const reviews=summarizeEditorialReviews(reviewGroups.map(row=>({
+    decision:row.decision,count:row._count._all,
+    minutesSamples:row._count.reviewMinutes,minutesTotal:row._sum.reviewMinutes??0
+  })));
+  return {shop,connection,comparison,editorial,reviews,recent:chronological.slice(-14),connected:new URL(request.url).searchParams.has("connected")};
 };
 
 export const action=async ({request}:ActionFunctionArgs)=>{
@@ -66,7 +74,7 @@ export const action=async ({request}:ActionFunctionArgs)=>{
 function number(x:number){return Math.round(x).toLocaleString();}
 function pct(x:number|null){return x===null?"Insufficient baseline":(x>0?"+":"")+x.toFixed(1)+"%";}
 export default function GrowthDashboard(){
-  const {shop,connection,comparison,editorial,recent,connected}=useLoaderData<typeof loader>();
+  const {shop,connection,comparison,editorial,reviews,recent,connected}=useLoaderData<typeof loader>();
   const result=useActionData<typeof action>();
   const busy=useNavigation().state!=="idle";
   return <s-page heading="Growth · Verified Organic Search">
@@ -82,6 +90,12 @@ export default function GrowthDashboard(){
       <p>Drafts created: <strong>{editorial.drafts}</strong>. Current status of those drafts: {editorial.published} published, {editorial.rejected} rejected, {editorial.awaitingReview} awaiting human review and {editorial.reconciliation} publishing or requiring reconciliation.</p>
       <p><strong>Published among resolved drafts:</strong> {editorial.publishedAmongResolvedPct===null?"Insufficient decisions":editorial.publishedAmongResolvedPct.toFixed(1)+"%"} ({editorial.published} published / {editorial.resolved} published or rejected). We display a percentage only after at least five decisions.</p>
       <p>These are two separate creation-date cohorts, not a draft-delivery conversion funnel. Draft status is measured now, so publication may have happened after the creation window. Publishing is a proxy for editorial approval, not proof of factual quality, merchant revenue, SEO impact or user retention. Rejections and unresolved publication attempts deserve review.</p>
+    </s-section>
+    <s-section heading="Recorded human editorial reviews · rolling 28 days">
+      <p><strong>{reviews.reviewed}</strong> explicit decisions: {reviews.usable} marked usable as written, {reviews.rejected} rejected.</p>
+      <p><strong>Usable among recorded reviews:</strong> {reviews.usableAmongReviewedPct===null?"Insufficient reviews":reviews.usableAmongReviewedPct.toFixed(1)+"%"} (shown only after at least five decisions).</p>
+      <p><strong>Self-reported review time:</strong> {reviews.meanReportedMinutes===null?"Not recorded":reviews.meanReportedMinutes.toFixed(1)+" minutes on average"} from {reviews.minutesSamples} reports. This is time spent, not time saved.</p>
+      <p>These are voluntary, one-time decisions dated by review, not all drafts generated in the window. Unreviewed and directly published drafts are not counted as accepted or rejected; the observed share may be selection-biased. Marking usable never publishes an article. No revenue or productivity lift is implied.</p>
     </s-section>
     <s-section heading="Google Search Console connection">
       {!connection?<div>

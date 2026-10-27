@@ -43,7 +43,7 @@ test("GSC import is cancelled by consent deletion and still works with active co
       return Response.json({access_token:"test-access-token"});
     }
     if(url.includes("/searchAnalytics/query")){
-      return Response.json({rows:[{
+      return Response.json({responseAggregationType:"byProperty",rows:[{
         keys:["2026-10-01"],clicks:5,impressions:50,ctr:0.1,position:8
       }]});
     }

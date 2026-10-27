@@ -23,7 +23,7 @@ export function parseSearchConsoleRows(rows:unknown, start:string, end:string):O
     // Do not coerce null, missing values, or strings to numbers. In particular,
     // Number(null) silently turns a missing metric into a fabricated zero.
     if(["clicks","impressions","ctr","position"].some(key=>
-      typeof r[key]!=="number"||!Number.isFinite(r[key]))){
+      typeof r[key]!=="number"||!Number.isFinite(r[key] as number))){
       throw new Error("Missing or non-numeric Google metric");
     }
     const clicks=r.clicks as number,impressions=r.impressions as number;

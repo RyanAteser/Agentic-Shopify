@@ -16,20 +16,37 @@ export function parseRanking(value: unknown, now = new Date()): SeoRanking {
   if (typeof row.keyword !== "string") throw new Error("Keyword required");
   const keyword = row.keyword.toLowerCase().trim().replace(/\s+/g, " ");
   if (keyword.length < 2 || keyword.length > 120) throw new Error("Keyword length invalid");
-  const engine = row.engine === undefined ? "google" : row.engine;
-  if (engine !== "google" && engine !== "bing") throw new Error("Unsupported search engine");
-  const device = row.device === undefined ? "desktop" : row.device;
-  if (device !== "desktop" && device !== "mobile") throw new Error("Unsupported device");
-  const country = row.country === undefined ? "US" : row.country;
+  // No silent US/desktop/Google defaults: missing scrape context would create
+  // misleading market-specific SEO trends.
+  const engine = row.engine;
+  if (engine !== "google" && engine !== "bing") throw new Error("Explicit search engine required");
+  const device = row.device;
+  if (device !== "desktop" && device !== "mobile") throw new Error("Explicit device required");
+  const country = row.country;
   if (typeof country !== "string" || !/^[A-Z]{2}$/.test(country)) throw new Error("Use ISO country code");
   const position = row.position === null || row.position === undefined ? null : row.position;
   if (position !== null && (!Number.isInteger(position) || (position as number) < 1 || (position as number) > 200)) {
     throw new Error("Organic position must be an integer 1-200 or null");
   }
-  if (typeof row.observedAt !== "string" || !/^\d{4}-\d\d-\d\dT/.test(row.observedAt)) {
-    throw new Error("Ranking requires observedAt ISO timestamp");
+  // Require an explicit RFC3339 offset. Local-time strings silently depend on
+  // the server timezone and can turn a scraped snapshot into a false trend.
+  const timestamp = row.observedAt;
+  if (typeof timestamp !== "string" ||
+      !/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,9})?(?:Z|[+-](?:0\d|1[0-4]):[0-5]\d)$/.test(timestamp)) {
+    throw new Error("Ranking requires RFC3339 timestamp with timezone");
   }
-  const observedAt = new Date(row.observedAt);
+  const offset = timestamp.match(/[+-](\d{2}):(\d{2})$/);
+  if (offset?.[1] === "14" && offset[2] !== "00") {
+    throw new Error("Ranking timezone offset invalid");
+  }
+  const [year, month, day] = timestamp.slice(0, 10).split("-").map(Number);
+  const calendarDay = new Date(Date.UTC(year, month - 1, day));
+  if (calendarDay.getUTCFullYear() !== year ||
+      calendarDay.getUTCMonth() !== month - 1 ||
+      calendarDay.getUTCDate() !== day) {
+    throw new Error("Ranking calendar date invalid");
+  }
+  const observedAt = new Date(timestamp);
   if (Number.isNaN(observedAt.getTime()) || observedAt.getTime() > now.getTime() + 5 * 60000
       || observedAt.getTime() < now.getTime() - 365 * 86400000) {
     throw new Error("Ranking timestamp outside permitted window");
@@ -42,6 +59,24 @@ export function parseRanking(value: unknown, now = new Date()): SeoRanking {
     if (url.username || url.password) throw new Error("URL credentials not allowed");
   }
   return { keyword, position: position as number | null, engine, device, country, targetUrl: rawUrl, observedAt, source: "brightdata-serp" };
+}
+
+
+/**
+ * A single SERP snapshot cannot have two different results for the same
+ * keyword, engine, country, device and timestamp. Reject ambiguous batches
+ * rather than silently letting the last upsert win.
+ */
+export function assertUniqueRankingObservations(records: SeoRanking[]): void {
+  const seen = new Set<string>();
+  for (const record of records) {
+    const key = JSON.stringify([
+      record.keyword, record.engine, record.country, record.device,
+      record.observedAt.getTime()
+    ]);
+    if (seen.has(key)) throw new Error("Duplicate ranking snapshot in batch");
+    seen.add(key);
+  }
 }
 
 export type SeoProduct = {id:string;title:string;url:string|null;seo:{title:string|null;description:string|null}|null;description:string};

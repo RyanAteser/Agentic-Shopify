@@ -7,21 +7,41 @@ export function parseSearchConsoleRows(rows:unknown, start:string, end:string):O
   for(const x of rows){
     if(!x||typeof x!=="object")throw new Error("Invalid Google metric row");
     const r=x as Record<string,unknown>;
+    // The request groups only by date; extra keys would represent a different
+    // cohort and must never be folded into a site-level daily observation.
     const keys=r.keys;
-    const date=Array.isArray(keys)?keys[0]:undefined;
-    if(typeof date!=="string"||!/^\d{4}-\d\d-\d\d$/.test(date)||date<start||date>end||seen.has(date)) {
+    const date=Array.isArray(keys)&&keys.length===1?keys[0]:undefined;
+    if(typeof date!=="string"||!/^\d{4}-\d\d-\d\d$/.test(date)||
+      date<start||date>end||seen.has(date)){
       throw new Error("Unexpected, out-of-range or duplicate Google metric date");
     }
-    seen.add(date);
-    const clicks=Number(r.clicks),impressions=Number(r.impressions),
-      ctr=Number(r.ctr),position=Number(r.position);
-    if(![clicks,impressions,ctr,position].every(Number.isFinite)||
-      clicks<0||impressions<0||clicks>impressions||ctr<0||ctr>1||position<0||position>500){
-      throw new Error("Invalid organic metric values");
+    const [year,month,day]=date.split("-").map(Number);
+    const calendarDay=new Date(Date.UTC(year,month-1,day));
+    if(calendarDay.toISOString().slice(0,10)!==date){
+      throw new Error("Invalid Google metric calendar date");
     }
+    // Do not coerce null, missing values, or strings to numbers. In particular,
+    // Number(null) silently turns a missing metric into a fabricated zero.
+    if(["clicks","impressions","ctr","position"].some(key=>
+      typeof r[key]!=="number"||!Number.isFinite(r[key]))){
+      throw new Error("Missing or non-numeric Google metric");
+    }
+    const clicks=r.clicks as number,impressions=r.impressions as number;
+    const ctr=r.ctr as number,position=r.position as number;
+    if(clicks<0||impressions<0||clicks>impressions||ctr<0||ctr>1||
+      (impressions===0&&(clicks!==0||ctr!==0||position!==0))||
+      (impressions>0&&(position<1||Math.abs(ctr-clicks/impressions)>1e-6))){
+      throw new Error("Inconsistent Google metric values");
+    }
+    seen.add(date);
     output.push({date,clicks,impressions,ctr,position});
   }
   return output;
+}
+
+/** A date-only property report must not be mixed with page aggregation. */
+export function assertPropertyAggregation(value: unknown): void {
+  if(value!=="byProperty")throw new Error("Unexpected Google Search Console aggregation type");
 }
 
 export type WindowResult={

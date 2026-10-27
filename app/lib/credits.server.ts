@@ -22,6 +22,14 @@ export async function createCreditedJob(shop:string,topic:string){
  */
 export async function failCreditedJob(shop:string,id:string,error:unknown){
   return db.$transaction(async tx=>{
+    // Lock the merchant row FIRST, matching article callbacks and Shopify
+    // redaction. Reversing StoreConfig -> ContentJob would permit a PostgreSQL
+    // deadlock when a late callback races a definitive rejection/refund.
+    // A deleted shop must not be recreated or refunded after redaction.
+    const active=await tx.storeConfig.updateMany({
+      where:{shop},data:{updatedAt:new Date()}
+    });
+    if(active.count!==1)return false;
     const result=await tx.contentJob.updateMany({
       where:{id,shop,status:{in:["queued","running"]}},
       data:{status:"failed",error:String(error).slice(0,400)}

@@ -17,7 +17,7 @@ export async function readBoundedRequestText(request: Request, maxBytes: number)
     throw new RangeError("maxBytes must be a positive safe integer");
   }
   const declared = request.headers.get("content-length");
-  if (declared !== null && /^\\d+$/.test(declared) && Number(declared) > maxBytes) {
+  if (declared !== null && /^\d+$/.test(declared) && Number(declared) > maxBytes) {
     throw new RequestBodyTooLargeError();
   }
   if (!request.body) return "";

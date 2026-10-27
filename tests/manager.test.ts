@@ -35,6 +35,25 @@ test("manager ranks factual SEO findings, editorial drafts and comparable rank d
  assert.equal(buildRankTasks([{keyword:"test",position:null,observedAt:new Date(),country:"US",device:"mobile",engine:"google",targetUrl:""}]).length,0);
 });
 
+test("rank changes never compare different pages or unknown result URLs",()=>{
+ const base={keyword:"boots",country:"US",device:"desktop",engine:"google"};
+ const now=new Date("2026-10-26T12:00:00Z");
+ const latest={...base,position:15,observedAt:new Date("2026-10-25T12:00:00Z"),targetUrl:"https://shop.example/products/boots"};
+ const previous={...base,position:3,observedAt:new Date("2026-10-24T12:00:00Z"),targetUrl:"https://shop.example/collections/boots"};
+ assert.equal(buildRankTasks([latest,previous],now).length,0,
+   "a different ranking landing page must not trigger a page-level drop");
+ assert.equal(buildRankTasks([{...latest,targetUrl:""},previous],now).length,0,
+   "missing target URL cannot establish a comparable page");
+ assert.equal(buildRankTasks([latest,{...previous,targetUrl:"https://shop.example/products/boots#details"}],now).length,1,
+   "fragments do not change the underlying page");
+ assert.equal(buildRankTasks([latest,{...previous,targetUrl:"https://shop.example/products/boots?variant=2"}],now).length,0,
+   "a different query string may identify a different page");
+ const middle={...base,position:5,observedAt:new Date("2026-10-24T18:00:00Z"),targetUrl:"https://shop.example/collections/boots"};
+ const older={...base,position:3,observedAt:new Date("2026-10-23T12:00:00Z"),targetUrl:"https://shop.example/products/boots"};
+ assert.equal(buildRankTasks([latest,middle,older],now).length,0,
+   "do not skip an intervening page change to cherry-pick a matching older snapshot");
+});
+
 test("merchant tasks deduplicate, preserve dismissals and never bleed into another shop",async()=>{
  const shopA="manager-"+randomUUID()+".myshopify.com";
  const shopB="manager-"+randomUUID()+".myshopify.com";

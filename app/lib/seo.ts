@@ -67,3 +67,29 @@ export function auditProductSeo(products: SeoProduct[]): SeoFinding[] {
   }
   return findings;
 }
+
+
+/**
+ * A ranking claim is merchant-specific only when its result URL belongs to
+ * the currently authenticated Shopify primary storefront domain. Never
+ * accept a competitor, arbitrary subdomain, or lookalike host as a store rank.
+ * Non-primary Markets domains require separate, explicit domain attestation.
+ */
+export function assertRankingTargetsForPrimaryDomain(records: SeoRanking[], primaryHost: string): void {
+  const host = primaryHost.trim().toLowerCase();
+  if (!/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(host) ||
+      host.split(".").some(label => label.startsWith("-") || label.endsWith("-"))) {
+    throw new Error("Verified Shopify primary domain unavailable");
+  }
+  for (const record of records) {
+    if (record.position === null) {
+      if (record.targetUrl) throw new Error("Not-found observation must have an empty target URL");
+      continue;
+    }
+    if (!record.targetUrl) throw new Error("Found ranking requires a result URL");
+    const url = new URL(record.targetUrl);
+    if (url.protocol !== "https:" || url.hostname !== host || url.username || url.password) {
+      throw new Error("Ranking URL does not belong to the Shopify primary domain");
+    }
+  }
+}

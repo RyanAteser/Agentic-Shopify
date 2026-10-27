@@ -36,12 +36,14 @@ App-side secret: `N8N_RANKING_SECRET` from the backend secret manager, different
 
 The ingestion endpoint:
 - Requires HTTPS in production, shared secret, and an existing installed Shopify tenant.
-- Rejects malformed ranks, unsafe URLs, future dates, oversized batches.
+- Rejects malformed ranks, unsafe URLs, future dates, oversized batches. A found rank requires a result URL; a not-found rank requires a null position and an empty URL.
+- Resolves the shop's **current primary storefront host** from the authenticated Shopify Admin API (shop.myshopifyDomain + shop.primaryDomain.host) on each import; only exact-host HTTPS results are accepted. The supplied shop/domain in n8n is not itself evidence of ownership. Requests fail closed (503) if the Shopify offline session/domain query is unavailable. This is conservative: secondary Shopify Markets domains and redirects need a separate authenticated domain allowlist before their results can be imported.
+- Uses a single DB transaction and store-row lock for the complete batch, so a database error cannot leave half a batch imported and uninstall/redaction cannot leave post-deletion orphaned ranking rows.
 - Upserts on (shop, keyword, engine, country, device, observedAt), preventing duplicate rows on retries.
 - Never changes product metadata or publishes articles.
-- Is intentionally a **trusted server-to-server ingest route**. For a multi-merchant public app, implement per-tenant connector identities / key rotation and request rate limits before launch.
+- Is intentionally a **trusted server-to-server ingest route**. The current global X-Agent-Key is **not** tenant-specific: possession of it can still submit fabricated observations for any installed tenant. Primary-domain attestation prevents cross-domain ranking contamination but does not prove the SERP measurement or caller's tenant authorization. Per-tenant connector identities, key rotation, payload provenance, and rate limits remain mandatory before public multi-merchant launch.
 - Bright Data ranks are point-in-time sampled organic placements; Google Search Console aggregated average position/clicks/impressions remain **separate source types**.
-- The manager only flags a page-level ranking drop when the two most recent distinct observations for the same keyword, engine, country and device also have the same nonempty HTTPS target URL (ignoring URL fragments). A changed or missing result URL is **not** proof of a page-level loss; the dashboard abstains from displaying a cross-page delta. This does not verify that the URL belongs to the merchant; tenant-specific domain attestation remains a production gate.
+- The manager only flags a page-level ranking drop when the two most recent distinct observations for the same keyword, engine, country and device also have the same nonempty HTTPS target URL (ignoring URL fragments). A changed or missing result URL is **not** proof of a page-level loss; the dashboard abstains from displaying a cross-page delta. The importer now attests the primary domain using Shopify, but other verified Markets domains and tenant-specific connector authorization remain production gates.
 
 ## New merchant-facing pages
 - `/app/team`: 10 specialist agents, statuses and safe action boundaries.

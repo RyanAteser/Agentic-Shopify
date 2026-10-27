@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRanking, auditProductSeo } from "../app/lib/seo";
+import { parseRanking, auditProductSeo, assertRankingTargetsForPrimaryDomain } from "../app/lib/seo";
 
 const now = new Date("2026-10-24T12:00:00.000Z");
 test("SERP rank record retains source, country, device and observation time", () => {
@@ -31,4 +31,27 @@ test("metadata audit detects blank descriptions and duplicate titles without mut
   assert.ok(findings.some(x=>x.kind==="missing-description"));
   assert.ok(findings.some(x=>x.kind==="duplicate-title"));
   assert.equal(products[0].seo.title,"Same");
+});
+
+
+test("SERP target URLs must belong to Shopify's verified primary domain", () => {
+  const found = parseRanking({keyword:"boots",position:5,observedAt:now.toISOString(),
+    targetUrl:"https://www.store.example/products/boots"},now);
+  assert.doesNotThrow(() => assertRankingTargetsForPrimaryDomain([found], "www.store.example"));
+  const absent = parseRanking({keyword:"boots",position:null,observedAt:now.toISOString()},now);
+  assert.doesNotThrow(() => assertRankingTargetsForPrimaryDomain([absent], "www.store.example"));
+  for (const url of [
+    "https://store.example/products/boots",
+    "https://competitor.example/products/boots",
+    "https://www.store.example.attacker.test/products/boots",
+    "https://blog.www.store.example/products/boots",
+    "https://www.store.example./products/boots",
+    "https://www.store.example@attacker.test/products/boots"
+  ]) {
+    const row = parseRanking({keyword:"boots",position:5,observedAt:now.toISOString(),targetUrl:url},now);
+    assert.throws(() => assertRankingTargetsForPrimaryDomain([row],"www.store.example"), url);
+  }
+  assert.throws(() => assertRankingTargetsForPrimaryDomain([{...found,targetUrl:""}],"www.store.example"));
+  assert.throws(() => assertRankingTargetsForPrimaryDomain([{...absent,targetUrl:found.targetUrl}],"www.store.example"));
+  assert.throws(() => assertRankingTargetsForPrimaryDomain([found],"https://www.store.example"));
 });

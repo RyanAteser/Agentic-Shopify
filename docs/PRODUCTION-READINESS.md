@@ -237,3 +237,16 @@ Background: https://shopify.dev/docs/apps/build/apis/graphql-admin/implementing-
 (Shopify's own idempotency guidance illustrates why concurrent duplicate
 requests require a stable operation identity; it does not provide idempotency
 for our n8n webhook).
+
+
+## n8n delivery outcome and stalled-job runbook (development only)
+
+The writer webhook's immediate HTTP 2xx response confirms intake, **not** completed generation or a saved draft. A later authenticated callback is required to mark a job completed. n8n's default Webhook response mode acknowledges before the workflow finishes: https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/
+
+- **2xx**: accepted for processing; await callback. A stale `running` job (30 minutes without an update) is shown as requiring review, not automatically marked failed.
+- **Known permanent 4xx** (400/401/403/404/405/410/413/415/422): dispatch is rejected and the original job's reserved free credit may be refunded transactionally.
+- **Other statuses** (including 408 timeout, 409 conflict, 425 too early, 429 throttling, redirects and 5xx), or transport exceptions: delivery is uncertain. Preserve the credit and job; **never auto-retry the same paid work**. A 429 may carry `Retry-After`, but that does not authorize retrying an ambiguous non-idempotent POST.
+- **Manual reconciliation**: first verify the merchant shop and job ID, inspect the n8n execution and callback history for that exact ID, and compare the app's draft/job state. If n8n completed, reconcile the callback once through the authenticated, idempotent endpoint. If it demonstrably never accepted the request, an operator can design a separately audited resolution/refund process; none is automated today. Do not replay requests merely because a job is old.
+- **Observability gap**: the 30-minute notice is advisory, not an SLA or proof of provider failure. There is not yet an operator dashboard, dead-letter queue, or authenticated n8n execution lookup. Test 408/409/425/429, 5xx, lost responses, delayed callbacks and execution retries against an isolated n8n instance before launch.
+
+HTTP semantics: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/408 and https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429 .

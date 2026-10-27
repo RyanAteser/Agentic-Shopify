@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
 import { buildBlogTasks, buildRankTasks, buildSeoTasks } from "../app/lib/manager";
-import { syncManagerTasks } from "../app/lib/manager.server";
+import { syncManagerTasks, logStoreAction } from "../app/lib/manager.server";
+import { eraseMerchantData } from "../app/lib/merchant-redaction.server";
 import { publishApprovedArticle } from "../app/lib/publish.server";
 import { recordEditorialReview } from "../app/lib/editorial-review.server";
 
@@ -101,7 +102,7 @@ test("merchant-approved publisher creates exactly one Shopify article and blocks
    let called=0;
    const admin={graphql:async (_query:string,_options?:unknown)=>{
      called++;
-     return {json:async()=>({data:{articleCreate:{article:{id:"gid://shopify/Article/123",title:"Product care guide"},userErrors:[]}}})};
+     return {json:async()=>({data:{articleCreate:{article:{id:"gid://shopify/Article/123",title:"Product care guide",isPublished:true,blog:{id:"gid://shopify/Blog/1"}},userErrors:[]}}})};
    }};
    assert.equal((await recordEditorialReview(shop,draft.id,"usable",5)).ok,true);
    const a=await publishApprovedArticle(shop,draft.id,admin);
@@ -117,5 +118,23 @@ test("merchant-approved publisher creates exactly one Shopify article and blocks
    await db.articleDraft.deleteMany({where:{shop}});
    await db.contentJob.deleteMany({where:{shop}});
    await db.storeConfig.deleteMany({where:{shop}});
+ }
+});
+
+test("manager sync and delayed audit writes do not recreate redacted merchant data",async()=>{
+ const shop="manager-deleted-"+randomUUID()+".myshopify.com";
+ await db.storeConfig.create({data:{shop}});
+ const catalog=[{id:"gid://shopify/Product/123",title:"Boots",description:"",url:"https://store.example/boots",seo:null}];
+ try{
+   assert.ok((await syncManagerTasks(shop,catalog))>0);
+   await logStoreAction(shop,null,"manager.sync","applied","before uninstall");
+   await eraseMerchantData(shop);
+   assert.equal(await syncManagerTasks(shop,catalog),0);
+   await logStoreAction(shop,null,"manager.sync","applied","late callback");
+   assert.equal(await db.storeConfig.count({where:{shop}}),0);
+   assert.equal(await db.storeRecommendation.count({where:{shop}}),0);
+   assert.equal(await db.storeActivity.count({where:{shop}}),0);
+ }finally{
+   await eraseMerchantData(shop);
  }
 });

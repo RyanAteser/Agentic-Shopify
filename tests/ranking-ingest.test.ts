@@ -10,7 +10,7 @@ import {
 import { rotateRankingConnectorKey, rankingKeyHash } from "../app/lib/ranking-credentials.server";
 
 const now = new Date("2026-10-26T12:00:00.000Z");
-const rank = parseRanking({ keyword: "boots", position: 5,
+const rank = parseRanking({ engine: "google", country: "US", device: "desktop", keyword: "boots", position: 5,
   observedAt: now.toISOString(), targetUrl: "https://shop.example/products/boots" }, now);
 
 test("Shopify Admin domain attestation rejects another store and missing primary domain", async () => {

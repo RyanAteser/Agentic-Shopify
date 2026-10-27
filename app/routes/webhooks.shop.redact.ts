@@ -8,6 +8,7 @@ export const action = async ({request}:ActionFunctionArgs) => {
    // locks this same row before inserting observations. Deleting it before
    // ranking rows ensures uninstall/redaction cannot leave orphaned ranks.
    db.storeConfig.deleteMany({where:{shop}}),
+   db.rankingConnectorCredential.deleteMany({where:{shop}}),
    db.googleAuthState.deleteMany({where:{shop}}),
    // Delete the connection before metrics so an in-flight GSC import cannot
    // reinsert observations after the redaction transaction has deleted them.

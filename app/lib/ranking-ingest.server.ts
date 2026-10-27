@@ -26,13 +26,18 @@ export async function primaryDomainForShop(admin: ReadOnlyAdmin, shop: string): 
  * of the store row, which locks it for this transaction on PostgreSQL.
  * Every batch is atomic; no partial ranking history on database failure.
  */
-export async function saveRankingsForShop(shop: string, entries: SeoRanking[]): Promise<void> {
+export async function saveRankingsForShop(shop: string, entries: SeoRanking[], keyHash: string): Promise<void> {
   await db.$transaction(async tx => {
     const active = await tx.storeConfig.updateMany({
       where: { shop },
       data: { updatedAt: new Date() }
     });
     if (active.count !== 1) throw new Error("Store disconnected during ranking import");
+    // Reauthorize under the same store row lock as rotation/uninstall.
+    const credential = await tx.rankingConnectorCredential.findFirst({
+      where: { shop, keyHash }, select: { shop: true }
+    });
+    if (!credential) throw new Error("Ranking connector revoked during import");
     for (const entry of entries) {
       await tx.seoRankObservation.upsert({
         where: { shop_keyword_engine_country_device_observedAt: {

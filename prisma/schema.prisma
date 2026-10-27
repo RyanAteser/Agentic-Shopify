@@ -81,6 +81,13 @@ model ArticleDraft {
   @@index([shop, status])
 }
 
+model RankingConnectorCredential {
+  shop      String   @id
+  keyHash   String   @unique
+  createdAt DateTime @default(now())
+  rotatedAt DateTime @default(now())
+}
+
 model SeoRankObservation {
   id          String   @id @default(cuid())
   shop        String

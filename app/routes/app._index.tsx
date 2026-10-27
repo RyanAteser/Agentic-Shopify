@@ -4,7 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { dispatchArticleJob, UncertainDispatchError } from "../lib/agent.server";
-import { DispatchAlreadyClaimedError } from "../lib/dispatch-claim.server";
+import { DispatchAlreadyClaimedError, generationJobNotice } from "../lib/dispatch-claim.server";
 import { createCreditedJob, failCreditedJob } from "../lib/credits.server";
 import { FREE_LIFETIME_GENERATIONS } from "../lib/pricing";
 import { publishApprovedArticle } from "../lib/publish.server";
@@ -35,7 +35,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     where: {shop: session.shop, draftId: {in: drafts.map(d => d.id)}},
     select: {draftId: true, decision: true, reviewMinutes: true}
   });
-  return { shop: session.shop, blogs, config, drafts, jobs, reviews };
+  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -202,7 +202,7 @@ export default function BlogAgent() {
       </article>)}
     </s-section>
     <s-section heading="Recent generation jobs">
-      <ul>{jobs.map(j => <li key={j.id}>{j.topic}: {j.status}{j.error ? " — " + j.error : ""}</li>)}</ul>
+      <ul>{jobs.map(j => <li key={j.id}>{j.topic}: {j.status}{j.error ? " — " + j.error : ""}{j.healthNotice ? " — " + j.healthNotice : ""}</li>)}</ul>
     </s-section>
   </s-page>;
 }

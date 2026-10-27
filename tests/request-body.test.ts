@@ -44,10 +44,10 @@ test("declared oversized bodies fail before stream consumption", async () => {
 test("both external JSON ingestion routes enforce a streamed byte limit", () => {
   const callback = readFileSync("app/routes/api.agent.complete.ts", "utf8");
   const rankings = readFileSync("app/routes/api.seo.rankings.ts", "utf8");
-  assert.match(callback, /readBoundedRequestText\\(request, 150_000\\)/);
-  assert.match(rankings, /readBoundedRequestText\\(request, 75_000\\)/);
+  assert.match(callback, /readBoundedRequestText\(request, 150_000\)/);
+  assert.match(rankings, /readBoundedRequestText\(request, 75_000\)/);
   for (const route of [callback, rankings]) {
-    assert.doesNotMatch(route, /await request\\.text\\(\\)/);
+    assert.doesNotMatch(route, /await request\.text\(\)/);
     assert.match(route, /instanceof RequestBodyTooLargeError/);
   }
 });

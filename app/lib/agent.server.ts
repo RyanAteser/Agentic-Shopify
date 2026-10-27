@@ -38,8 +38,7 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
 
   const url = process.env.N8N_BLOG_WEBHOOK_URL;
   const secret = process.env.N8N_OUTBOUND_KEY;
-  const appUrl = process.env.SHOPIFY_APP_URL;
-  if (!url || !secret || !appUrl) throw new Error("n8n integration is not configured");
+  if (!url || !secret) throw new Error("n8n integration is not configured");
   if (!url.startsWith("https://") && !url.startsWith("http://localhost")) {
     throw new Error("n8n URL must use HTTPS");
   }
@@ -61,7 +60,6 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
       priorPublishedTitles: recentPublished.map(x => x.title),
       avoidPatterns: recentRejected.map(x => ({ topic: x.topic, reason: x.reviewNotes })),
     },
-    callbackUrl: appUrl.replace(/\/$/, "") + "/api/agent/complete",
     productCatalog: await publishedProducts(shop),
   };
   // Set running before network dispatch: webhook responses and callbacks may race.

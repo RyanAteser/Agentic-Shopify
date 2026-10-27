@@ -103,6 +103,6 @@ test("writer callback destination is operator-pinned and cannot be changed by we
   assert.match(dispatchSource, /deliverClaimedN8nJob/,
     "App must route dispatch through the tested transport helper");
   const deliverySource = readFileSync("app/lib/n8n-delivery.server.ts", "utf8");
-  assert.match(deliverySource, /redirect:\\s*"error"/,
+  assert.match(deliverySource, /redirect:\s*"error"/,
     "App-to-n8n authenticated dispatch must reject redirects");
 });

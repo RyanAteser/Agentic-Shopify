@@ -3,18 +3,15 @@ import { unauthenticated } from "../shopify.server";
 import { assertRankingTargetsForPrimaryDomain, assertUniqueRankingObservations, parseRanking } from "../lib/seo";
 import { primaryDomainForShop, saveRankingsForShop, reserveRankingImportBudget, RankingImportRateLimitError, RankingSnapshotConflictError } from "../lib/ranking-ingest.server";
 import { authorizedRankingConnector } from "../lib/ranking-credentials.server";
+import { readBoundedRequestText, RequestBodyTooLargeError } from "../lib/request-body.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
-  if (Number(request.headers.get("content-length") || "0") > 75_000) {
-    return Response.json({ error: "Payload too large" }, { status: 413 });
-  }
-
   let shop: string;
   let entries: ReturnType<typeof parseRanking>[];
   try {
-    const text = await request.text();
-    if (text.length > 75_000) return Response.json({ error: "Payload too large" }, { status: 413 });
+    // Bound the actual streamed UTF-8 bytes, not client-supplied Content-Length.
+    const text = await readBoundedRequestText(request, 75_000);
     const value = JSON.parse(text);
     shop = String(value.shop || "");
     if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) {
@@ -27,6 +24,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     entries = value.observations.map((item: unknown) => parseRanking(item, now));
     assertUniqueRankingObservations(entries);
   } catch (e) {
+    if (e instanceof RequestBodyTooLargeError) {
+      return Response.json({ error: "Payload too large" }, { status: 413 });
+    }
     return Response.json({ error: e instanceof Error ? e.message : "Invalid data" }, { status: 400 });
   }
 

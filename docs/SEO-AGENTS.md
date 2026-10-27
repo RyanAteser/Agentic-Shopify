@@ -41,6 +41,7 @@ The ingestion endpoint:
 - Never changes product metadata or publishes articles.
 - Is intentionally a **trusted server-to-server ingest route**. For a multi-merchant public app, implement per-tenant connector identities / key rotation and request rate limits before launch.
 - Bright Data ranks are point-in-time sampled organic placements; Google Search Console aggregated average position/clicks/impressions remain **separate source types**.
+- The manager only flags a page-level ranking drop when the two most recent distinct observations for the same keyword, engine, country and device also have the same nonempty HTTPS target URL (ignoring URL fragments). A changed or missing result URL is **not** proof of a page-level loss; the dashboard abstains from displaying a cross-page delta. This does not verify that the URL belongs to the merchant; tenant-specific domain attestation remains a production gate.
 
 ## New merchant-facing pages
 - `/app/team`: 10 specialist agents, statuses and safe action boundaries.

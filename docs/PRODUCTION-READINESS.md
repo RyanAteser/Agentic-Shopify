@@ -276,3 +276,29 @@ A real development-store test and reconciliation plan remain required.
 
 Official Shopify `articleCreate` contract:
 https://shopify.dev/docs/api/admin-graphql/2026-07/mutations/articleCreate
+
+
+## Verify Shopify publication visibility and destination (2026-10-27)
+
+The shared publisher now captures the selected blog, author and reviewed draft
+content inside its merchant-row-locked publication claim. A missing destination
+blog is a **local validation failure**: no Shopify request is sent and the
+reviewed draft remains ready for correction. This avoids placing a draft into
+manual reconciliation when no external mutation could have occurred.
+
+Shopify's `articleCreate` mutation response is requested with `article.id`,
+`article.isPublished` and `article.blog.id`. The app marks an article
+`published` only if the response has a nonempty ID, confirms
+`isPublished === true`, identifies the blog selected at claim time, and has
+no GraphQL or mutation user errors. Missing, unpublished, or wrong-blog
+responses remain `needs_reconciliation` and cannot be blindly replayed.
+
+Five synthetic mocked-Admin tests cover absent destination, unpublished
+response, wrong blog, omitted visibility fields and a configuration change
+while the mutation is in flight. These checks validate response handling, not
+Shopify's real-world consistency, storefront visibility, indexing, or
+uninstall races. An authenticated development-store test must verify the
+exact 2026-10 GraphQL response and a live storefront before release.
+
+Primary API contract:
+https://shopify.dev/docs/api/admin-graphql/2026-10/mutations/articleCreate

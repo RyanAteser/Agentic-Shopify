@@ -104,3 +104,31 @@ References:
   https://docs.n8n.io/workflows/executions/all-executions/
 - n8n security audit for unprotected webhooks and credentials:
   https://docs.n8n.io/hosting/securing/security-audit/
+
+
+## Uncertain dispatch plus database outage (2026-10-27)
+
+**Invariant:** A failed write of `dispatch_uncertain` is not proof that the
+outbound n8n request was rejected. Previously the write failure could escape
+as a generic exception, and both manual and scheduled callers refunded generic
+errors. If n8n accepted the job before returning HTTP 503, closing a socket,
+or timing out, this could refund an actually running generation.
+
+`deliverClaimedN8nJob` now always raises `UncertainDispatchError` after an
+ambiguous HTTP or transport outcome, **even if recording that outcome fails**.
+The error path logs only the exception class, not merchant payloads, tokens,
+or endpoint URLs. Both callers must continue to exempt
+`UncertainDispatchError` from `failCreditedJob`. A job may temporarily
+remain `running` when the database write fails; that is preferable to
+incorrectly refunding or dispatching twice.
+
+The regression test uses a disposable local HTTP server to simulate HTTP 503
+and dropped sockets while injecting a failed uncertainty-state database write.
+It checks that the exception remains non-refundable, one request was sent, and
+the original credit stays reserved. This is **not** a real n8n execution,
+PostgreSQL outage, or proof of end-to-end recovery. In staging, induce a
+database write outage after n8n receives a request, then verify operator
+reconciliation against n8n's execution history and the stored job. Never
+blindly replay a job because its status is `running`.
+
+Reference: https://docs.n8n.io/workflows/executions/all-executions/

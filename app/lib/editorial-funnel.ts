@@ -1,0 +1,55 @@
+export type EditorialStatusCount = { status: string; count: number };
+
+export type EditorialCohort = {
+  requests: number;
+  failedJobs: number;
+  uncertainJobs: number;
+  drafts: number;
+  published: number;
+  rejected: number;
+  awaitingReview: number;
+  reconciliation: number;
+  resolved: number;
+  publishedAmongResolvedPct: number | null;
+};
+
+function countsByStatus(rows: EditorialStatusCount[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (!Number.isSafeInteger(row.count) || row.count < 0) {
+      throw new Error("Invalid editorial aggregate count");
+    }
+    counts.set(row.status, (counts.get(row.status) ?? 0) + row.count);
+  }
+  return counts;
+}
+
+/**
+ * Status snapshot for drafts CREATED in a reporting window. A draft can be
+ * published after that window, so this is not a period publication count.
+ * Job requests and drafts are independent creation-date cohorts: never divide
+ * their totals to infer delivery success. No merchant revenue is inferred.
+ */
+export function summarizeEditorialCohort(
+  jobRows: EditorialStatusCount[], draftRows: EditorialStatusCount[]
+): EditorialCohort {
+  const jobs = countsByStatus(jobRows);
+  const drafts = countsByStatus(draftRows);
+  const sum = (rows: Map<string, number>) =>
+    [...rows.values()].reduce((total, count) => total + count, 0);
+  const published = drafts.get("published") ?? 0;
+  const rejected = drafts.get("rejected") ?? 0;
+  const resolved = published + rejected;
+  return {
+    requests: sum(jobs),
+    failedJobs: jobs.get("failed") ?? 0,
+    uncertainJobs: jobs.get("dispatch_uncertain") ?? 0,
+    drafts: sum(drafts),
+    published,
+    rejected,
+    awaitingReview: (drafts.get("ready") ?? 0) + (drafts.get("needs_review") ?? 0),
+    reconciliation: (drafts.get("needs_reconciliation") ?? 0) + (drafts.get("publishing") ?? 0),
+    resolved,
+    publishedAmongResolvedPct: resolved >= 5 ? published / resolved * 100 : null,
+  };
+}

@@ -67,3 +67,40 @@ References:
   https://www.postgresql.org/docs/current/explicit-locking.html#LOCKING-DEADLOCKS
 - Prisma 6 transactions:
   https://www.prisma.io/docs/orm/v6/prisma-client/queries/transactions
+
+
+## Isolated HTTP transport fault injection (2026-10-27)
+
+`tests/n8n-delivery.test.ts` runs the actual application dispatch transport
+against a disposable local Node HTTP server; no n8n account, provider
+credentials, Shopify Admin API, or live merchant data are used. The
+`deliverClaimedN8nJob` helper is invoked only after an atomic job claim,
+and the normal application dispatch still prepares Shopify context and
+enforces the same webhook URL validation.
+
+The regression suite verifies:
+
+1. HTTP 202 acknowledges transport but leaves the job running until callback;
+   the outgoing POST contains one job ID and the configured header credential.
+2. HTTP 400 is a definitive rejection; the caller may refund exactly once.
+3. HTTP 429 leaves the job/credit reserved; a later callback creates one draft
+   and repeated callbacks cannot create duplicates.
+4. A callback that commits before a delayed HTTP 503 response remains completed;
+   uncertain-delivery bookkeeping cannot revert it.
+5. Redirects are not followed, and a dropped TCP response is never retried;
+   neither outcome automatically refunds a credit.
+
+These tests are more representative than pure HTTP-status classification
+tests, but **they are not a real n8n execution or a live Shopify callback**.
+The stub cannot establish n8n's execution persistence, callback retry
+configuration, provider charge timing, proxy behavior, or true crash recovery.
+The release gate remains an authenticated, isolated n8n integration with
+delayed callbacks, workflow-level execution lookup, and deliberate process
+crashes. Never automatically retry an uncertain job without verifying that
+the original n8n execution did not run.
+
+References:
+- n8n execution inspection and retry behavior:
+  https://docs.n8n.io/workflows/executions/all-executions/
+- n8n security audit for unprotected webhooks and credentials:
+  https://docs.n8n.io/hosting/securing/security-audit/

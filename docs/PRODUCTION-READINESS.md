@@ -20,7 +20,7 @@
 | Managed PostgreSQL | Migration committed; NOT provisioned | Migration job runs on actual database with backup/restore test |
 | Google OAuth | Code implemented; NOT connected | OAuth consent screen configured, allowed callback domain, verified store property, Google policy review |
 | n8n | JSON ready; NOT connected | Authenticated instance, secure credential scopes, workflow publishing, end-to-end callback verification |
-| Bright Data ranking connector | Normalization endpoint and per-tenant hashed keys coded; NOT connected | Operator-provisioned isolated n8n credentials, real workflow JSON mapping, verified SERP samples, rate limits and source provenance |
+| Bright Data ranking connector | Normalization endpoint and per-tenant hashed keys coded; NOT connected | Operator-provisioned isolated n8n credentials, real workflow JSON mapping, verified SERP samples, edge abuse controls, external scrape cost limits and source provenance |
 | Real Shopify publishing | Mock-tested only | Development store draft -> manual review -> one published article; confirm exactly-once behavior |
 | Pricing | Proposed only | Shopify App Pricing setup and billing / entitlement webhooks verified |
 | n8n commercial rights | Not yet confirmed | Written n8n guidance for configurable merchant automations or appropriate Enterprise/OEM contract |
@@ -103,3 +103,11 @@ Standalone blog starter: $19/month. All-in-one launch: $49/month (blog + SEO + m
 - GSC site access: https://developers.google.com/webmaster-tools/v1/sites/list
 - GSC Search Analytics query: https://developers.google.com/webmaster-tools/v1/searchanalytics/query
 - n8n licensing: https://support.n8n.io/article/can-i-use-your-license-for-my-use-case
+
+## Ranking connector admission budget (development)
+
+The ranking importer now reserves an atomic, per-shop quota **before** querying Shopify's Admin API: 60 requests and 1,000 submitted ranking observations per fixed UTC hour. Requests from different shops do not share the quota. HTTP 429 includes a `Retry-After` value in seconds; invalid credentials receive HTTP 401. Failed Shopify domain checks and duplicate/retried submissions consume budget intentionally, so retries must be bounded and paced. The quota is durable in `StoreConfig`, is deleted on uninstall/redaction, and does not reset when an operator rotates a key.
+
+This is a defensive app policy, **not** Shopify's GraphQL Admin API throttle (which is calculated using query cost and app/store buckets), a Bright Data billing cap, a verified source signature, or protection from unauthenticated network floods. Before enabling a real merchant connector, add ingress/IP abuse limits, source attestation, per-merchant paid scrape spend ceilings, and real payload/429/backoff tests.
+
+Source: https://shopify.dev/docs/apps/build/apis/graphql-admin/rate-limits

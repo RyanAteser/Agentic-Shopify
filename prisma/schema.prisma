@@ -43,6 +43,9 @@ model StoreConfig {
   cadenceDays      Int      @default(7)
   topicCursor       Int      @default(0)
   freeDraftsUsed    Int      @default(0)
+  rankingWindowStart DateTime?
+  rankingRequestsUsed Int      @default(0)
+  rankingRecordsUsed  Int      @default(0)
   lastManagerSyncAt DateTime?
   nextRunAt        DateTime?
   enabled          Boolean  @default(false)

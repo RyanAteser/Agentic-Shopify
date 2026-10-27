@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { unauthenticated } from "../shopify.server";
 import { assertRankingTargetsForPrimaryDomain, parseRanking } from "../lib/seo";
-import { primaryDomainForShop, saveRankingsForShop } from "../lib/ranking-ingest.server";
+import { primaryDomainForShop, saveRankingsForShop, reserveRankingImportBudget, RankingImportRateLimitError } from "../lib/ranking-ingest.server";
 import { authorizedRankingConnector } from "../lib/ranking-credentials.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -32,6 +32,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // Bind the key to the payload shop before any Shopify Admin calls.
   const keyHash = await authorizedRankingConnector(shop, request.headers.get("X-Agent-Key"));
   if (!keyHash) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Reserve a durable per-shop budget before making any Shopify API call.
+  // A failed or replayed request still costs admission capacity.
+  try {
+    await reserveRankingImportBudget(shop, keyHash, entries.length);
+  } catch (e) {
+    if (e instanceof RankingImportRateLimitError) {
+      return Response.json({ error: "Ranking import quota exceeded" }, {
+        status: 429, headers: { "Retry-After": String(e.retryAfterSeconds) }
+      });
+    }
+    if (e instanceof Error && e.message === "Ranking connector revoked during import") {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (e instanceof Error && e.message === "Store disconnected during ranking import") {
+      return Response.json({ error: "Store disconnected during ranking import" }, { status: 409 });
+    }
+    console.error("Ranking budget admission failed", e instanceof Error ? e.message : "unknown");
+    return Response.json({ error: "Ranking budget unavailable; retry later" }, { status: 503 });
+  }
 
   // Fail closed when Shopify cannot attest the primary domain. Never trust
   // the tenant's self-reported domain in an n8n webhook payload.

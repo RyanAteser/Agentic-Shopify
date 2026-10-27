@@ -50,3 +50,65 @@ export async function saveRankingsForShop(shop: string, entries: SeoRanking[], k
     }
   });
 }
+
+/**
+ * Durable per-merchant admission budget for the ranking connector. Charge a
+ * valid request BEFORE the Shopify Admin API call, including requests that
+ * subsequently fail storefront verification. This prevents repeated requests
+ * with a compromised connector key from exhausting Shopify API capacity.
+ *
+ * Fixed UTC hour, at most 60 calls and 1,000 submitted rows per store. This
+ * is not an IP/edge abuse limit or a Bright Data cost limit.
+ */
+export const RANKING_REQUESTS_PER_HOUR = 60;
+export const RANKING_RECORDS_PER_HOUR = 1000;
+
+export class RankingImportRateLimitError extends Error {
+  constructor(public readonly retryAfterSeconds: number) {
+    super("Ranking import quota exceeded");
+    this.name = "RankingImportRateLimitError";
+  }
+}
+
+export async function reserveRankingImportBudget(
+  shop: string, keyHash: string, recordCount: number, now = new Date()
+): Promise<void> {
+  if (!Number.isInteger(recordCount) || recordCount < 1 || recordCount > 50 ||
+      !Number.isFinite(now.getTime())) {
+    throw new Error("Invalid ranking import budget request");
+  }
+  const hourMs = 3_600_000;
+  const windowStart = new Date(Math.floor(now.getTime() / hourMs) * hourMs);
+  const retryAfterSeconds = Math.max(1, Math.ceil((windowStart.getTime() + hourMs - now.getTime()) / 1000));
+  await db.$transaction(async tx => {
+    // PostgreSQL row lock serializes concurrent admissions, rotation, and
+    // uninstall; SQLite transactions serialize writers.
+    const active = await tx.storeConfig.updateMany({
+      where: { shop }, data: { updatedAt: now }
+    });
+    if (active.count !== 1) throw new Error("Store disconnected during ranking import");
+    const credential = await tx.rankingConnectorCredential.findFirst({
+      where: { shop, keyHash }, select: { shop: true }
+    });
+    if (!credential) throw new Error("Ranking connector revoked during import");
+    const state = await tx.storeConfig.findUniqueOrThrow({
+      where: { shop },
+      select: { rankingWindowStart: true, rankingRequestsUsed: true, rankingRecordsUsed: true }
+    });
+    const current = state.rankingWindowStart?.getTime() === windowStart.getTime();
+    const requests = current ? state.rankingRequestsUsed : 0;
+    const records = current ? state.rankingRecordsUsed : 0;
+    if (requests >= RANKING_REQUESTS_PER_HOUR ||
+        records + recordCount > RANKING_RECORDS_PER_HOUR) {
+      throw new RankingImportRateLimitError(retryAfterSeconds);
+    }
+    await tx.storeConfig.update({
+      where: { shop },
+      data: {
+        rankingWindowStart: windowStart,
+        rankingRequestsUsed: requests + 1,
+        rankingRecordsUsed: records + recordCount
+      }
+    });
+  });
+}

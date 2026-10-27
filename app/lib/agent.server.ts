@@ -68,6 +68,8 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
   try{
     response=await fetch(url,{
       method:"POST",
+      // Never forward the n8n webhook credential to a redirected host.
+      redirect:"error",
       headers:{"Content-Type":"application/json","X-Agent-Key":secret},
       body:JSON.stringify(body),
       signal:AbortSignal.timeout(12_000),

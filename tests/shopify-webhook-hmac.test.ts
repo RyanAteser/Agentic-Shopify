@@ -84,13 +84,17 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
     assert.equal(retried.status, 200);
     assert.equal(await db.storeConfig.count({ where: { shop: otherShop } }), 1);
   } finally {
-    for (const model of [
-      db.googleAuthState, db.searchConsoleConnection, db.organicDailyMetric,
-      db.storeActivity, db.storeRecommendation, db.articleDraft,
-      db.seoRankObservation, db.contentJob, db.storeConfig, db.session,
-    ]) {
-      await model.deleteMany({ where: { shop: { in: [shop, otherShop] } } });
-    }
+    const where = { shop: { in: [shop, otherShop] } };
+    await db.googleAuthState.deleteMany({ where });
+    await db.searchConsoleConnection.deleteMany({ where });
+    await db.organicDailyMetric.deleteMany({ where });
+    await db.storeActivity.deleteMany({ where });
+    await db.storeRecommendation.deleteMany({ where });
+    await db.articleDraft.deleteMany({ where });
+    await db.seoRankObservation.deleteMany({ where });
+    await db.contentJob.deleteMany({ where });
+    await db.storeConfig.deleteMany({ where });
+    await db.session.deleteMany({ where });
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key];
       else process.env[key] = previous[key];

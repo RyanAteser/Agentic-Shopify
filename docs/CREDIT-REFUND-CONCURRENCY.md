@@ -25,7 +25,7 @@ then conditionally changes only a `queued` or `running` job to
 if that status transition succeeds.
 
 All three paths acquire the merchant row before the job row:
-- Callback: merchant -> job -> draft.
+- Callback: merchant -> read job -> draft upsert -> job status update.
 - Refund: merchant -> job -> credit decrement on merchant.
 - Redaction: delete merchant -> delete merchant-owned records.
 

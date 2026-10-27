@@ -16,39 +16,53 @@ export async function publishApprovedArticle(shop:string,draftId:string,admin:Ad
     const active=await tx.storeConfig.updateMany({
       where:{shop},data:{updatedAt:new Date()}
     });
-    if(active.count!==1)return false;
+    if(active.count!==1)return null;
+    // Capture the selected destination and exact reviewed content at claim
+    // time. A missing blog is a local validation error, not an uncertain
+    // Shopify mutation, so leave the draft ready for correction.
+    const config=await tx.storeConfig.findUnique({
+      where:{shop},select:{blogId:true,authorName:true}
+    });
+    if(!config?.blogId)return null;
     const review=await tx.editorialReview.findUnique({
       where:{shop_draftId:{shop,draftId}},select:{decision:true}
     });
-    if(review?.decision!=="usable")return false;
+    if(review?.decision!=="usable")return null;
+    const draft=await tx.articleDraft.findFirst({
+      where:{id:draftId,shop,status:"ready",seoScore:{gte:70}},
+      select:{title:true,body:true,summary:true,tags:true}
+    });
+    if(!draft)return null;
     const claim=await tx.articleDraft.updateMany({
       where:{id:draftId,shop,status:"ready",seoScore:{gte:70}},
       data:{status:"publishing"}
     });
-    return claim.count===1;
+    return claim.count===1?{...draft,...config}:null;
   });
-  if(!claimed)return {ok:false,message:"Record a usable editorial review before publishing; the draft must still be ready and unpublished."};
+  if(!claimed)return {ok:false,message:"A connected destination blog, usable editorial review and ready unpublished draft are required."};
   try{
-    const [draft,config]=await Promise.all([
-      db.articleDraft.findFirstOrThrow({where:{id:draftId,shop}}),
-      db.storeConfig.findUniqueOrThrow({where:{shop}})
-    ]);
-    if(!config.blogId)throw new Error("No destination blog configured");
     const response=await admin.graphql(
       `#graphql mutation ManagerPublishArticle($article:ArticleCreateInput!) {
-        articleCreate(article:$article) { article { id title } userErrors { field message } }
+        articleCreate(article:$article) { article { id title isPublished blog { id } } userErrors { field message } }
       }`,
       {variables:{article:{
-        blogId:config.blogId,title:draft.title,body:draft.body,summary:draft.summary,
-        author:{name:config.authorName},
-        tags:draft.tags.split(",").map(t=>t.trim()).filter(Boolean),
+        blogId:claimed.blogId,title:claimed.title,body:claimed.body,summary:claimed.summary,
+        author:{name:claimed.authorName},
+        tags:claimed.tags.split(",").map(t=>t.trim()).filter(Boolean),
         isPublished:true
       }}}
     );
     const result=await response.json();
     const errors=[...(result.errors||[]),...(result.data?.articleCreate?.userErrors||[])];
     const article=result.data?.articleCreate?.article;
-    if(errors.length||!article?.id)throw new Error(errors.map((e:{message:string})=>e.message).join("; ")||"Shopify returned no article");
+    // A successful HTTP/GraphQL response does not establish that the article
+    // is visible in the intended blog. Fail closed and require reconciliation
+    // if Shopify omits these fields or reports an unexpected destination.
+    if(errors.length||typeof article?.id!=="string"||!article.id||
+       article.isPublished!==true||article.blog?.id!==claimed.blogId) {
+      throw new Error(errors.map((e:{message:string})=>e.message).join("; ")||
+        "Shopify did not confirm a published article in the selected blog");
+    }
     await db.articleDraft.update({where:{id:draftId},data:{
       status:"published",shopifyArticleId:article.id,publishedAt:new Date()
     }});

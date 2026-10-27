@@ -5,6 +5,7 @@ import db from "../app/db.server";
 import { buildBlogTasks, buildRankTasks, buildSeoTasks } from "../app/lib/manager";
 import { syncManagerTasks } from "../app/lib/manager.server";
 import { publishApprovedArticle } from "../app/lib/publish.server";
+import { recordEditorialReview } from "../app/lib/editorial-review.server";
 
 test("manager ranks factual SEO findings, editorial drafts and comparable rank drops",()=>{
  const seo=buildSeoTasks([{
@@ -102,6 +103,7 @@ test("merchant-approved publisher creates exactly one Shopify article and blocks
      called++;
      return {json:async()=>({data:{articleCreate:{article:{id:"gid://shopify/Article/123",title:"Product care guide"},userErrors:[]}}})};
    }};
+   assert.equal((await recordEditorialReview(shop,draft.id,"usable",5)).ok,true);
    const a=await publishApprovedArticle(shop,draft.id,admin);
    const b=await publishApprovedArticle(shop,draft.id,admin);
    assert.equal(a.ok,true);
@@ -111,6 +113,7 @@ test("merchant-approved publisher creates exactly one Shopify article and blocks
    assert.equal(saved.status,"published");
    assert.equal(saved.shopifyArticleId,"gid://shopify/Article/123");
  }finally{
+   await db.editorialReview.deleteMany({where:{shop}});
    await db.articleDraft.deleteMany({where:{shop}});
    await db.contentJob.deleteMany({where:{shop}});
    await db.storeConfig.deleteMany({where:{shop}});

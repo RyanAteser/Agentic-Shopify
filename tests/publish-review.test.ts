@@ -105,7 +105,7 @@ test("uncertain Shopify response requires reconciliation and forbids replay",asy
     const admin={graphql:async()=>{calls++;throw new Error("simulated lost response");}};
     const result=await publishApprovedArticle(shop,draftId,admin);
     assert.equal(result.ok,false);
-    assert.match(result.message,/reconciliation/i);
+    assert.match(result.message,/could not be confirmed/i);
     assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"needs_reconciliation");
     assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
     assert.equal(calls,1);

@@ -250,3 +250,29 @@ The writer webhook's immediate HTTP 2xx response confirms intake, **not** comple
 - **Observability gap**: the 30-minute notice is advisory, not an SLA or proof of provider failure. There is not yet an operator dashboard, dead-letter queue, or authenticated n8n execution lookup. Test 408/409/425/429, 5xx, lost responses, delayed callbacks and execution retries against an isolated n8n instance before launch.
 
 HTTP semantics: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/408 and https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429 .
+
+
+## Durable editorial review required before Shopify publication (2026-10-27)
+
+A structural readiness score (even 100/100) must not authorize an irreversible
+Shopify `articleCreate(isPublished: true)` mutation. Previously, the Blog Agent
+and Store Manager allowed a single publish confirmation checkbox to publish a
+`ready` draft without a separately recorded editorial review. The shared
+publisher now requires a **shop-scoped, persisted `usable` editorial review**
+for that draft, then atomically claims its `ready` status under the merchant
+row lock. Both UIs disable or hide publication until the review is recorded.
+A final explicit merchant confirmation is still required; n8n cannot publish.
+
+Regression tests use a mocked Shopify Admin GraphQL client: unreviewed,
+rejected, other-shop, and redacted drafts trigger **zero Shopify mutations**;
+a reviewed draft triggers one publish mutation, and a repeat attempt cannot
+publish twice. An ambiguous Shopify response leaves the draft in
+`needs_reconciliation` and prevents a blind second mutation.
+
+This is a workflow and database guard, **not proof** that a merchant actually
+verified facts, that Shopify accepted a real publication, or that a concurrent
+uninstall cannot occur after the local claim but before the external API call.
+A real development-store test and reconciliation plan remain required.
+
+Official Shopify `articleCreate` contract:
+https://shopify.dev/docs/api/admin-graphql/2026-07/mutations/articleCreate

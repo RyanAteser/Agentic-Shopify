@@ -8,11 +8,26 @@ type Admin = {graphql: (...args:any[])=>Promise<any>};
  * On an uncertain Shopify response, manual reconciliation is required.
  */
 export async function publishApprovedArticle(shop:string,draftId:string,admin:Admin) {
-  const claim=await db.articleDraft.updateMany({
-    where:{id:draftId,shop,status:"ready",seoScore:{gte:70}},
-    data:{status:"publishing"}
+  // A structure score is not evidence that a person checked factual claims.
+  // Require an immutable, shop-scoped usable editorial review before the
+  // irreversible Shopify mutation. Lock StoreConfig first to match review,
+  // callback and merchant-redaction transaction ordering.
+  const claimed=await db.$transaction(async tx=>{
+    const active=await tx.storeConfig.updateMany({
+      where:{shop},data:{updatedAt:new Date()}
+    });
+    if(active.count!==1)return false;
+    const review=await tx.editorialReview.findUnique({
+      where:{shop_draftId:{shop,draftId}},select:{decision:true}
+    });
+    if(review?.decision!=="usable")return false;
+    const claim=await tx.articleDraft.updateMany({
+      where:{id:draftId,shop,status:"ready",seoScore:{gte:70}},
+      data:{status:"publishing"}
+    });
+    return claim.count===1;
   });
-  if(!claim.count) return {ok:false,message:"Article is not eligible or is already being published."};
+  if(!claimed)return {ok:false,message:"Record a usable editorial review before publishing; the draft must still be ready and unpublished."};
   try{
     const [draft,config]=await Promise.all([
       db.articleDraft.findFirstOrThrow({where:{id:draftId,shop}}),

@@ -184,7 +184,7 @@ export default function BlogAgent() {
           <label><input type="checkbox" name="reviewed" required/> I inspected the full draft and consider it usable as written</label>
           <button type="submit" disabled={busy}>Record usable review (do not publish)</button>
         </Form>}
-        {d.status === "ready" && <Form method="post" onSubmit={e => {
+        {d.status === "ready" && reviewMap.get(d.id)?.decision === "usable" && <Form method="post" onSubmit={e => {
           if (!window.confirm("Publish this article immediately to your Shopify store? You must have verified all claims and source links.")) e.preventDefault();
         }}>
           <input type="hidden" name="intent" value="publish"/>
@@ -192,6 +192,7 @@ export default function BlogAgent() {
           <label><input type="checkbox" name="verified" required/> I have reviewed all facts, links and brand claims</label>
           <button type="submit" disabled={busy}>Publish to Shopify</button>
         </Form>}
+        {d.status === "ready" && reviewMap.get(d.id)?.decision !== "usable" && <p>Record a usable editorial review above before publishing. A structure score alone is not approval.</p>}
         {["ready", "needs_review"].includes(d.status) && !reviewMap.has(d.id) && <Form method="post" style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
           <input type="hidden" name="intent" value="reject"/>
           <input type="hidden" name="draftId" value={d.id}/>

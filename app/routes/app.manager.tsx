@@ -26,7 +26,10 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
   const articles=await db.articleDraft.findMany({
     where:{shop,id:{in:ids}},select:{id:true,body:true,summary:true,seoScore:true,title:true,reviewNotes:true,status:true}
   });
-  return {shop,warning,filter,tasks,activity,counts,articles};
+  const reviews=await db.editorialReview.findMany({
+    where:{shop,draftId:{in:ids}},select:{draftId:true,decision:true}
+  });
+  return {shop,warning,filter,tasks,activity,counts,articles,reviews};
 };
 
 export const action=async ({request}:ActionFunctionArgs)=>{
@@ -85,12 +88,13 @@ export const action=async ({request}:ActionFunctionArgs)=>{
 };
 
 export default function StoreManager(){
-  const {shop,warning,filter,tasks,activity,counts,articles}=useLoaderData<typeof loader>();
+  const {shop,warning,filter,tasks,activity,counts,articles,reviews}=useLoaderData<typeof loader>();
   const outcome=useActionData<typeof action>();
   const nav=useNavigation();
   const busy=nav.state!=="idle";
   const totals=Object.fromEntries(counts.map(x=>[x.status,x._count._all])) as Record<string,number>;
   const draftMap=new Map(articles.map(a=>[a.id,a]));
+  const usableReviewIds=new Set(reviews.filter(r=>r.decision==="usable").map(r=>r.draftId));
   return <s-page heading="Store Manager · Approval Inbox">
     <s-section heading="Your store, one team">
       <p>Connected merchant: <strong>{shop}</strong></p>
@@ -135,7 +139,8 @@ export default function StoreManager(){
               <input type="hidden" name="id" value={task.id}/>
               <input type="hidden" name="intent" value="publish"/>
               <label style={{marginRight:8}}><input type="checkbox" name="verified" required/> I verified claims, sources and brand fit</label>
-              <button type="submit" disabled={busy||article?.status!=="ready"}>Approve & Publish</button>
+              <button type="submit" disabled={busy||article?.status!=="ready"||!usableReviewIds.has(task.targetId)}>Approve & Publish</button>
+              {!usableReviewIds.has(task.targetId) && <p>Record a usable editorial review in the <Link to="/app">Blog Agent</Link> first.</p>}
             </Form>:<>
               <Form method="post">
                 <input type="hidden" name="id" value={task.id}/>

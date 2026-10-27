@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
-import { claimQueuedDispatch, DispatchAlreadyClaimedError, validateN8nWebhookUrl } from "../app/lib/dispatch-claim.server";
+import { claimQueuedDispatch, classifyN8nDispatchStatus, DispatchAlreadyClaimedError, generationJobNotice, validateN8nWebhookUrl } from "../app/lib/dispatch-claim.server";
 
 test("n8n webhook URL cannot disguise a remote host as localhost", () => {
   for (const valid of [
@@ -43,4 +43,31 @@ test("queued job is claimed only once; other shops and completed jobs cannot dis
     await db.contentJob.deleteMany({ where: { shop: { in: [shop, other] } } });
     await db.storeConfig.deleteMany({ where: { shop: { in: [shop, other] } } });
   }
+});
+
+
+test("only known permanent n8n rejections allow refund; transient HTTP outcomes require reconciliation", () => {
+  for (const status of [200, 201, 202, 204]) {
+    assert.equal(classifyN8nDispatchStatus(status), "accepted", String(status));
+  }
+  for (const status of [400, 401, 403, 404, 405, 410, 413, 415, 422]) {
+    assert.equal(classifyN8nDispatchStatus(status), "rejected", String(status));
+  }
+  for (const status of [0, 301, 307, 308, 402, 408, 409, 425, 429, 500, 502, 503, 504, 599]) {
+    assert.equal(classifyN8nDispatchStatus(status), "uncertain", String(status));
+  }
+});
+
+test("stalled job notices are advisory and never mislabel completed jobs", () => {
+  const now = new Date("2026-10-27T17:00:00.000Z");
+  const fresh = new Date("2026-10-27T16:45:00.000Z");
+  const stale = new Date("2026-10-27T16:29:59.000Z");
+  assert.equal(generationJobNotice("running", fresh, now), null);
+  assert.equal(generationJobNotice("queued", fresh, now), null);
+  assert.match(generationJobNotice("running", stale, now)!, /30 minutes/);
+  assert.match(generationJobNotice("queued", stale, now)!, /30 minutes/);
+  assert.match(generationJobNotice("dispatch_uncertain", fresh, now)!, /inspect the n8n execution/);
+  assert.equal(generationJobNotice("completed", stale, now), null);
+  assert.equal(generationJobNotice("failed", stale, now), null);
+  assert.equal(generationJobNotice("running", new Date("invalid"), now), null);
 });

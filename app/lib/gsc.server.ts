@@ -1,6 +1,6 @@
 import db from "../db.server";
 import {decryptToken,encryptToken} from "./gsc-crypto.server";
-import {gscReportingWindow,matchesPrimaryDomain,parseSearchConsoleRows} from "./growth";
+import {assertPropertyAggregation,gscReportingWindow,matchesPrimaryDomain,parseSearchConsoleRows} from "./growth";
 
 const SCOPE="https://www.googleapis.com/auth/webmasters.readonly";
 const GOOGLE_AUTHORIZE="https://accounts.google.com/o/oauth2/v2/auth";
@@ -97,6 +97,9 @@ export async function syncOrganicMetrics(shop:string,now=new Date()){
       body:JSON.stringify({startDate,endDate,dimensions:["date"],type:"web",
         dataState:"final",rowLimit:250,aggregationType:"byProperty"})
     });
+    // A successful HTTP response is not proof of the requested metric scope.
+    // Refuse page-aggregated or malformed data rather than misleading merchants.
+    assertPropertyAggregation(result.responseAggregationType);
     const rows=parseSearchConsoleRows(result.rows||[],startDate,endDate);
     await db.$transaction(async tx=>{
       // Revalidate consent and the exact lease before writing any observations.

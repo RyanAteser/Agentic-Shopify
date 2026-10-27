@@ -9,7 +9,7 @@ import {
   rotateRankingConnectorKey, revokeRankingConnectorKey
 } from "../app/lib/ranking-credentials.server";
 
-const sample = parseRanking({
+const sample = parseRanking({ engine: "google", country: "US", device: "desktop",
   keyword: "merchant-only", position: 4, targetUrl: "https://store.example/products/boots",
   observedAt: "2026-10-26T12:00:00.000Z"
 }, new Date("2026-10-26T12:00:00.000Z"));

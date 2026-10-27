@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs } from "react-router";
 import { unauthenticated } from "../shopify.server";
-import { assertRankingTargetsForPrimaryDomain, parseRanking } from "../lib/seo";
+import { assertRankingTargetsForPrimaryDomain, assertUniqueRankingObservations, parseRanking } from "../lib/seo";
 import { primaryDomainForShop, saveRankingsForShop, reserveRankingImportBudget, RankingImportRateLimitError } from "../lib/ranking-ingest.server";
 import { authorizedRankingConnector } from "../lib/ranking-credentials.server";
 
@@ -25,6 +25,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     const now = new Date();
     entries = value.observations.map((item: unknown) => parseRanking(item, now));
+    assertUniqueRankingObservations(entries);
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : "Invalid data" }, { status: 400 });
   }

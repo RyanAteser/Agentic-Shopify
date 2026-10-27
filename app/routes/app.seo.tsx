@@ -45,7 +45,8 @@ export const loader=async ({request}:LoaderFunctionArgs) => {
       seen.set(key,{keyword:o.keyword,engine:o.engine,country:o.country,device:o.device,
         position:o.position,targetUrl:o.targetUrl,observedAt:o.observedAt,previous:null,count:1});
     } else if(existing.count===1 && o.observedAt.getTime()!==existing.observedAt.getTime()){
-      existing.previous=o.position;existing.count=2;
+      existing.previous=sameRankTarget(existing.targetUrl,o.targetUrl)?o.position:null;
+      existing.count=2;
     }
   }
   const rankingRows=Array.from(seen.values()).slice(0,40);

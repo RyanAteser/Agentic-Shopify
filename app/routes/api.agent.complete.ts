@@ -23,7 +23,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   const data = payload as Record<string, unknown>;
   if (typeof data.jobId !== "string" || !data.jobId || data.jobId.length > 100 ||
-      typeof data.shop !== "string" || !/^[a-z0-9][a-z0-9-]*\\.myshopify\\.com$/.test(data.shop)) {
+      typeof data.shop !== "string" || !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(data.shop)) {
     return Response.json({ error: "Invalid job identifiers" }, { status: 400 });
   }
 

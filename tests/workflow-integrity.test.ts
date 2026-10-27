@@ -97,6 +97,9 @@ test("writer callback destination is operator-pinned and cannot be changed by we
   assert.equal(reviewed[0].json.jobId, untrusted.jobId);
   assert.equal(reviewed[0].json.shop, untrusted.shop);
   assert.equal("callbackUrl" in reviewed[0].json, false);
-  assert.doesNotMatch(readFileSync("app/lib/agent.server.ts", "utf8"), /callbackUrl/,
+  const dispatchSource = readFileSync("app/lib/agent.server.ts", "utf8");
+  assert.doesNotMatch(dispatchSource, /callbackUrl/,
     "App must not send an attacker-controllable callback URL to n8n");
+  assert.match(dispatchSource, /redirect:"error"/,
+    "App-to-n8n authenticated dispatch must reject redirects");
 });

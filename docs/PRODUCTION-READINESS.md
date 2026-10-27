@@ -146,3 +146,10 @@ to maximize content output.
 
 Primary reference:
 https://developers.google.com/search/docs/fundamentals/creating-helpful-content
+
+
+## Streamed ingestion resource bounds (2026-10-27)
+
+The n8n article callback (`POST /api/agent/complete`) now enforces **150,000 received bytes** and the SERP connector (`POST /api/seo/rankings`) enforces **75,000 received bytes** *while consuming the request stream*. Previously both routes called `request.text()` first and checked the size only after the entire body had been buffered; an absent or dishonest `Content-Length` could defeat the intended memory bound. Oversized requests return HTTP 413 without parsing JSON or invoking Shopify/Prisma. The limits count UTF-8 bytes, not JavaScript string characters, and are tested with chunked bodies, misleading headers, multibyte Unicode and exact-boundary payloads.
+
+This is an application-level defense aligned with [OWASP API4:2023 Unrestricted Resource Consumption](https://api-security.owasp.org/editions/2023/en/0xa4-unrestricted-resource-consumption/). It does **not** replace reverse-proxy ingress body caps, per-IP request-rate limits, request read timeouts, n8n retry/backoff validation, memory/load testing or paid provider spend ceilings. Those remain mandatory staging and production gates. The workflow templates remain inactive; no merchant content is auto-published.

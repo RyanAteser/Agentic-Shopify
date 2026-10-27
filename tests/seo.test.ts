@@ -1,16 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRanking, auditProductSeo, assertRankingTargetsForPrimaryDomain } from "../app/lib/seo";
+import { parseRanking, auditProductSeo, assertRankingTargetsForPrimaryDomain, assertUniqueRankingObservations } from "../app/lib/seo";
 
 const now = new Date("2026-10-24T12:00:00.000Z");
+const context = {engine:"google",country:"US",device:"desktop"} as const;
 test("SERP rank record retains source, country, device and observation time", () => {
-  const a = parseRanking({keyword:"  Running Shoes ",position:4,country:"US",device:"mobile",
+  const a = parseRanking({...context,keyword:"  Running Shoes ",position:4,country:"US",device:"mobile",
     observedAt:"2026-10-24T11:00:00.000Z",targetUrl:"https://example.com/shoes"},now);
   assert.equal(a.keyword,"running shoes");
   assert.equal(a.position,4);
   assert.equal(a.source,"brightdata-serp");
   assert.equal(a.device,"mobile");
-  const b = parseRanking({keyword:"running shoes",position:null,observedAt:"2026-10-24T11:00:00.000Z"},now);
+  const b = parseRanking({...context,keyword:"running shoes",position:null,observedAt:"2026-10-24T11:00:00.000Z"},now);
   assert.equal(b.position,null);
 });
 test("reject invalid ranks, unsafe URLs, and future observations", () => {
@@ -35,10 +36,10 @@ test("metadata audit detects blank descriptions and duplicate titles without mut
 
 
 test("SERP target URLs must belong to Shopify's verified primary domain", () => {
-  const found = parseRanking({keyword:"boots",position:5,observedAt:now.toISOString(),
+  const found = parseRanking({...context,keyword:"boots",position:5,observedAt:now.toISOString(),
     targetUrl:"https://www.store.example/products/boots"},now);
   assert.doesNotThrow(() => assertRankingTargetsForPrimaryDomain([found], "www.store.example"));
-  const absent = parseRanking({keyword:"boots",position:null,observedAt:now.toISOString()},now);
+  const absent = parseRanking({...context,keyword:"boots",position:null,observedAt:now.toISOString()},now);
   assert.doesNotThrow(() => assertRankingTargetsForPrimaryDomain([absent], "www.store.example"));
   for (const url of [
     "https://store.example/products/boots",
@@ -47,12 +48,56 @@ test("SERP target URLs must belong to Shopify's verified primary domain", () => 
     "https://blog.www.store.example/products/boots",
     "https://www.store.example./products/boots"
   ]) {
-    const row = parseRanking({keyword:"boots",position:5,observedAt:now.toISOString(),targetUrl:url},now);
+    const row = parseRanking({...context,keyword:"boots",position:5,observedAt:now.toISOString(),targetUrl:url},now);
     assert.throws(() => assertRankingTargetsForPrimaryDomain([row],"www.store.example"), url);
   }
-  assert.throws(() => parseRanking({keyword:"boots",position:5,observedAt:now.toISOString(),
+  assert.throws(() => parseRanking({...context,keyword:"boots",position:5,observedAt:now.toISOString(),
     targetUrl:"https://www.store.example@attacker.test/products/boots"},now), /credentials/);
   assert.throws(() => assertRankingTargetsForPrimaryDomain([{...found,targetUrl:""}],"www.store.example"));
   assert.throws(() => assertRankingTargetsForPrimaryDomain([{...absent,targetUrl:found.targetUrl}],"www.store.example"));
   assert.throws(() => assertRankingTargetsForPrimaryDomain([found],"https://www.store.example"));
+});
+
+
+test("SERP import rejects omitted market context rather than silently labeling US desktop Google", () => {
+  const valid: Record<string, unknown> = {
+    ...context, keyword:"boots", position:5,
+    targetUrl:"https://shop.example/boots", observedAt:now.toISOString()
+  };
+  for (const missing of ["engine", "country", "device"]) {
+    const row = {...valid};
+    delete row[missing];
+    assert.throws(() => parseRanking(row, now), missing);
+  }
+  assert.equal(parseRanking(valid, now).country, "US");
+});
+
+test("SERP timestamps require an explicit offset and a real calendar date", () => {
+  const valid = {
+    ...context, keyword:"boots", position:5,
+    targetUrl:"https://shop.example/boots"
+  };
+  for (const observedAt of [
+    "2026-10-24T11:00:00",
+    "2026-10-24",
+    "2026-02-30T11:00:00Z",
+    "2026-10-24T11:00:00+14:30",
+    "2026-10-24T11:00:00+15:00",
+    "2026-10-24T25:00:00Z"
+  ]) {
+    assert.throws(() => parseRanking({...valid, observedAt}, now), observedAt);
+  }
+  const offset = parseRanking({...valid, observedAt:"2026-10-24T13:00:00+02:00"}, now);
+  assert.equal(offset.observedAt.toISOString(), "2026-10-24T11:00:00.000Z");
+  assert.equal(parseRanking({...valid, observedAt:"2024-02-29T11:00:00Z"},
+    new Date("2024-02-29T12:00:00Z")).observedAt.toISOString(), "2024-02-29T11:00:00.000Z");
+});
+
+test("duplicate same-market SERP snapshots are rejected before last-write-wins upsert", () => {
+  const base = parseRanking({...context,keyword:"boots",position:4,
+    observedAt:now.toISOString(),targetUrl:"https://shop.example/boots"},now);
+  assert.throws(() => assertUniqueRankingObservations([base,{...base,position:9}]), /Duplicate/);
+  assert.doesNotThrow(() => assertUniqueRankingObservations([
+    base, {...base,device:"mobile"}, {...base,observedAt:new Date(now.getTime()-60_000)}
+  ]));
 });

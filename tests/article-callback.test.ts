@@ -45,7 +45,7 @@ test("article callbacks are tenant-scoped, idempotent and preserve completed dra
     const late = await persistArticleCallback(shop, uncertain.id, article);
     assert.ok(late.draftId, "an uncertain network dispatch can still complete via callback");
     assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: uncertain.id } })).status, "completed");
-    await assert.rejects(persistArticleCallback(shop, job.id, { body: "" }), isRejected(400));
+    await assert.rejects(persistArticleCallback(shop, job.id, null), isRejected(400));
   } finally {
     await db.editorialReview.deleteMany({ where });
     await db.articleDraft.deleteMany({ where });

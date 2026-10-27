@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { auditProductSeo, type SeoProduct } from "../lib/seo";
+import { sameRankTarget } from "../lib/manager";
 
 export const loader=async ({request}:LoaderFunctionArgs) => {
   const {admin,session}=await authenticate.admin(request);

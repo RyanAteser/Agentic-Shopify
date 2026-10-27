@@ -162,10 +162,11 @@ export default function BlogAgent() {
       </Form>
     </s-section>
     <s-section heading="Draft review queue">
+      <p>The structure score does not verify SEO rankings, product facts or sources. Older drafts may retain scores from an earlier heuristic; review the full article regardless of score.</p>
       {!drafts.length && <p>No drafts yet. Create a draft above to start your content pipeline.</p>}
       {drafts.map(d => <article key={d.id} style={{border:"1px solid #ddd",borderRadius:12,padding:16,marginBottom:16}}>
         <h2>{d.title}</h2>
-        <p><strong>Status:</strong> {d.status} · <strong>Structural quality:</strong> {d.seoScore}/100 · <strong>Topic:</strong> {d.topic}</p>
+        <p><strong>Status:</strong> {d.status} · <strong>Draft structure (heuristic):</strong> {d.seoScore}/100 · <strong>Topic:</strong> {d.topic}</p>
         <p>{d.summary}</p>
         <details><summary>Read full draft and review notes</summary>
           <div style={{padding:10,border:"1px solid #ddd",maxHeight:400,overflow:"auto"}} dangerouslySetInnerHTML={{__html:d.body}}/>

@@ -1,7 +1,9 @@
 import db from "../db.server";
 import * as crypto from "node:crypto";
 import { unauthenticated } from "../shopify.server";
-import { claimQueuedDispatch, classifyN8nDispatchStatus, validateN8nWebhookUrl } from "./dispatch-claim.server";
+import { claimQueuedDispatch, validateN8nWebhookUrl } from "./dispatch-claim.server";
+import { deliverClaimedN8nJob } from "./n8n-delivery.server";
+export { UncertainDispatchError } from "./n8n-delivery.server";
 
 async function publishedProducts(shop: string) {
   try {
@@ -28,9 +30,6 @@ async function publishedProducts(shop: string) {
 }
 
 
-export class UncertainDispatchError extends Error {
-  constructor(){super("Could not confirm n8n acceptance. This job is awaiting reconciliation; no credit was refunded.");this.name="UncertainDispatchError";}
-}
 export async function dispatchArticleJob(jobId: string, shop: string) {
   const config = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
   const job = await db.contentJob.findUniqueOrThrow({ where: { id: jobId } });
@@ -64,40 +63,7 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
     },
     productCatalog: await publishedProducts(shop),
   };
-  let response:Response;
-  try{
-    response=await fetch(url,{
-      method:"POST",
-      // Never forward the n8n webhook credential to a redirected host.
-      redirect:"error",
-      headers:{"Content-Type":"application/json","X-Agent-Key":secret},
-      body:JSON.stringify(body),
-      signal:AbortSignal.timeout(12_000),
-    });
-  }catch(err){
-    // A timeout is NOT proof that the workflow failed: n8n may still generate
-    // and send the callback. Preserve the credit and accept a later callback.
-    await db.contentJob.updateMany({
-      where:{id:jobId,shop,status:"running"},
-      data:{status:"dispatch_uncertain",error:"Transport outcome unknown; manual reconciliation needed"}
-    });
-    throw new UncertainDispatchError();
-  }
-  const outcome = classifyN8nDispatchStatus(response.status);
-  if (outcome === "uncertain") {
-    // Timeouts, throttling, conflicts, redirects and server errors can be
-    // produced by intermediaries. They do not establish that n8n did no work.
-    await db.contentJob.updateMany({
-      where: { id: jobId, shop, status: "running" },
-      data: { status: "dispatch_uncertain",
-        error: "n8n HTTP " + response.status + "; acceptance unknown; reconcile execution" }
-    });
-    throw new UncertainDispatchError();
-  }
-  if (outcome === "rejected") {
-    // Only known permanent request rejections permit the caller to refund.
-    throw new Error("n8n rejected generation request (HTTP " + response.status + ")");
-  }
+  await deliverClaimedN8nJob({ shop, jobId, url, secret, body });
 }
 
 export function authorizedBridge(request: Request) {

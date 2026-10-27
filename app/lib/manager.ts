@@ -8,6 +8,23 @@ export type SuggestedTask = {
 export type DraftLike={id:string;title:string;topic:string;seoScore:number;status:string;reviewNotes:string};
 export type RankLike={keyword:string;position:number|null;country:string;device:string;observedAt:Date;targetUrl:string;engine:string};
 
+/**
+ * A change of ranking URL is not evidence that the same page lost positions.
+ * Only compare consecutive snapshots of the same HTTPS result URL. Ignore URL
+ * fragments, which are not sent to servers; retain paths and query strings
+ * because they can identify genuinely different indexed pages.
+ */
+export function sameRankTarget(a:string,b:string):boolean {
+  if(!a||!b)return false;
+  try {
+    const left=new URL(a),right=new URL(b);
+    if(left.protocol!=="https:"||right.protocol!=="https:"||
+       left.username||left.password||right.username||right.password)return false;
+    left.hash="";right.hash="";
+    return left.href===right.href;
+  }catch{return false;}
+}
+
 export function buildSeoTasks(findings:SeoFinding[]):SuggestedTask[] {
   return findings.slice(0,60).map(f=>({
     sourceKey:"seo:"+f.id, agent:"seo", kind:"seo_review", targetId:f.productId,

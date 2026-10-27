@@ -52,11 +52,20 @@ export async function verifyGoogleSite(accessToken:string,primaryHost:string) {
   options.sort((a:any,b:any)=>Number(b.siteUrl.startsWith("https:"))-Number(a.siteUrl.startsWith("https:")));
   return String(options[0].siteUrl);
 }
-export async function storeGoogleConnection(shop:string,property:string,refreshToken:string) {
+export async function storeGoogleConnection(shop:string,property:string,refreshToken:string,stateHash:string) {
   const encryptedRefresh=encryptToken(refreshToken);
-  await db.searchConsoleConnection.upsert({
-    where:{shop},create:{shop,property,encryptedRefresh,status:"active"},
-    update:{property,encryptedRefresh,status:"active",lastSyncedAt:null}
+  await db.$transaction(async tx=>{
+    // Keep the pending state until the same transaction that stores consent.
+    // Disconnect/uninstall/redaction delete pending states, fencing off delayed
+    // Google callbacks even when the external token exchange has succeeded.
+    const claimed=await tx.googleAuthState.deleteMany({
+      where:{stateHash,shop,expiresAt:{gt:new Date()}}
+    });
+    if(claimed.count!==1)throw new Error("Google OAuth state expired or revoked during authorization");
+    await tx.searchConsoleConnection.upsert({
+      where:{shop},create:{shop,property,encryptedRefresh,status:"active"},
+      update:{property,encryptedRefresh,status:"active",lastSyncedAt:null}
+    });
   });
 }
 async function googleRefresh(refreshToken:string){

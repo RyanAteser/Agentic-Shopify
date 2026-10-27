@@ -89,6 +89,7 @@ Reference: https://developers.google.com/webmaster-tools/v1/searchanalytics/quer
 - Uncertain n8n POST outcomes enter \`dispatch_uncertain\` and do not automatically refund credits or blindly retry.
 - Upserts are idempotent and never overwrite reviewed articles on callback retry.
 - Background tasks cap shops per run; OAuth states expire; Google token storage is encrypted at rest.
+- Google OAuth callback finalization consumes the pending state in the **same transaction** that persists the connection. Merchant disconnect, Shopify uninstall and shop redaction delete pending states, preventing a callback delayed by Google API requests from recreating a revoked connection. This is covered by database regression tests, but webhook delivery and OAuth lifecycle still require real development-store verification.
 - Manager approvals are decisions, not automatic product edits.
 - Privacy webhooks erase raw token and measurement tables. Test mandatory callbacks in Shopify Partner dashboard before submission.
 

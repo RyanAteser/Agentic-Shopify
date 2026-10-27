@@ -153,3 +153,30 @@ https://developers.google.com/search/docs/fundamentals/creating-helpful-content
 The n8n article callback (`POST /api/agent/complete`) now enforces **150,000 received bytes** and the SERP connector (`POST /api/seo/rankings`) enforces **75,000 received bytes** *while consuming the request stream*. Previously both routes called `request.text()` first and checked the size only after the entire body had been buffered; an absent or dishonest `Content-Length` could defeat the intended memory bound. Oversized requests return HTTP 413 without parsing JSON or invoking Shopify/Prisma. The limits count UTF-8 bytes, not JavaScript string characters, and are tested with chunked bodies, misleading headers, multibyte Unicode and exact-boundary payloads.
 
 This is an application-level defense aligned with [OWASP API4:2023 Unrestricted Resource Consumption](https://api-security.owasp.org/editions/2023/en/0xa4-unrestricted-resource-consumption/). It does **not** replace reverse-proxy ingress body caps, per-IP request-rate limits, request read timeouts, n8n retry/backoff validation, memory/load testing or paid provider spend ceilings. Those remain mandatory staging and production gates. The workflow templates remain inactive; no merchant content is auto-published.
+
+
+## Shared merchant erasure and PostgreSQL race verification (2026-10-27)
+
+Both authenticated Shopify `app/uninstalled` and `shop/redact` webhook
+handlers now call the same `eraseMerchantData(shop)` function. This prevents
+future table additions from silently diverging between the two deletion paths.
+The helper deletes `StoreConfig` **first**, inside one Prisma transaction,
+because n8n article callbacks and ranking imports write-lock that row before
+inserting any merchant-owned records. The other merchant tables are deleted
+before commit. Retried webhook deliveries are idempotent.
+
+`tests/merchant-redaction-postgres.test.ts` races two real article callbacks
+against redaction across five independent synthetic shops using the PostgreSQL
+CI service. It asserts no drafts, jobs, configuration, or editorial reviews
+survive, that delayed callbacks are rejected, and that an unrelated merchant's
+data remains intact. This is a **database-level concurrency test**, not a
+Shopify-delivered webhook, live n8n integration, or guarantee about any future
+writer that does not acquire the same merchant row lock. When adding a new
+merchant-owned table or integration writer, update the shared helper and
+verify the row-lock invariant.
+
+Shopify's mandatory privacy webhook guidance:
+https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
+
+Prisma 6 transaction guidance:
+https://www.prisma.io/docs/orm/v6/prisma-client/queries/transactions

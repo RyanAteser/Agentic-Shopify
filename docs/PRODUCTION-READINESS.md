@@ -64,6 +64,10 @@ For n8n:
 - Only enable after app deployment, production URL replacement and smoke tests.
 - Use tight budgets and execution limits per merchant. n8n should never receive Shopify tokens or Google OAuth refresh tokens.
 
+## Merchant editorial outcomes (read-only development)
+
+The Growth page now reports rolling 28-day **creation cohorts** for generation requests and article drafts, with current publish/reject/review/reconciliation states. It abstains from a published-among-resolved percentage until at least five editorial decisions. The two creation cohorts must not be divided into a misleading draft-delivery rate; publication is not verified content quality or sales. See [EDITORIAL-METRICS.md](./EDITORIAL-METRICS.md) for precise denominators, caveats and the consented merchant pilot protocol. No live outcomes have been observed.
+
 ## Growth evaluation design
 
 The primary outcome is **qualified organic search traffic and useful merchant actions**, not raw article output. Track:

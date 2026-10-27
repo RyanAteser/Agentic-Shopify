@@ -155,3 +155,44 @@ test("redirect and dropped response never trigger an authenticated second reques
     });
   }
 });
+
+test("ambiguous HTTP outcome remains non-refundable even when the status write fails", async () => {
+  // A failed status update used to leak a generic database error to callers.
+  // Those callers refund generic errors, despite n8n possibly accepting work.
+  for (const mode of ["503", "dropped"] as const) {
+    await withJob(async (shop, jobId) => {
+      let requests = 0;
+      let recordAttempts = 0;
+      await withHttpStub((req, res) => {
+        requests++;
+        if (mode === "dropped") req.socket.destroy();
+        else { res.writeHead(503); res.end(); }
+      }, async url => {
+        let caught: unknown;
+        try {
+          await deliverClaimedN8nJob({
+            shop, jobId, url, secret: "test-only-outbound-secret",
+            body: { shop, jobId, topic: "Test generation" }
+          }, async () => {
+            recordAttempts++;
+            throw new Error("simulated database outage while marking uncertain");
+          });
+        } catch (error) {
+          caught = error;
+          // Mirror both manual and scheduled dispatch caller policies.
+          if (!(error instanceof UncertainDispatchError)) {
+            await failCreditedJob(shop, jobId, error);
+          }
+        }
+        assert.ok(caught instanceof UncertainDispatchError,
+          "Persistence failure must not become a generic refundable error");
+      });
+      assert.equal(requests, 1, "No automatic retry");
+      assert.equal(recordAttempts, 1);
+      assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: jobId } })).status,
+        "running", "The simulated failed write must not falsely persist a status");
+      assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed,
+        1, "Never refund a potentially accepted paid generation");
+    });
+  }
+});

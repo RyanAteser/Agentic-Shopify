@@ -1,6 +1,7 @@
 import db from "../db.server";
 import * as crypto from "node:crypto";
 import { unauthenticated } from "../shopify.server";
+import { claimQueuedDispatch, validateN8nWebhookUrl } from "./dispatch-claim.server";
 
 async function publishedProducts(shop: string) {
   try {
@@ -39,9 +40,10 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
   const url = process.env.N8N_BLOG_WEBHOOK_URL;
   const secret = process.env.N8N_OUTBOUND_KEY;
   if (!url || !secret) throw new Error("n8n integration is not configured");
-  if (!url.startsWith("https://") && !url.startsWith("http://localhost")) {
-    throw new Error("n8n URL must use HTTPS");
-  }
+  validateN8nWebhookUrl(url);
+  // Claim BEFORE product context, prompt history or network I/O. Concurrent
+  // requests for the same job must not send duplicate paid n8n work.
+  await claimQueuedDispatch(shop, jobId);
   const recentRejected = await db.articleDraft.findMany({
     where: { shop, status: "rejected", reviewNotes: { not: "" } },
     take: 4, orderBy: { updatedAt: "desc" }, select: { topic: true, reviewNotes: true },
@@ -62,8 +64,6 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
     },
     productCatalog: await publishedProducts(shop),
   };
-  // Set running before network dispatch: webhook responses and callbacks may race.
-  await db.contentJob.updateMany({where:{id:jobId,shop,status:"queued"},data:{status:"running"}});
   let response:Response;
   try{
     response=await fetch(url,{
@@ -84,7 +84,9 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
     throw new UncertainDispatchError();
   }
   if(!response.ok){
-    if(response.status>=500){
+    // A redirect or server error is ambiguous: the original n8n endpoint
+    // may have accepted the POST even though we cannot confirm processing.
+    if(response.status<400 || response.status>=500){
       await db.contentJob.updateMany({
         where:{id:jobId,shop,status:"running"},
         data:{status:"dispatch_uncertain",error:"n8n returned a server error; acceptance unknown"}

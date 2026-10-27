@@ -57,7 +57,8 @@ export function buildRankTasks(records: RankLike[], now=new Date()):SuggestedTas
     const distinct=rows.sort((a,b)=>b.observedAt.getTime()-a.observedAt.getTime())
       .filter((r,i,arr)=>i===0||r.observedAt.getTime()!==arr[i-1].observedAt.getTime());
     const latest=distinct[0],previous=distinct[1];
-    if(!latest||!previous||latest.position===null||previous.position===null) continue;
+    if(!latest||!previous||latest.position===null||previous.position===null||
+       !sameRankTarget(latest.targetUrl,previous.targetUrl)) continue;
     if(now.getTime()-latest.observedAt.getTime()>14*86400000)continue;
     if(latest.observedAt.getTime()-previous.observedAt.getTime()>28*86400000)continue;
     const lost=latest.position-previous.position;

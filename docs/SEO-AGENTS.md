@@ -12,8 +12,8 @@ Based on the merchant-supplied n8n screenshot, the existing template has:
 **Do not replace it.** Add a second HTTP Request after "Parse SERP Results" or after the Sheets logger (depending on the error policy). Set the node to POST parsed **organic rankings** to the Shopify app; leave the Sheets path intact.
 
 Endpoint: `POST https://<your-app-host>/api/seo/rankings`
-Headers: `Content-Type: application/json`; `X-Agent-Key: <secret>` (stored in an n8n Header Auth credential, never in the workflow JSON)
-App-side secret: `N8N_RANKING_SECRET` from the backend secret manager, different from the blog webhook key.
+Headers: `Content-Type: application/json`; `X-Agent-Key: <per-merchant connector key>` (stored in a shop-specific n8n Header Auth credential, never in workflow JSON).
+There is no global ranking secret fallback. An operator must explicitly provision each shop.
 
 ### Request contract (demonstration only, NOT actual ranking measurements)
 ```json
@@ -35,13 +35,13 @@ App-side secret: `N8N_RANKING_SECRET` from the backend secret manager, different
 **Do not forward this illustrative request as real data.** Instead map the actual template's parsed organic result fields. Use `null` for not found in the sampled SERP, never `0`. Record the observation's real timestamp; preserve the country, locale and device the scraping job truly used. Up to 50 records per call, max 75 KB.
 
 The ingestion endpoint:
-- Requires HTTPS in production, shared secret, and an existing installed Shopify tenant.
+- Requires HTTPS in production, a hashed **shop-bound** connector credential, and an existing installed Shopify tenant.
 - Rejects malformed ranks, unsafe URLs, future dates, oversized batches. A found rank requires a result URL; a not-found rank requires a null position and an empty URL.
 - Resolves the shop's **current primary storefront host** from the authenticated Shopify Admin API (shop.myshopifyDomain + shop.primaryDomain.host) on each import; only exact-host HTTPS results are accepted. The supplied shop/domain in n8n is not itself evidence of ownership. Requests fail closed (503) if the Shopify offline session/domain query is unavailable. This is conservative: secondary Shopify Markets domains and redirects need a separate authenticated domain allowlist before their results can be imported.
 - Uses a single DB transaction and store-row lock for the complete batch, so a database error cannot leave half a batch imported and uninstall/redaction cannot leave post-deletion orphaned ranking rows.
 - Upserts on (shop, keyword, engine, country, device, observedAt), preventing duplicate rows on retries.
 - Never changes product metadata or publishes articles.
-- Is intentionally a **trusted server-to-server ingest route**. The current global X-Agent-Key is **not** tenant-specific: possession of it can still submit fabricated observations for any installed tenant. Primary-domain attestation prevents cross-domain ranking contamination but does not prove the SERP measurement or caller's tenant authorization. Per-tenant connector identities, key rotation, payload provenance, and rate limits remain mandatory before public multi-merchant launch.
+- Uses a **shop-bound** 256-bit connector key (only its SHA-256 digest is stored). The route checks the exact shop and rechecks the digest inside the write transaction under the same row lock used for rotation, revocation and uninstall. Old shared keys fail closed. This does **not** prove Bright Data produced the measurement: rate limits, quota controls, source provenance and actual connector mapping remain launch gates.
 - Bright Data ranks are point-in-time sampled organic placements; Google Search Console aggregated average position/clicks/impressions remain **separate source types**.
 - The manager only flags a page-level ranking drop when the two most recent distinct observations for the same keyword, engine, country and device also have the same nonempty HTTPS target URL (ignoring URL fragments). A changed or missing result URL is **not** proof of a page-level loss; the dashboard abstains from displaying a cross-page delta. The importer now attests the primary domain using Shopify, but other verified Markets domains and tenant-specific connector authorization remain production gates.
 
@@ -65,3 +65,19 @@ The ingestion endpoint:
 - Shopify Product GraphQL SEO object: https://shopify.dev/docs/api/admin-graphql/latest/objects/Product
 - Shopify product query: https://shopify.dev/docs/api/admin-graphql/latest/queries/products
 - n8n Header Auth: https://docs.n8n.io/integrations/builtin/credentials/httprequest/
+
+## Operator-only credential provisioning (development; not live)
+
+After applying the PostgreSQL migration, a trusted operator may provision an explicitly authorized, installed development store from a secure shell (never in CI or an issue comment):
+
+```sh
+npx tsx scripts/ranking-connector-key.ts rotate example.myshopify.com --confirm=example.myshopify.com
+```
+
+Save the one-time key directly into that shop’s dedicated n8n Header Auth credential or secret manager. Only a SHA-256 digest is stored in the app database. Rotating immediately invalidates the old key. To revoke:
+
+```sh
+npx tsx scripts/ranking-connector-key.ts revoke example.myshopify.com --confirm=example.myshopify.com
+```
+
+No key is created automatically at install. Missing, old global, wrong-shop and revoked keys get HTTP 401. A key rotated after the initial request check is rejected again at transaction commit. Do not share a Header Auth credential between shops or give merchants configurable n8n workflow access until written commercial licensing clearance. No live Bright Data payload, rate-limit, signed provenance or cost-control validation has been completed.

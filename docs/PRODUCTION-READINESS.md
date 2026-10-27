@@ -20,7 +20,7 @@
 | Managed PostgreSQL | Migration committed; NOT provisioned | Migration job runs on actual database with backup/restore test |
 | Google OAuth | Code implemented; NOT connected | OAuth consent screen configured, allowed callback domain, verified store property, Google policy review |
 | n8n | JSON ready; NOT connected | Authenticated instance, secure credential scopes, workflow publishing, end-to-end callback verification |
-| Bright Data ranking connector | Normalization endpoint ready | Original workflow JSON mapped and legitimate SERP samples imported under authorized shop |
+| Bright Data ranking connector | Normalization endpoint and per-tenant hashed keys coded; NOT connected | Operator-provisioned isolated n8n credentials, real workflow JSON mapping, verified SERP samples, rate limits and source provenance |
 | Real Shopify publishing | Mock-tested only | Development store draft -> manual review -> one published article; confirm exactly-once behavior |
 | Pricing | Proposed only | Shopify App Pricing setup and billing / entitlement webhooks verified |
 | n8n commercial rights | Not yet confirmed | Written n8n guidance for configurable merchant automations or appropriate Enterprise/OEM contract |
@@ -48,7 +48,7 @@ npm start
 Set \`DATABASE_URL\` to a PostgreSQL TLS connection string in the host's secret manager.
 Create an \`SSL\`-enforcing connection configuration appropriate for your provider.
 Run \`GET /health\` from your platform load balancer; HTTP 200 indicates database reachable; HTTP 503 indicates unavailable.
-Store app API key/secret and \`GSC_CLIENT_ID\`, \`GSC_CLIENT_SECRET\`, \`GSC_ENCRYPTION_KEY\`, \`N8N_OUTBOUND_KEY\`, \`N8N_CALLBACK_SECRET\`, and \`N8N_RANKING_SECRET\` ONLY in secure runtime secrets. Never commit them.
+Store Shopify and Google credentials, `N8N_OUTBOUND_KEY`, and `N8N_CALLBACK_SECRET` only in secure runtime secrets. Ranking connector keys are provisioned per-shop, stored as hashes in the database, and delivered to the operator’s secure secret manager; never commit them.
 
 For Google OAuth, register an HTTPS Web Application redirect URI:
 \`https://YOUR_APP_HOST/auth/google/callback\`.
@@ -85,7 +85,7 @@ Reference: https://developers.google.com/webmaster-tools/v1/searchanalytics/quer
 ## Backend reliability / privacy
 
 - All merchant API mutations require authenticated Shopify sessions and explicit approval.
-- Callback, manager and scheduler traffic require shared server-to-server secrets; rotate regularly and consider per-merchant keys before scale.
+- Callback, manager and scheduler traffic still require shared server-to-server secrets; rotate and scope them before scale. Ranking ingest now requires per-merchant hashed connector keys, revocable/rotatable with an operator-only CLI, and transactional reauthorization before import. This does not replace provenance, quotas, or a licensing decision.
 - Uncertain n8n POST outcomes enter \`dispatch_uncertain\` and do not automatically refund credits or blindly retry.
 - Upserts are idempotent and never overwrite reviewed articles on callback retry.
 - Background tasks cap shops per run; OAuth states expire; Google token storage is encrypted at rest.

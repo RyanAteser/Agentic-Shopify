@@ -26,7 +26,7 @@ In **n8n**, import both `n8n/*.json` workflows and connect credentials:
 
 ### SEO agent integration
 
-The ranking workflow shown in the merchant-provided n8n screenshot can send normalized Bright Data SERP observations to `/api/seo/rankings`. Configure `N8N_RANKING_SECRET` in the app server and outbound n8n Header Auth credential, then follow `docs/SEO-AGENTS.md`. The `/app/seo` workspace is read-only and only displays source-backed ranking snapshots. The `/app/team` directory represents code status, not live activity.
+The ranking workflow shown in the merchant-provided n8n screenshot can send normalized Bright Data SERP observations to `/api/seo/rankings`. Provision a shop-specific connector key from the trusted operator CLI and store it in that shop’s n8n Header Auth credential; the legacy global `N8N_RANKING_SECRET` is no longer accepted. Follow `docs/SEO-AGENTS.md`. The `/app/seo` workspace is read-only and only displays source-backed ranking snapshots. The `/app/team` directory represents code status, not live activity.
 
 ## 3. Safe smoke test
 1. Ensure the app was granted `read_products` so the agent can ground product links in actual published catalog URLs. No customer order data is required.

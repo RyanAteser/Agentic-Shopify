@@ -48,6 +48,12 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
     // credentials before its singleton is initialized.
     const { action } = await import("../app/routes/webhooks.shop.redact");
     await db.storeConfig.createMany({ data: [{ shop }, { shop: otherShop }] });
+    // Synthetic review rows exercise the real webhook erasure path.
+    await db.editorialReview.createMany({data:[
+      {shop,draftId:"synthetic-"+randomUUID(),decision:"usable",reviewMinutes:12},
+      {shop:otherShop,draftId:"synthetic-"+randomUUID(),decision:"rejected",
+        reviewMinutes:7,feedback:"Incorrect sources"}
+    ]});
     const rankingKey = rankingKeyHash(await rotateRankingConnectorKey(shop))!;
     await rotateRankingConnectorKey(otherShop);
     await db.organicDailyMetric.createMany({
@@ -80,6 +86,7 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
       assert.equal(await db.searchConsoleConnection.count({ where: { shop } }), 1);
       assert.equal(await db.organicDailyMetric.count({ where: { shop } }), 1);
       assert.equal(await db.seoRankObservation.count({ where: { shop } }), 1);
+      assert.equal(await db.editorialReview.count({ where: { shop } }), 1);
     }
 
     const response = await action(args(request(raw, signature(raw))));
@@ -90,6 +97,7 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
     assert.equal(await db.searchConsoleConnection.count({ where: { shop } }), 0);
     assert.equal(await db.organicDailyMetric.count({ where: { shop } }), 0);
     assert.equal(await db.seoRankObservation.count({ where: { shop } }), 0);
+    assert.equal(await db.editorialReview.count({ where: { shop } }), 0);
     const lateRank = parseRanking({ keyword: "late boots", position: 7,
       observedAt: rankAt.toISOString(), targetUrl: "https://example.test/boots" }, rankAt);
     await assert.rejects(saveRankingsForShop(shop, [lateRank], rankingKey), /Store disconnected/);
@@ -98,6 +106,7 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
     assert.equal(await db.rankingConnectorCredential.count({ where: { shop: otherShop } }), 1);
     assert.equal(await db.organicDailyMetric.count({ where: { shop: otherShop } }), 1);
     assert.equal(await db.seoRankObservation.count({ where: { shop: otherShop } }), 1);
+    assert.equal(await db.editorialReview.count({ where: { shop: otherShop } }), 1);
 
     // Shopify retries deliveries; deletion must be idempotent.
     const retried = await action(args(request(raw, signature(raw))));
@@ -110,6 +119,7 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
     await db.organicDailyMetric.deleteMany({ where });
     await db.storeActivity.deleteMany({ where });
     await db.storeRecommendation.deleteMany({ where });
+    await db.editorialReview.deleteMany({ where });
     await db.articleDraft.deleteMany({ where });
     await db.seoRankObservation.deleteMany({ where });
     await db.rankingConnectorCredential.deleteMany({ where });

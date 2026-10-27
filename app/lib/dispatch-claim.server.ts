@@ -33,3 +33,29 @@ export function validateN8nWebhookUrl(value: string): void {
     throw new Error("n8n webhook must use HTTPS (plain HTTP only for exact loopback hosts), without embedded credentials or fragments");
   }
 }
+
+
+/**
+ * Only explicit permanent request rejections are safe to refund. HTTP 408,
+ * 409, 425, 429, redirects and 5xx are not proof that n8n did not start a
+ * workflow, especially when a proxy is between the app and n8n.
+ * Never automatically retry an uncertain generation request.
+ */
+export function classifyN8nDispatchStatus(status: number): "accepted" | "rejected" | "uncertain" {
+  if (Number.isInteger(status) && status >= 200 && status < 300) return "accepted";
+  if ([400, 401, 403, 404, 405, 410, 413, 415, 422].includes(status)) return "rejected";
+  return "uncertain";
+}
+
+/** Advisory only: age is not proof of failure and does not mutate a job. */
+export function generationJobNotice(status: string, updatedAt: Date, now = new Date()): string | null {
+  if (status === "dispatch_uncertain") {
+    return "Delivery was not confirmed. An operator must inspect the n8n execution before retrying or refunding.";
+  }
+  if (["queued", "running"].includes(status) &&
+      Number.isFinite(updatedAt.getTime()) &&
+      now.getTime() - updatedAt.getTime() >= 30 * 60_000) {
+    return "No completion confirmed for at least 30 minutes. Check n8n execution and callback history; do not blindly retry.";
+  }
+  return null;
+}

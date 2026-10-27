@@ -45,12 +45,13 @@ test("SERP target URLs must belong to Shopify's verified primary domain", () => 
     "https://competitor.example/products/boots",
     "https://www.store.example.attacker.test/products/boots",
     "https://blog.www.store.example/products/boots",
-    "https://www.store.example./products/boots",
-    "https://www.store.example@attacker.test/products/boots"
+    "https://www.store.example./products/boots"
   ]) {
     const row = parseRanking({keyword:"boots",position:5,observedAt:now.toISOString(),targetUrl:url},now);
     assert.throws(() => assertRankingTargetsForPrimaryDomain([row],"www.store.example"), url);
   }
+  assert.throws(() => parseRanking({keyword:"boots",position:5,observedAt:now.toISOString(),
+    targetUrl:"https://www.store.example@attacker.test/products/boots"},now), /credentials/);
   assert.throws(() => assertRankingTargetsForPrimaryDomain([{...found,targetUrl:""}],"www.store.example"));
   assert.throws(() => assertRankingTargetsForPrimaryDomain([{...absent,targetUrl:found.targetUrl}],"www.store.example"));
   assert.throws(() => assertRankingTargetsForPrimaryDomain([found],"https://www.store.example"));

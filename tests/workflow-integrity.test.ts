@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 type NodeShape = { name: string; type: string };
 type Workflow = { nodes: NodeShape[]; connections: Record<string, { main: Array<Array<{ node: string }>> }>; active: boolean };
 function load(path: string): Workflow { return JSON.parse(readFileSync(path, "utf8")) as Workflow; }
@@ -49,4 +50,53 @@ test("Growth workflow imports verified GSC data but cannot modify Shopify",()=>{
   assert.ok(raw.includes("/api/growth/sync"));
   assert.ok(raw.includes("httpHeaderAuth"));
   assert.doesNotMatch(raw,/shpat_[a-zA-Z0-9]{12,}/);
+});
+
+
+test("writer callback destination is operator-pinned and cannot be changed by webhook input", () => {
+  const workflow = load("n8n/shopify-blog-writer.json");
+  const nodes = workflow.nodes as Array<{
+    name: string;
+    type: string;
+    parameters: {
+      url?: string;
+      jsCode?: string;
+      genericAuthType?: string;
+      options?: { redirect?: { redirect?: { followRedirects?: boolean } } };
+    };
+  }>;
+  const find = (name: string) => {
+    const node = nodes.find(node => node.name === name);
+    assert.ok(node, "Missing workflow node: " + name);
+    return node;
+  };
+  const callback = find("Return Secure Draft");
+  assert.equal(callback.parameters.url, "https://YOUR-PUBLISHED-SHOPIFY-APP.example/api/agent/complete");
+  assert.doesNotMatch(callback.parameters.url!, /^=/, "Callback URL must never be an expression");
+  for (const node of nodes.filter(node => node.type === "n8n-nodes-base.httpRequest" &&
+    node.parameters.genericAuthType === "httpHeaderAuth")) {
+    assert.equal(node.parameters.options?.redirect?.redirect?.followRedirects, false,
+      "Credential-bearing HTTP requests must not follow redirects: " + node.name);
+  }
+  const untrusted = {
+    jobId: "job-1", shop: "demo.myshopify.com", topic: "boots",
+    callbackUrl: "https://attacker.example/collect-credentials", brief: {}
+  };
+  const prepared = runInNewContext("(() => {" + find("Prepare Brief").parameters.jsCode + "})()", {
+    $input: { first: () => ({ json: { body: untrusted } }) }
+  }) as Array<{ json: Record<string, unknown> }>;
+  assert.equal(prepared[0].json.jobId, untrusted.jobId);
+  assert.equal(prepared[0].json.shop, untrusted.shop);
+  assert.equal("callbackUrl" in prepared[0].json, false);
+  const reviewed = runInNewContext("(() => {" + find("Parse Reviewed Article").parameters.jsCode + "})()", {
+    $: () => ({ first: () => prepared[0] }),
+    $input: { first: () => ({ json: { choices: [{ message: {
+      content: JSON.stringify({ title: "Boot guide", summary: "A guide", body: "<p>Useful</p>" })
+    } }] } }) }
+  }) as Array<{ json: Record<string, unknown> }>;
+  assert.equal(reviewed[0].json.jobId, untrusted.jobId);
+  assert.equal(reviewed[0].json.shop, untrusted.shop);
+  assert.equal("callbackUrl" in reviewed[0].json, false);
+  assert.doesNotMatch(readFileSync("app/lib/agent.server.ts", "utf8"), /callbackUrl/,
+    "App must not send an attacker-controllable callback URL to n8n");
 });

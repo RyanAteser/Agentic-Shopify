@@ -1,21 +1,20 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authorizedBridge } from "../lib/agent.server";
+import { readBoundedRequestText, RequestBodyTooLargeError } from "../lib/request-body.server";
 import { ArticleCallbackRejectedError, persistArticleCallback } from "../lib/article-callback.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (!authorizedBridge(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
-  if (Number(request.headers.get("content-length") || "0") > 150_000) {
-    return Response.json({ error: "Body too large" }, { status: 413 });
-  }
   let payload: unknown;
   try {
-    const raw = await request.text();
-    if (Buffer.byteLength(raw, "utf8") > 150_000) {
+    // Reject oversized chunked requests before buffering or JSON parsing.
+    const raw = await readBoundedRequestText(request, 150_000);
+    payload = JSON.parse(raw);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
       return Response.json({ error: "Body too large" }, { status: 413 });
     }
-    payload = JSON.parse(raw);
-  } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
   if (!payload || typeof payload !== "object") {

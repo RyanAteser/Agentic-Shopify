@@ -5,7 +5,7 @@ import db from "../app/db.server";
 import { parseRanking } from "../app/lib/seo";
 import {
   primaryDomainForShop, saveRankingsForShop, reserveRankingImportBudget,
-  RankingImportRateLimitError, RANKING_REQUESTS_PER_HOUR, RANKING_RECORDS_PER_HOUR
+  RankingImportRateLimitError, RankingSnapshotConflictError, RANKING_REQUESTS_PER_HOUR, RANKING_RECORDS_PER_HOUR
 } from "../app/lib/ranking-ingest.server";
 import { rotateRankingConnectorKey, rankingKeyHash } from "../app/lib/ranking-credentials.server";
 
@@ -123,5 +123,36 @@ test("ranking record quota can reject a batch before request-count limit", async
   } finally {
     await db.rankingConnectorCredential.deleteMany({ where: { shop } });
     await db.storeConfig.deleteMany({ where: { shop } });
+  }
+});
+
+test("historical SERP snapshots are immutable across retries and mixed batches", async () => {
+  const shop = "immutable-" + randomUUID() + ".myshopify.com";
+  const otherShop = "immutable-" + randomUUID() + ".myshopify.com";
+  await db.storeConfig.createMany({ data: [{ shop }, { shop: otherShop }] });
+  try {
+    const key = rankingKeyHash(await rotateRankingConnectorKey(shop))!;
+    const otherKey = rankingKeyHash(await rotateRankingConnectorKey(otherShop))!;
+    await saveRankingsForShop(shop, [rank], key);
+    await saveRankingsForShop(shop, [rank], key); // exact retry is harmless
+    const changed = { ...rank, position: 17, targetUrl: "https://shop.example/products/other" };
+    await assert.rejects(saveRankingsForShop(shop, [changed], key),
+      (error: unknown) => error instanceof RankingSnapshotConflictError);
+    const original = await db.seoRankObservation.findFirstOrThrow({ where: { shop } });
+    assert.equal(original.position, rank.position);
+    assert.equal(original.targetUrl, rank.targetUrl);
+    const fresh = { ...rank, keyword: "new boots", observedAt: new Date(now.getTime() - 60_000) };
+    await assert.rejects(saveRankingsForShop(shop, [fresh, changed], key),
+      (error: unknown) => error instanceof RankingSnapshotConflictError);
+    assert.equal(await db.seoRankObservation.count({ where: { shop } }), 1,
+      "a conflicting row must roll back newly inserted rows in the same batch");
+    // Identical snapshot keys in another tenant remain independent.
+    await saveRankingsForShop(otherShop, [changed], otherKey);
+    assert.equal((await db.seoRankObservation.findFirstOrThrow({ where: { shop: otherShop } })).position, 17);
+  } finally {
+    const where = { shop: { in: [shop, otherShop] } };
+    await db.seoRankObservation.deleteMany({ where });
+    await db.rankingConnectorCredential.deleteMany({ where });
+    await db.storeConfig.deleteMany({ where });
   }
 });

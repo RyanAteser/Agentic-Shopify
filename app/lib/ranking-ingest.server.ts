@@ -26,6 +26,14 @@ export async function primaryDomainForShop(admin: ReadOnlyAdmin, shop: string): 
  * of the store row, which locks it for this transaction on PostgreSQL.
  * Every batch is atomic; no partial ranking history on database failure.
  */
+/** A replay may repeat an observation but must never rewrite historical evidence. */
+export class RankingSnapshotConflictError extends Error {
+  constructor() {
+    super("Ranking snapshot conflicts with an existing observation");
+    this.name = "RankingSnapshotConflictError";
+  }
+}
+
 export async function saveRankingsForShop(shop: string, entries: SeoRanking[], keyHash: string): Promise<void> {
   await db.$transaction(async tx => {
     const active = await tx.storeConfig.updateMany({
@@ -39,14 +47,24 @@ export async function saveRankingsForShop(shop: string, entries: SeoRanking[], k
     });
     if (!credential) throw new Error("Ranking connector revoked during import");
     for (const entry of entries) {
-      await tx.seoRankObservation.upsert({
-        where: { shop_keyword_engine_country_device_observedAt: {
-          shop, keyword: entry.keyword, engine: entry.engine,
-          country: entry.country, device: entry.device, observedAt: entry.observedAt
-        }},
-        create: { shop, ...entry },
-        update: { position: entry.position, targetUrl: entry.targetUrl, source: entry.source }
+      const where = { shop_keyword_engine_country_device_observedAt: {
+        shop, keyword: entry.keyword, engine: entry.engine,
+        country: entry.country, device: entry.device, observedAt: entry.observedAt
+      }};
+      // The store row lock serializes all connector imports for this tenant.
+      // A duplicate is idempotent only when the complete measurement agrees.
+      const existing = await tx.seoRankObservation.findUnique({
+        where, select: { position: true, targetUrl: true, source: true }
       });
+      if (existing) {
+        if (existing.position !== entry.position ||
+            existing.targetUrl !== entry.targetUrl ||
+            existing.source !== entry.source) {
+          throw new RankingSnapshotConflictError();
+        }
+        continue;
+      }
+      await tx.seoRankObservation.create({ data: { shop, ...entry } });
     }
   });
 }

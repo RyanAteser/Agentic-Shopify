@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { unauthenticated } from "../shopify.server";
 import { assertRankingTargetsForPrimaryDomain, assertUniqueRankingObservations, parseRanking } from "../lib/seo";
-import { primaryDomainForShop, saveRankingsForShop, reserveRankingImportBudget, RankingImportRateLimitError } from "../lib/ranking-ingest.server";
+import { primaryDomainForShop, saveRankingsForShop, reserveRankingImportBudget, RankingImportRateLimitError, RankingSnapshotConflictError } from "../lib/ranking-ingest.server";
 import { authorizedRankingConnector } from "../lib/ranking-credentials.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -73,6 +73,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await saveRankingsForShop(shop, entries, keyHash);
     return Response.json({ ok: true, records: entries.length, shop });
   } catch (e) {
+    if (e instanceof RankingSnapshotConflictError) {
+      // Do not retry this payload unchanged: it disagrees with stored evidence.
+      return Response.json({ error: e.message }, { status: 409 });
+    }
     if (e instanceof Error && e.message === "Store disconnected during ranking import") {
       return Response.json({ error: "Store disconnected during ranking import" }, { status: 409 });
     }

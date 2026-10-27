@@ -20,6 +20,7 @@ In **n8n**, import both `n8n/*.json` workflows and connect credentials:
 - Writer > Receive Draft Request: Webhook Header Auth, header `X-Agent-Key` = app `N8N_OUTBOUND_KEY`.
 - Draft Article and Editorial Revision: HTTP Request Header Auth: `Authorization: Bearer YOUR_OPENAI_API_KEY`. Keep key in n8n credentials.
 - Return Secure Draft: HTTP Request Header Auth: `X-Agent-Key` = app `N8N_CALLBACK_SECRET`.
+- **Before activating the writer workflow**, replace its fixed `https://YOUR-PUBLISHED-SHOPIFY-APP.example/api/agent/complete` callback URL with the exact trusted HTTPS app origin and path. Never change it to an expression or take it from incoming webhook JSON. Keep HTTP redirects disabled for credential-bearing writer requests; a 3xx response must fail rather than forward a secret to a new destination.
 - Scheduled Dispatcher > Request Due Drafts: same callback-secret HTTP Header Auth credential.
 - Replace the placeholder URL in Scheduled Dispatcher > Request Due Drafts with your real `https://YOUR_APP_HOST/api/agent/due`.
 - Save and **publish** the n8n workflows to activate production webhook and hourly schedule. The app's webhook URL must use the production webhook path, not the ephemeral test URL.
@@ -42,6 +43,7 @@ The ranking workflow shown in the merchant-provided n8n screenshot can send norm
 
 ## Architecture & boundaries
 - Shopify OAuth/session storage stays in the app backend. n8n has neither Shopify API token nor publishing action.
+- The writer callback URL is operator-configured in the n8n workflow, not provided by the app's job payload or the model. This removes a dynamic-URL SSRF/credential-forwarding path. It does **not** replace network egress policy, n8n instance access controls, or a live test of redirect handling. See [OWASP SSRF prevention](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html) and [n8n HTTP Request redirects](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/).
 - Each saved draft and job is scoped by the Shopify shop domain; callback checks the job/shop pair and requires a secret. Callback duplicates return the same draft rather than creating duplicates.
 - The quality score is a simple structural checklist, **not** a factual verification, ranking predictor or Google score.
 - Merchant-approved publishing calls the 2026-10 Shopify Admin GraphQL `articleCreate` mutation. On uncertain outcomes, status changes to `needs_reconciliation`; inspect the Shopify admin before retrying.

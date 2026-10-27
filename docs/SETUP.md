@@ -41,6 +41,14 @@ The ranking workflow shown in the merchant-provided n8n screenshot can send norm
 7. Enable scheduled drafts only after manual flow succeeds. Confirm a scheduler run creates **drafts**, never directly published posts.
 8. Verify uninstallation cleans up saved app data.
 
+
+### Callback delivery, privacy and retries
+
+- The `/api/agent/complete` callback locks the merchant's configuration row and verifies the job **inside the same transaction** that creates the draft and marks the job completed. This is ordered against `app/uninstalled` and `shop/redact` deletion of the same row, so a late n8n response cannot recreate draft data after redaction.
+- Exact callback replays return the original draft ID and stored structural score without overwriting edits. A completed job with a missing draft is treated as inconsistent and requires investigation.
+- HTTP 400 means malformed callback data; 401 means invalid bridge authentication; 404 means unknown or wrong-merchant job; 409 means disconnected store or ineligible job. **Do not automatically replay these unchanged.** HTTP 503 means persistence could not be confirmed; inspect the app database and n8n execution before any manual replay. This workflow template does not enable automatic callback retries.
+- Regression tests cover wrong-merchant submissions, failed and uncertain jobs, duplicate callbacks and late callbacks after the configuration is removed. SQLite and PostgreSQL CI validate the transaction logic, but real webhook timing, provider outages and network retry behavior still require isolated integration tests.
+
 ## Architecture & boundaries
 - Shopify OAuth/session storage stays in the app backend. n8n has neither Shopify API token nor publishing action.
 - App-to-n8n webhook dispatch also rejects HTTP redirects so its outbound credential cannot follow a 3xx response to another host. Redirect failures enter the existing uncertain-dispatch reconciliation path rather than blindly refunding credits.

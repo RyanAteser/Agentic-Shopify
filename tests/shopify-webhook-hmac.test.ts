@@ -98,7 +98,7 @@ test("shop/redact rejects forged and modified HMACs, erases only the signed shop
     assert.equal(await db.organicDailyMetric.count({ where: { shop } }), 0);
     assert.equal(await db.seoRankObservation.count({ where: { shop } }), 0);
     assert.equal(await db.editorialReview.count({ where: { shop } }), 0);
-    const lateRank = parseRanking({ keyword: "late boots", position: 7,
+    const lateRank = parseRanking({ engine: "google", country: "US", device: "desktop", keyword: "late boots", position: 7,
       observedAt: rankAt.toISOString(), targetUrl: "https://example.test/boots" }, rankAt);
     await assert.rejects(saveRankingsForShop(shop, [lateRank], rankingKey), /Store disconnected/);
     assert.equal(await db.seoRankObservation.count({ where: { shop } }), 0);

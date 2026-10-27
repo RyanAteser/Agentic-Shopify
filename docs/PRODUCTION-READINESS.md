@@ -115,3 +115,34 @@ The ranking importer now reserves an atomic, per-shop quota **before** querying 
 This is a defensive app policy, **not** Shopify's GraphQL Admin API throttle (which is calculated using query cost and app/store buckets), a Bright Data billing cap, a verified source signature, or protection from unauthenticated network floods. Before enabling a real merchant connector, add ingress/IP abuse limits, source attestation, per-merchant paid scrape spend ceilings, and real payload/429/backoff tests.
 
 Source: https://shopify.dev/docs/apps/build/apis/graphql-admin/rate-limits
+
+
+## Editorial readiness score: scope and limitations (2026-10-27)
+
+The Blog Agent's stored `seoScore` is a **local structural triage score**, not
+a prediction of Google rankings, a verified SEO audit, or a factual-quality
+rating. A score of 70 only routes a draft into the human-review queue. It
+**never** authorizes publishing. The UI should continue to describe it as
+structural quality, not SEO performance.
+
+The old heuristic gave 30 points for reaching 450 words and 10 points for
+having at least one hyperlink. Both incentives were removed. Google's
+people-first guidance explicitly says it has **no preferred word count**.
+A hyperlink can be fabricated or unrelated, so link presence cannot establish
+source reliability. The revised 100-point triage checks a clear title (25),
+useful excerpt (20), minimally readable body (25), section/paragraph structure
+(15), and topic relevance (15). The body-text minimum is an anti-empty guard,
+**not** an SEO word target; a missing body, title, summary or placeholder
+content caps readiness at 40. All draft links, product facts, originality and
+claims still require human verification.
+
+Regression cases cover a substantive draft under 450 words, unchanged scores
+when unverified links are added, heading-only/empty content, placeholder text,
+and sanitization of unsafe HTML. No claim is made that the score correlates
+with merchant acceptance, conversion or search outcomes. In a consented pilot,
+compare triage scores to blinded editor decisions and correction minutes; if
+calibration fails, remove the score from the merchant UI rather than tuning it
+to maximize content output.
+
+Primary reference:
+https://developers.google.com/search/docs/fundamentals/creating-helpful-content

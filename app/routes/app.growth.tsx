@@ -4,6 +4,7 @@ import {boundary} from "@shopify/shopify-app-react-router/server";
 import {authenticate} from "../shopify.server";
 import db from "../db.server";
 import {compareOrganicWindows} from "../lib/growth";
+import {summarizeEditorialCohort} from "../lib/editorial-funnel";
 import {disconnectGoogle,syncOrganicMetrics} from "../lib/gsc.server";
 
 export const loader=async ({request}:LoaderFunctionArgs)=>{
@@ -18,7 +19,22 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
   }):[];
   const chronological=rows.slice().reverse();
   const comparison=compareOrganicWindows(chronological);
-  return {shop,connection,comparison,recent:chronological.slice(-14),connected:new URL(request.url).searchParams.has("connected")};
+  const now=new Date();
+  const since=new Date(now.getTime()-28*86400000);
+  // Only authenticated shop-scoped aggregates; no buyer/order data or new permissions.
+  const [jobGroups,draftGroups]=await Promise.all([
+    db.contentJob.groupBy({
+      by:["status"],where:{shop,createdAt:{gte:since,lt:now}},_count:{_all:true}
+    }),
+    db.articleDraft.groupBy({
+      by:["status"],where:{shop,createdAt:{gte:since,lt:now}},_count:{_all:true}
+    })
+  ]);
+  const editorial=summarizeEditorialCohort(
+    jobGroups.map(row=>({status:row.status,count:row._count._all})),
+    draftGroups.map(row=>({status:row.status,count:row._count._all}))
+  );
+  return {shop,connection,comparison,editorial,recent:chronological.slice(-14),connected:new URL(request.url).searchParams.has("connected")};
 };
 
 export const action=async ({request}:ActionFunctionArgs)=>{
@@ -50,7 +66,7 @@ export const action=async ({request}:ActionFunctionArgs)=>{
 function number(x:number){return Math.round(x).toLocaleString();}
 function pct(x:number|null){return x===null?"Insufficient baseline":(x>0?"+":"")+x.toFixed(1)+"%";}
 export default function GrowthDashboard(){
-  const {shop,connection,comparison,recent,connected}=useLoaderData<typeof loader>();
+  const {shop,connection,comparison,editorial,recent,connected}=useLoaderData<typeof loader>();
   const result=useActionData<typeof action>();
   const busy=useNavigation().state!=="idle";
   return <s-page heading="Growth · Verified Organic Search">
@@ -60,6 +76,12 @@ export default function GrowthDashboard(){
       <p>Growth measurement is descriptive: changes in search clicks do not prove which blog post or SEO change caused them.</p>
       {connected&&<p role="status">Google authorization completed. Import historical search performance below.</p>}
       {result&&<p role="status">{result.message}</p>}
+    </s-section>
+    <s-section heading="Editorial outcomes · rolling 28-day cohorts">
+      <p>Generation requests created: <strong>{editorial.requests}</strong> ({editorial.failedJobs} failed; {editorial.uncertainJobs} awaiting dispatch reconciliation).</p>
+      <p>Drafts created: <strong>{editorial.drafts}</strong>. Current status of those drafts: {editorial.published} published, {editorial.rejected} rejected, {editorial.awaitingReview} awaiting human review and {editorial.reconciliation} publishing or requiring reconciliation.</p>
+      <p><strong>Published among resolved drafts:</strong> {editorial.publishedAmongResolvedPct===null?"Insufficient decisions":editorial.publishedAmongResolvedPct.toFixed(1)+"%"} ({editorial.published} published / {editorial.resolved} published or rejected). We display a percentage only after at least five decisions.</p>
+      <p>These are two separate creation-date cohorts, not a draft-delivery conversion funnel. Draft status is measured now, so publication may have happened after the creation window. Publishing is a proxy for editorial approval, not proof of factual quality, merchant revenue, SEO impact or user retention. Rejections and unresolved publication attempts deserve review.</p>
     </s-section>
     <s-section heading="Google Search Console connection">
       {!connection?<div>

@@ -208,3 +208,32 @@ merchant data or conversion lift has been observed.
 
 Primary API contract:
 https://developers.google.com/webmaster-tools/v1/searchanalytics/query
+
+
+## Single-dispatch generation guard (2026-10-27)
+
+Every paid/credit-backed n8n blog generation now atomically transitions its own
+`ContentJob` from `queued` to `running` **before** reading product context
+or sending a webhook. Only the winning claim may send a request; concurrent
+claims, completed jobs and cross-shop job IDs are rejected. Duplicate attempts
+must **not** refund the original job's credit, because that work may still be
+running. The original callback remains idempotent.
+
+HTTP redirects and 5xx responses are treated as **uncertain delivery**, not
+definitive rejection: a POST may have reached n8n even if its response was
+unusable. These attempts remain reserved for reconciliation instead of being
+replayed automatically. Plain HTTP is accepted only for exact local loopback
+hosts; prefix tricks such as `localhost.evil.example` are rejected.
+
+Tests exercise concurrent conditional claims, tenant isolation, completed-job
+rejection and webhook URL validation. They do **not** yet prove an exactly-once
+n8n execution under network partition, n8n workflow restart or process crash.
+Before production, verify callback delivery, 3xx/4xx/5xx behavior, n8n
+execution deduplication and operator reconciliation in a real isolated n8n
+instance. Do not automatically retry ambiguous dispatches or enable scheduled
+merchant content without approval.
+
+Background: https://shopify.dev/docs/apps/build/apis/graphql-admin/implementing-idempotency
+(Shopify's own idempotency guidance illustrates why concurrent duplicate
+requests require a stable operation identity; it does not provide idempotency
+for our n8n webhook).

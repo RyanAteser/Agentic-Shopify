@@ -32,6 +32,8 @@ test("GSC import is cancelled by consent deletion and still works with active co
   const refreshGate=new Promise<void>(resolve=>{releaseRefresh=resolve;});
   const refreshStarted=new Promise<void>(resolve=>{signalRefresh=resolve;});
   let pauseRefresh=true;
+  let aggregationType="byProperty";
+  let reportedCtr=0.1;
   let pending:Promise<unknown>|undefined;
   globalThis.fetch=async input=>{
     const url=typeof input==="string"?input:input instanceof URL?input.href:input.url;
@@ -43,8 +45,8 @@ test("GSC import is cancelled by consent deletion and still works with active co
       return Response.json({access_token:"test-access-token"});
     }
     if(url.includes("/searchAnalytics/query")){
-      return Response.json({responseAggregationType:"byProperty",rows:[{
-        keys:["2026-10-01"],clicks:5,impressions:50,ctr:0.1,position:8
+      return Response.json({responseAggregationType:aggregationType,rows:[{
+        keys:["2026-10-01"],clicks:5,impressions:50,ctr:reportedCtr,position:8
       }]});
     }
     if(url==="https://oauth2.googleapis.com/revoke")return Response.json({});
@@ -63,7 +65,16 @@ test("GSC import is cancelled by consent deletion and still works with active co
     // Positive control: the guard must not suppress legitimate imports.
     pauseRefresh=false;
     await connectWithPendingState(activeShop,"sc-domain:example.test","refresh-token-2");
-    const result=await syncOrganicMetrics(activeShop,new Date("2026-10-26T12:00:00Z"));
+    const syncNow=new Date("2026-10-26T12:00:00Z");
+    aggregationType="byPage";
+    await assert.rejects(syncOrganicMetrics(activeShop,syncNow),/aggregation type/);
+    assert.equal(await db.organicDailyMetric.count({where:{shop:activeShop}}),0);
+    reportedCtr=0.9;
+    aggregationType="byProperty";
+    await assert.rejects(syncOrganicMetrics(activeShop,syncNow),/Inconsistent Google metric values/);
+    assert.equal(await db.organicDailyMetric.count({where:{shop:activeShop}}),0);
+    reportedCtr=0.1;
+    const result=await syncOrganicMetrics(activeShop,syncNow);
     assert.equal(result.rows,1);
     assert.equal(await db.organicDailyMetric.count({where:{shop:activeShop}}),1);
   }finally{

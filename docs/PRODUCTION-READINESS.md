@@ -180,3 +180,31 @@ https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
 
 Prisma 6 transaction guidance:
 https://www.prisma.io/docs/orm/v6/prisma-client/queries/transactions
+
+
+## Search Console measurement-integrity checks (2026-10-27)
+
+The daily organic import now verifies that Google actually returned
+`responseAggregationType: "byProperty"` for the requested date-only,
+property-level web report. A successful HTTP response with `byPage`, `auto`
+or missing aggregation metadata is rejected rather than silently mixed into
+merchant growth metrics.
+
+Each daily row must contain exactly one valid Pacific calendar date within the
+requested range and finite **numeric** clicks, impressions, CTR and average
+position. The importer rejects missing/null/string metrics, contradictory
+click/impression/CTR combinations (tolerance 1e-6 for floating-point
+serialization), nonzero position without impressions, and zero position with
+positive impressions. A legitimate zero-impression row may contain all-zero
+metrics. An invalid response fails before any rows are persisted; the existing
+sync lease is released for a later investigation/retry.
+
+**Scope:** These are contract and consistency checks, not verification that
+Google's underlying traffic figures are accurate, that the account has
+sufficient property access, or that content caused a traffic change. The
+strict response aggregation requirement must be tested against an authentic
+consented Google Search Console export before production activation. No real
+merchant data or conversion lift has been observed.
+
+Primary API contract:
+https://developers.google.com/webmaster-tools/v1/searchanalytics/query

@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {gscReportingWindow,matchesPrimaryDomain,parseSearchConsoleRows,compareOrganicWindows} from "../app/lib/growth";
+import {assertPropertyAggregation,gscReportingWindow,matchesPrimaryDomain,parseSearchConsoleRows,compareOrganicWindows} from "../app/lib/growth";
 import {encryptToken,decryptToken,randomOAuthState,hashState} from "../app/lib/gsc-crypto.server";
 
 test("Search Console OAuth property must match Shopify primary host",()=>{
@@ -23,6 +23,30 @@ test("Search Console daily observation parser validates dates and data provenanc
   assert.throws(()=>parseSearchConsoleRows([{keys:["2026-10-01"],clicks:4,impressions:1,ctr:4,position:10}],"2026-10-01","2026-10-04"));
   assert.throws(()=>parseSearchConsoleRows([{keys:["2026-10-05"],clicks:0,impressions:0,ctr:0,position:0}],"2026-10-01","2026-10-04"));
   assert.throws(()=>parseSearchConsoleRows([{keys:["2026-10-01"],clicks:-1,impressions:0,ctr:0,position:0}],"2026-10-01","2026-10-04"));
+});
+test("GSC rejects malformed dates, wrong dimensions and fabricated zero metrics",()=>{
+  const start="2026-02-01",end="2026-03-31";
+  const good={keys:["2026-02-12"],clicks:3,impressions:20,ctr:0.15,position:6.2};
+  const parse=(row:unknown)=>parseSearchConsoleRows([row],start,end);
+  assert.deepEqual(parse(good)[0],{date:"2026-02-12",clicks:3,impressions:20,ctr:0.15,position:6.2});
+  for(const invalid of [
+    {...good,keys:["2026-02-30"]}, // lexically valid, impossible calendar day
+    {...good,keys:["2026-02-12","MOBILE"]}, // page/device cohort, not date-only
+    {...good,clicks:null}, {...good,impressions:"20"},
+    {...good,ctr:0.5}, // clicks/impressions must agree with reported CTR
+    {...good,position:0}, // positive impressions require a real rank
+    {...good,impressions:0,clicks:0,ctr:0,position:6.2},
+    {...good,impressions:0,clicks:0,ctr:0,position:0,keys:[]},
+  ]) assert.throws(()=>parse(invalid));
+  // Google declares these as double values; preserve fractional precision.
+  assert.equal(parse({...good,clicks:2.5,ctr:0.125})[0].clicks,2.5);
+  assert.equal(parse({...good,ctr:0.1500004})[0].ctr,0.1500004);
+});
+test("GSC rejects a different response aggregation even with valid date rows",()=>{
+  assert.doesNotThrow(()=>assertPropertyAggregation("byProperty"));
+  for(const value of ["byPage","auto",null,undefined,"BY_PROPERTY"]){
+    assert.throws(()=>assertPropertyAggregation(value),/aggregation type/);
+  }
 });
 test("28 day growth windows are observation based and refuse weak baselines",()=>{
   const now=new Date("2026-10-26T12:00:00Z");

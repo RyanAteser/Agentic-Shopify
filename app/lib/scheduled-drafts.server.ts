@@ -48,7 +48,7 @@ export function scheduledClaimFromJob(job: {
   }
   const v = value as Record<string, unknown>;
   const isUtcTimestamp = (value: unknown): value is string =>
-    typeof value === "string" && /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(value);
+    typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value);
   if ((v.previousNextRunAt !== null && !isUtcTimestamp(v.previousNextRunAt)) ||
       !isUtcTimestamp(v.nextRunAt)) {
     throw new Error("Corrupt scheduled outbox snapshot");

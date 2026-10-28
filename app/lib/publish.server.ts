@@ -1,5 +1,6 @@
 import db from "../db.server";
 import { toSafeShopifySummaryHtml } from "./article-summary";
+import { hasCurrentUsableReview } from "./editorial-review-integrity";
 
 type Admin = {graphql: (...args:any[])=>Promise<any>};
 
@@ -26,21 +27,23 @@ export async function publishApprovedArticle(shop:string,draftId:string,admin:Ad
     });
     if(!config?.blogId)return null;
     const review=await tx.editorialReview.findUnique({
-      where:{shop_draftId:{shop,draftId}},select:{decision:true}
+      where:{shop_draftId:{shop,draftId}},select:{decision:true,contentDigest:true}
     });
-    if(review?.decision!=="usable")return null;
     const draft=await tx.articleDraft.findFirst({
       where:{id:draftId,shop,status:"ready",seoScore:{gte:70}},
       select:{title:true,body:true,summary:true,tags:true}
     });
-    if(!draft)return null;
+    if(!draft || !hasCurrentUsableReview(review,draft,config))return null;
+    // The conditional claim rejects a concurrent content edit between the
+    // digest comparison and status transition, even from an external writer.
     const claim=await tx.articleDraft.updateMany({
-      where:{id:draftId,shop,status:"ready",seoScore:{gte:70}},
+      where:{id:draftId,shop,status:"ready",seoScore:{gte:70},
+        title:draft.title,body:draft.body,summary:draft.summary,tags:draft.tags},
       data:{status:"publishing"}
     });
     return claim.count===1?{...draft,...config}:null;
   });
-  if(!claimed)return {ok:false,message:"A connected destination blog, usable editorial review and ready unpublished draft are required."};
+  if(!claimed)return {ok:false,message:"A connected destination blog, current usable editorial review and ready unpublished draft are required."};
   try{
     const response=await admin.graphql(
       `#graphql mutation ManagerPublishArticle($article:ArticleCreateInput!) {

@@ -55,6 +55,10 @@ References:
 - Shopify App Events privacy and preview:
   https://shopify.dev/docs/apps/build/app-events
 
+## Review renewal and evidence freshness (2026-10-28)
+
+A usable editorial review is bound to the exact publication fields and selected Shopify blog/author by a stored content digest. A changed draft or destination requires another explicit review before publishing; legacy usable reviews without digests are not sufficient. Renewing an outdated usable review **updates the same row** with the latest review timestamp and optional self-reported minutes; it does not create a second review event. Therefore the 28-day review-decision cohort measures **most recent recorded review timestamps**, not unique lifetime first reviews or total review actions. Never interpret the renewal as proof of increased productivity, fact-checking quality or conversion.
+
 ## Explicit review evidence (2026-10-27)
 
 The Blog Agent now records **usable as written** or **rejected** decisions,

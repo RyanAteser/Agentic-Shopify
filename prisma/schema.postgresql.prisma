@@ -59,6 +59,10 @@ model ContentJob {
   shop             String
   topic            String
   status           String   @default("queued")
+  // Only jobs created after the recovery contract is introduced are auto-recoverable.
+  outboxVersion    Int      @default(0)
+  // Immutable schedule snapshot for a definitive rejection/refund after a crash.
+  scheduleClaim    String?
   error            String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

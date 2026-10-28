@@ -2,7 +2,8 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import db from "../app/db.server";
-import {parseReviewMinutes,recordEditorialReview} from "../app/lib/editorial-review.server";
+import {parseReviewMinutes} from "../app/lib/editorial-review.server";
+import {recordEditorialReview} from "./helpers/editorial-review";
 import {summarizeEditorialReviews} from "../app/lib/editorial-funnel";
 
 test("review aggregation uses explicit decisions and observed minutes",()=>{

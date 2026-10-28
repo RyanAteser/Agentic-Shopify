@@ -47,8 +47,14 @@ export function scheduledClaimFromJob(job: {
     throw new Error("Corrupt scheduled outbox snapshot");
   }
   const v = value as Record<string, unknown>;
-  const previous = v.previousNextRunAt === null ? null : new Date(String(v.previousNextRunAt));
-  const next = new Date(String(v.nextRunAt));
+  const isUtcTimestamp = (value: unknown): value is string =>
+    typeof value === "string" && /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(value);
+  if ((v.previousNextRunAt !== null && !isUtcTimestamp(v.previousNextRunAt)) ||
+      !isUtcTimestamp(v.nextRunAt)) {
+    throw new Error("Corrupt scheduled outbox snapshot");
+  }
+  const previous = v.previousNextRunAt === null ? null : new Date(v.previousNextRunAt as string);
+  const next = new Date(v.nextRunAt as string);
   if ((previous !== null && !Number.isFinite(previous.getTime())) ||
       !Number.isFinite(next.getTime()) ||
       typeof v.previousCursor !== "number" || !Number.isSafeInteger(v.previousCursor) || v.previousCursor < 0 ||

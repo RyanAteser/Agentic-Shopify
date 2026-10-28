@@ -191,3 +191,75 @@ test("legacy broad GSC connection cannot sync or spend Google quota",async()=>{
     else process.env.GSC_ENCRYPTION_KEY=priorKey;
   }
 });
+
+
+test("GSC snapshots retire omitted dates without touching other shops or historical ranges",async()=>{
+  const envKeys=["GSC_CLIENT_ID","GSC_CLIENT_SECRET","GSC_ENCRYPTION_KEY","SHOPIFY_APP_URL"] as const;
+  const previous=Object.fromEntries(envKeys.map(key=>[key,process.env[key]]));
+  const originalFetch=globalThis.fetch;
+  process.env.GSC_CLIENT_ID="snapshot-test-client";
+  process.env.GSC_CLIENT_SECRET="snapshot-test-secret";
+  process.env.GSC_ENCRYPTION_KEY=Buffer.alloc(32,41).toString("base64");
+  process.env.SHOPIFY_APP_URL="https://app.example.test";
+  const shop="snapshot-"+randomUUID()+".myshopify.com";
+  const otherShop="neighbor-"+randomUUID()+".myshopify.com";
+  const property="https://example.test/";
+  const day=(date:string)=>({keys:[date],clicks:5,impressions:50,ctr:0.1,position:8});
+  let rows=[day("2026-10-01"),day("2026-10-02")];
+  let aggregationType="byProperty";
+  globalThis.fetch=async input=>{
+    const url=typeof input==="string"?input:input instanceof URL?input.href:input.url;
+    if(url==="https://oauth2.googleapis.com/token")return Response.json({access_token:"snapshot-access"});
+    if(url.includes("/searchAnalytics/query"))return Response.json({
+      responseAggregationType:aggregationType,rows
+    });
+    throw new Error("Unexpected Google request: "+url);
+  };
+  const currentDates={gte:"2026-08-29",lte:"2026-10-23"};
+  try{
+    await connectWithPendingState(shop,property,"snapshot-refresh");
+    await db.organicDailyMetric.createMany({data:[
+      {shop,property,date:"2026-08-01",clicks:2,impressions:20,ctr:0.1,position:7},
+      {shop:otherShop,property,date:"2026-10-02",clicks:9,impressions:90,ctr:0.1,position:6}
+    ]});
+    const run=(minute:number)=>syncOrganicMetrics(shop,new Date(Date.parse("2026-10-26T12:00:00Z")+minute*60_000));
+    assert.equal((await run(0)).rows,2);
+    assert.equal(await db.organicDailyMetric.count({where:{shop,date:currentDates}}),2);
+
+    // Google's next successful date-only response no longer includes Oct 2.
+    // It must not remain as a fabricated observed day in the growth baseline.
+    rows=[day("2026-10-01")];
+    assert.equal((await run(1)).rows,1);
+    assert.deepEqual((await db.organicDailyMetric.findMany({
+      where:{shop,date:currentDates},select:{date:true}
+    })).map(r=>r.date),["2026-10-01"]);
+
+    // Invalid Google responses must not erase the last valid snapshot.
+    aggregationType="byPage";
+    await assert.rejects(run(2),/aggregation type/);
+    assert.equal(await db.organicDailyMetric.count({where:{shop,date:currentDates}}),1);
+    aggregationType="byProperty";
+
+    // A legitimate zero-row response removes all stale dates in the window,
+    // but not older history or an unrelated tenant's same-property data.
+    rows=[];
+    assert.equal((await run(3)).rows,0);
+    assert.equal(await db.organicDailyMetric.count({where:{shop,date:currentDates}}),0);
+    assert.equal(await db.organicDailyMetric.count({where:{shop,date:"2026-08-01"}}),1);
+    assert.equal(await db.organicDailyMetric.count({where:{shop:otherShop}}),1);
+
+    // A date returned on a subsequent sync is restored normally.
+    rows=[day("2026-10-02")];
+    assert.equal((await run(4)).rows,1);
+    assert.equal(await db.organicDailyMetric.count({where:{shop,date:currentDates}}),1);
+  }finally{
+    globalThis.fetch=originalFetch;
+    await db.organicDailyMetric.deleteMany({where:{shop:{in:[shop,otherShop]}}});
+    await db.searchConsoleConnection.deleteMany({where:{shop}});
+    await db.googleAuthState.deleteMany({where:{shop}});
+    for(const key of envKeys){
+      if(previous[key]===undefined)delete process.env[key];
+      else process.env[key]=previous[key];
+    }
+  }
+});

@@ -23,11 +23,11 @@ test("writer workflow references only existing nodes and starts inactive", () =>
   assert.doesNotMatch(raw, /shpat_[a-zA-Z0-9]{12,}/);
 });
 test("writer returns a job-and-tenant-scoped 202 before paid generation, not a generic HTTP 200", () => {
-  const workflow = load("n8n/shopify-blog-writer.json") as Workflow & {
-    nodes: Array<NodeShape & { parameters: Record<string, unknown> }>
-  };
-  const find = (name: string) => {
-    const node = workflow.nodes.find(n => n.name === name);
+  const workflow = load("n8n/shopify-blog-writer.json");
+  type AckNode = NodeShape & { parameters: Record<string, unknown> };
+  const nodes = workflow.nodes as AckNode[];
+  const find = (name: string): AckNode => {
+    const node = nodes.find(n => n.name === name);
     assert.ok(node, "Missing node " + name);
     return node;
   };

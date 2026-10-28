@@ -157,6 +157,7 @@ export default function BlogAgent() {
     </s-section>
     <s-section heading="Request a blog draft">
       <p>Free plan: {Math.max(0, FREE_LIFETIME_GENERATIONS - config.freeDraftsUsed)} of {FREE_LIFETIME_GENERATIONS} lifetime generations remaining. Paid subscriptions will be enabled after Shopify billing setup.</p>
+      {config.enabled && config.freeDraftsUsed >= FREE_LIFETIME_GENERATIONS && <p role="status">Scheduled draft creation is paused because all free generations have been used. No further jobs will be started until an authorized entitlement is available; paid billing is not enabled.</p>}
       <Form method="post" style={{display:"flex",gap:10,flexWrap:"wrap"}}>
         <input type="hidden" name="intent" value="generate"/>
         <input name="topic" minLength={6} maxLength={140} placeholder="e.g. How to choose a shade for ..." style={{minWidth:300,flex:1}} required/>

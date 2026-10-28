@@ -31,6 +31,42 @@ export type ScheduledDraftClaim = {
   seedTopics: string;
 };
 
+/**
+ * Persist the exact schedule claim with the queued job. A recovery sweep can
+ * refund a definite pre-acceptance rejection without guessing merchant state.
+ * Legacy jobs have no snapshot and are deliberately excluded from recovery.
+ */
+export function scheduledClaimFromJob(job: {
+  id: string; shop: string; topic: string; scheduleClaim: string | null
+}): ScheduledDraftClaim | null {
+  if (job.scheduleClaim === null) return null;
+  let value: unknown;
+  try { value = JSON.parse(job.scheduleClaim); }
+  catch { throw new Error("Corrupt scheduled outbox snapshot"); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Corrupt scheduled outbox snapshot");
+  }
+  const v = value as Record<string, unknown>;
+  const previous = v.previousNextRunAt === null ? null : new Date(String(v.previousNextRunAt));
+  const next = new Date(String(v.nextRunAt));
+  if ((previous !== null && !Number.isFinite(previous.getTime())) ||
+      !Number.isFinite(next.getTime()) ||
+      !Number.isSafeInteger(v.previousCursor) || (v.previousCursor as number) < 0 ||
+      !Number.isInteger(v.cadenceDays) || (v.cadenceDays as number) < 1 ||
+      (v.cadenceDays as number) > 30 ||
+      typeof v.blogId !== "string" || !v.blogId ||
+      typeof v.seedTopics !== "string") {
+    throw new Error("Corrupt scheduled outbox snapshot");
+  }
+  return {
+    shop: job.shop, jobId: job.id, topic: job.topic,
+    previousNextRunAt: previous, nextRunAt: next,
+    previousCursor: v.previousCursor as number,
+    blogId: v.blogId, cadenceDays: v.cadenceDays as number,
+    seedTopics: v.seedTopics
+  };
+}
+
 function scheduledTopic(config: DueDraftSnapshot): string {
   const topics = config.seedTopics.split(",").map(t => t.trim()).filter(Boolean);
   const topic = topics.length
@@ -81,7 +117,15 @@ export async function claimDueScheduledDraft(
       }
     });
     if (claim.count !== 1) return null;
-    const job = await tx.contentJob.create({ data: { shop: config.shop, topic } });
+    const scheduleClaim = JSON.stringify({
+      previousNextRunAt: config.nextRunAt?.toISOString() ?? null,
+      nextRunAt: nextRunAt.toISOString(), previousCursor: config.topicCursor,
+      blogId: config.blogId, cadenceDays: config.cadenceDays,
+      seedTopics: config.seedTopics
+    });
+    const job = await tx.contentJob.create({
+      data: { shop: config.shop, topic, outboxVersion: 1, scheduleClaim }
+    });
     return {
       shop: config.shop, jobId: job.id, topic,
       previousNextRunAt: config.nextRunAt, nextRunAt,

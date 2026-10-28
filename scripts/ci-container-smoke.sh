@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# CI-only, ephemeral smoke test: no Shopify credentials, merchant stores or remote APIs.
+set -euo pipefail
+
+image="${1:-agentic-shopify:ci}"
+suffix="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$$"
+network="agentic-smoke-${suffix}"
+database="agentic-smoke-db-${suffix}"
+application="agentic-smoke-app-${suffix}"
+
+cleanup() {
+  docker rm -f "$application" "$database" >/dev/null 2>&1 || true
+  docker network rm "$network" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+# Prove the final image is not running its application as root.
+docker run --rm --entrypoint sh "$image" -c 'test "$(id -u)" -ne 0 && test -r build/server/index.js'
+
+docker network create "$network" >/dev/null
+docker run -d --name "$database" --network "$network" \
+  -e POSTGRES_USER=agentic -e POSTGRES_PASSWORD=test-only-password \
+  -e POSTGRES_DB=agentic_test postgres:16 >/dev/null
+
+db_ready=false
+for _ in $(seq 1 40); do
+  if docker exec "$database" pg_isready -U agentic -d agentic_test >/dev/null 2>&1; then
+    db_ready=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$db_ready" != true ]]; then
+  echo "Temporary PostgreSQL never became ready" >&2
+  docker logs "$database" >&2
+  exit 1
+fi
+
+db_url="postgresql://agentic:test-only-password@${database}:5432/agentic_test?schema=public"
+# Migration uses exactly the production runtime image and committed SQL.
+docker run --rm --network "$network" -e DATABASE_URL="$db_url" \
+  "$image" npx prisma migrate deploy --schema prisma/schema.postgresql.prisma
+
+# Credentials are inert CI placeholders. Health must not require external APIs.
+docker run -d --name "$application" --network "$network" -p 127.0.0.1::3000 \
+  -e DATABASE_URL="$db_url" \
+  -e SHOPIFY_API_KEY=ci_dummy_key \
+  -e SHOPIFY_API_SECRET=ci-only-inert-secret-not-for-any-store \
+  -e SHOPIFY_APP_URL=https://ci.example.invalid \
+  -e SCOPES=read_products,write_content \
+  "$image" >/dev/null
+
+port="$(docker port "$application" 3000/tcp | head -n 1 | sed 's/.*://')"
+if [[ ! "$port" =~ ^[0-9]+$ ]]; then
+  echo "Could not resolve temporary mapped application port" >&2
+  exit 1
+fi
+url="http://127.0.0.1:${port}/health"
+ready=false
+for _ in $(seq 1 40); do
+  body="$(curl --silent --show-error --max-time 2 --fail "$url" 2>/dev/null || true)"
+  if [[ "$body" == '{"status":"ready"}' ]]; then
+    ready=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$ready" != true ]]; then
+  echo "Built image failed to serve a DB-backed HTTP 200 readiness response" >&2
+  docker logs "$application" >&2
+  exit 1
+fi
+echo "Container smoke: non-root image, migrations and DB-backed /health passed"
+
+# A dead database must not be reported as ready by the load-balancer endpoint.
+docker stop "$database" >/dev/null
+unavailable=false
+for _ in $(seq 1 20); do
+  status="$(curl --silent --max-time 3 --output /dev/null --write-out '%{http_code}' "$url" || true)"
+  if [[ "$status" == "503" ]]; then
+    unavailable=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$unavailable" != true ]]; then
+  echo "Readiness did not return HTTP 503 after PostgreSQL stopped" >&2
+  docker logs "$application" >&2
+  exit 1
+fi
+echo "Container smoke: failed dependency correctly returns HTTP 503"

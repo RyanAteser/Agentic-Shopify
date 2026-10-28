@@ -5,7 +5,7 @@ import db from "../app/db.server";
 import { buildBlogTasks, buildRankTasks, buildSeoTasks, rankingDropHasRecovered } from "../app/lib/manager";
 import { readMerchantProductSample, syncManagerTasks, logStoreAction } from "../app/lib/manager.server";
 import { eraseMerchantData } from "../app/lib/merchant-redaction.server";
-import { publishApprovedArticle } from "../app/lib/publish.server";
+import { publishFromCurrentForm } from "./helpers/publish";
 import { recordEditorialReview } from "./helpers/editorial-review";
 
 test("manager audits only published Online Store products, not other-channel inventory",async()=>{
@@ -154,8 +154,8 @@ test("merchant-approved publisher creates exactly one Shopify article and blocks
      return {json:async()=>({data:{articleCreate:{article:{id:"gid://shopify/Article/123",title:"Product care guide",isPublished:true,blog:{id:"gid://shopify/Blog/1"}},userErrors:[]}}})};
    }};
    assert.equal((await recordEditorialReview(shop,draft.id,"usable",5)).ok,true);
-   const a=await publishApprovedArticle(shop,draft.id,admin);
-   const b=await publishApprovedArticle(shop,draft.id,admin);
+   const a=await publishFromCurrentForm(shop,draft.id,admin);
+   const b=await publishFromCurrentForm(shop,draft.id,admin);
    assert.equal(a.ok,true);
    assert.equal(b.ok,false);
    assert.equal(called,1);

@@ -8,7 +8,8 @@ Before this change, `failCreditedJob` updated a `ContentJob` row and
 then decremented `StoreConfig.freeDraftsUsed` in the same transaction.
 The n8n callback path (`persistArticleCallback`) acquires the
 `StoreConfig` row lock **before** reading/updating the job. Shopify
-uninstall/redaction also deletes `StoreConfig` first.
+uninstall/redaction now deletes persisted Sessions first, then `StoreConfig`
+before deleting jobs; it still acquires the merchant row before the job.
 
 If a definitive HTTP rejection/refund and a late callback execute
 concurrently, the two transactions can acquire the same row locks in
@@ -27,7 +28,7 @@ if that status transition succeeds.
 All three paths acquire the merchant row before the job row:
 - Callback: merchant -> read job -> draft upsert -> job status update.
 - Refund: merchant -> job -> credit decrement on merchant.
-- Redaction: delete merchant -> delete merchant-owned records.
+- Redaction: delete Sessions -> delete merchant StoreConfig -> delete jobs and other merchant-owned records.
 
 The operation is idempotent: a completed job cannot be refunded, and
 a failed job cannot be refunded twice. A network timeout, 408, 409,

@@ -8,6 +8,7 @@ import { DispatchAlreadyClaimedError, generationJobNotice } from "../lib/dispatc
 import { createCreditedJob, failCreditedJob } from "../lib/credits.server";
 import { FREE_LIFETIME_GENERATIONS } from "../lib/pricing";
 import { publishApprovedArticle } from "../lib/publish.server";
+import { loadMerchantConfig, saveMerchantConfig } from "../lib/merchant-config.server";
 import { logStoreAction } from "../lib/manager.server";
 import { parseReviewMinutes, recordEditorialReview } from "../lib/editorial-review.server";
 
@@ -25,9 +26,12 @@ async function blogOptions(admin: any) {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
-  const [blogs, config, drafts, jobs] = await Promise.all([
+  // A request authenticated before uninstall may resume after the privacy
+  // webhook. Lock the persisted session before initializing merchant data.
+  const config = await loadMerchantConfig(session.shop, session.id);
+  if (!config) throw new Response("Merchant session no longer active", { status: 401 });
+  const [blogs, drafts, jobs] = await Promise.all([
     blogOptions(admin),
-    db.storeConfig.upsert({ where: { shop: session.shop }, create: { shop: session.shop }, update: {} }),
     db.articleDraft.findMany({ where: { shop: session.shop }, orderBy: { createdAt: "desc" }, take: 30 }),
     db.contentJob.findMany({ where: { shop: session.shop }, orderBy: { createdAt: "desc" }, take: 10 }),
   ]);
@@ -50,27 +54,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (!allowed.some((b: {id:string}) => b.id === blogId)) return { ok: false, message: "Choose an existing Shopify blog." };
       const cadenceDays = Math.min(30, Math.max(1, Number(form.get("cadenceDays")) || 7));
       const enabled = form.get("enabled") === "on";
-      const prev = await db.storeConfig.findUnique({ where: { shop } });
-      await db.storeConfig.upsert({
-        where: { shop },
-        create: {
-          shop, blogId,
-          authorName: value(form, "authorName", 80) || "Editorial Team",
-          audience: value(form, "audience", 1000),
-          brandVoice: value(form, "brandVoice", 1000),
-          seedTopics: value(form, "seedTopics", 1000),
-          cadenceDays, enabled, nextRunAt: enabled ? new Date() : null,
-        },
-        update: {
-          blogId,
-          authorName: value(form, "authorName", 80) || "Editorial Team",
-          audience: value(form, "audience", 1000),
-          brandVoice: value(form, "brandVoice", 1000),
-          seedTopics: value(form, "seedTopics", 1000),
-          cadenceDays, enabled,
-          nextRunAt: !enabled ? null : prev?.enabled ? prev.nextRunAt ?? new Date() : new Date(),
-        },
+      const saved = await saveMerchantConfig(shop, session.id, {
+        blogId,
+        authorName: value(form, "authorName", 80) || "Editorial Team",
+        audience: value(form, "audience", 1000),
+        brandVoice: value(form, "brandVoice", 1000),
+        seedTopics: value(form, "seedTopics", 1000),
+        cadenceDays, enabled,
       });
+      if (!saved) return { ok: false, message: "Store disconnected. Reinstall before saving settings." };
       return { ok: true, message: "Store preferences saved." };
     }
     if (intent === "generate") {

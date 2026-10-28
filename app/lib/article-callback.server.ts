@@ -11,9 +11,10 @@ export class ArticleCallbackRejectedError extends Error {
 /**
  * Persist a verified n8n callback without racing Shopify uninstall/redaction.
  *
- * The first write locks the merchant StoreConfig row on PostgreSQL, matching
- * the first deletion in both privacy webhooks. No network calls occur inside
- * the transaction. A late callback cannot recreate deleted merchant drafts.
+ * The first write locks the merchant StoreConfig row on PostgreSQL.
+ * Redaction deletes persisted Sessions first (to fence authenticated page
+ * loads), then StoreConfig, before removing drafts and jobs. No network calls
+ * occur inside this transaction. A late callback cannot recreate drafts.
  */
 export async function persistArticleCallback(shop: string, jobId: string, rawArticle: unknown) {
   let checked: ReturnType<typeof evaluateArticle>;

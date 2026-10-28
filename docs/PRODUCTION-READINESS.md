@@ -160,9 +160,11 @@ This is an application-level defense aligned with [OWASP API4:2023 Unrestricted 
 Both authenticated Shopify `app/uninstalled` and `shop/redact` webhook
 handlers now call the same `eraseMerchantData(shop)` function. This prevents
 future table additions from silently diverging between the two deletion paths.
-The helper deletes `StoreConfig` **first**, inside one Prisma transaction,
-because n8n article callbacks and ranking imports write-lock that row before
-inserting any merchant-owned records. The other merchant tables are deleted
+The helper now deletes persisted Sessions **first**, then `StoreConfig`,
+inside one Prisma transaction. This fences delayed authenticated page-load
+and settings writes (which lock Session before creating config), while n8n
+callbacks and ranking imports continue to lock the existing StoreConfig
+before inserting merchant-owned records. Other merchant tables are deleted
 before commit. Retried webhook deliveries are idempotent.
 
 `tests/merchant-redaction-postgres.test.ts` races two real article callbacks
@@ -335,3 +337,19 @@ and database backups/retention need development-store and operations testing.
 The row lock does not prevent an already-started external Shopify API request;
 no external calls occur inside these manager transactions. The test harness
 must pass full CI before this change is considered verified.
+
+
+## Authenticated page-load and uninstall race guard (2026-10-27)
+
+Blog Agent initialization and settings save now require a matching persisted
+Shopify Session row and lock it in the same transaction as StoreConfig writes.
+Both uninstall and shop-redact erase Session before StoreConfig, so a delayed
+authenticated GET or POST cannot recreate configuration after erasure. Added
+SQLite lifecycle tests and a five-shop PostgreSQL bootstrap/save/redaction
+race test. The lock order is documented in
+[MERCHANT-SESSION-LIFECYCLE.md](./MERCHANT-SESSION-LIFECYCLE.md).
+
+These checks do not prove real OAuth persistence, webhook delivery, or
+Shopify SDK behavior with expired offline tokens. A development-store
+install, idle-token expiry, uninstall, webhook HMAC and redaction test is still
+required before launch. No live merchant stores or content were touched.

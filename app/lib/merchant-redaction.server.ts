@@ -3,9 +3,12 @@ import db from "../db.server";
 /**
  * Remove all app-owned records for a verified Shopify merchant.
  *
- * The StoreConfig deletion MUST be the first statement in the transaction.
- * Article callbacks and ranking imports lock that same row before writing,
- * so no late integration request can recreate data after redaction commits.
+ * Delete Session rows FIRST, then StoreConfig, in the same transaction.
+ * Authenticated page loads and preference saves lock the persisted Session
+ * before creating StoreConfig; deleting Session first prevents a stale request
+ * from recreating configuration after uninstall. Background callbacks and
+ * ranking imports lock StoreConfig before writing; deleting it next prevents
+ * their late writes. Neither path can recreate merchant data after commit.
  *
  * This helper is shared by app/uninstalled and shop/redact so that adding a
  * new merchant-owned table cannot silently leave one privacy path behind.
@@ -13,6 +16,7 @@ import db from "../db.server";
  */
 export async function eraseMerchantData(shop: string): Promise<void> {
   await db.$transaction([
+    db.session.deleteMany({ where: { shop } }),
     db.storeConfig.deleteMany({ where: { shop } }),
     db.rankingConnectorCredential.deleteMany({ where: { shop } }),
     db.googleAuthState.deleteMany({ where: { shop } }),
@@ -24,6 +28,5 @@ export async function eraseMerchantData(shop: string): Promise<void> {
     db.articleDraft.deleteMany({ where: { shop } }),
     db.seoRankObservation.deleteMany({ where: { shop } }),
     db.contentJob.deleteMany({ where: { shop } }),
-    db.session.deleteMany({ where: { shop } }),
   ]);
 }

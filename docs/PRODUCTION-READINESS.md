@@ -35,6 +35,12 @@ This is an application integrity control, **not proof that a human read the cont
 
 **Remaining limitation:** A server crash after committing a queued job but before the n8n POST still leaves a queued job without a confirmed delivery. The existing 30-minute stale-job notice is advisory; a durable outbox/worker lease and operator reconciliation remain production gates. The scheduler is inactive until the n8n integration and commercial license are cleared.
 
+## Durable queued-generation recovery (2026-10-28)
+
+A new **opt-in, inactive** n8n recovery workflow and authenticated `POST /api/agent/recover` endpoint address the crash-after-commit/before-dispatch gap for **newly versioned** generation jobs. The recovery sweeper selects up to three jobs at least five minutes old and only if still `queued`; `claimQueuedDispatch` atomically fences concurrent workers before any n8n POST. Manual and scheduled job creation now persist `outboxVersion=1`; scheduled jobs also retain the original due-slot snapshot for a definitive rejection/refund. Legacy queued jobs default to version 0 and are never automatically replayed. Running/uncertain/completed jobs are never retried. A crash after the claim but before n8n acceptance remains unresolved and requires human execution-history reconciliation; this is not exactly-once delivery. See [OUTBOX-RECOVERY.md](./OUTBOX-RECOVERY.md) for the failure matrix, staging tests, license requirements and monitoring.
+
+**Verification gate:** PostgreSQL migration, SQLite/PostgreSQL tests, TypeScript/build and Docker smoke must pass CI on the final branch head. A real authorized n8n/Shopify staging test and commercial license clearance are still required before activating the workflow. No production recovery, publishing or merchant benefit has been demonstrated.
+
 ## Hard go/no-go gates
 
 | Gate | Current status | Completion proof required |

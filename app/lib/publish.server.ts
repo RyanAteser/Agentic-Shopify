@@ -1,4 +1,5 @@
 import db from "../db.server";
+import { toSafeShopifySummaryHtml } from "./article-summary";
 
 type Admin = {graphql: (...args:any[])=>Promise<any>};
 
@@ -46,7 +47,7 @@ export async function publishApprovedArticle(shop:string,draftId:string,admin:Ad
         articleCreate(article:$article) { article { id title isPublished blog { id } } userErrors { field message } }
       }`,
       {variables:{article:{
-        blogId:claimed.blogId,title:claimed.title,body:claimed.body,summary:claimed.summary,
+        blogId:claimed.blogId,title:claimed.title,body:claimed.body,summary:toSafeShopifySummaryHtml(claimed.summary),
         author:{name:claimed.authorName},
         tags:claimed.tags.split(",").map(t=>t.trim()).filter(Boolean),
         isPublished:true

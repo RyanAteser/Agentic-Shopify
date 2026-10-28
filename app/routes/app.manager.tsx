@@ -109,7 +109,7 @@ export default function StoreManager(){
           fontWeight:filter===s?"bold":"normal",textDecoration:filter===s?"underline":"none"
         }}>{s==="superseded"?"Outdated":s.charAt(0).toUpperCase()+s.slice(1)} ({totals[s]??0})</Link>)}
       </div>
-      <p>Outdated SEO metadata alerts are retired only when the affected product is sampled again. Merchant decisions are preserved; an outdated alert can reopen if the same issue returns.</p>
+      <p>Outdated SEO metadata alerts require a rechecked product. Pending SERP-drop alerts become outdated only after a newer comparable observation shows the same page recovered; missing data is not recovery. Merchant decisions are preserved.</p>
       {!tasks.length&&<p>No {filter} tasks. New content drafts and SEO findings will appear here after the corresponding connectors produce data.</p>}
       {tasks.map(task=>{
         const article=draftMap.get(task.targetId);

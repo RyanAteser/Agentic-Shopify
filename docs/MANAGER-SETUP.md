@@ -7,7 +7,7 @@ Implemented on the `feat/n8n-shopify-blog-agent` branch; **not deployed or Shopi
 Open **`/app/manager`** from the embedded Shopify app. The server authenticates the shop from a Shopify OAuth session; no tenant ID is accepted from the browser.
 
 The manager aggregates:
-- **Blog Agent** drafts in `ready` or `needs_review` state. Ready drafts with structural score >=70 appear for full preview, claims verification and one-time "Approve & Publish". Lower-scored drafts link to blog editing.
+- **Blog Agent** drafts in `ready` or `needs_review` state. Ready drafts with structural score >=70 appear for full preview, claims verification and one-time "Approve & Publish". Lower-scored drafts link to blog editing. The sync inspects the 30 newest eligible drafts for new recommendations; older pending recommendations are only retired after checking the exact draft's current status, never merely because they fell outside this sample.
 - **SEO Agent** actionable metadata findings for the first 50 active products (read-only). A merchant can accept, dismiss or mark manual follow-up complete; accepting is NOT a live Shopify mutation.
 - **Bright Data SERP Agent** observed organic ranking drops of >=3 places across comparable keyword+engine+country+device observations. Does not conflate ranks with Search Console average position or SEO-derived revenue.
 - **Activity log** recording approval and dismissal decisions. Each source recommendation is unique within its shop and does not reopen silently on refresh.

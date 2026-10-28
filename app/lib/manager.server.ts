@@ -91,13 +91,26 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[]) {
         });
       }
     }
-    // Resolve stale pending content items without changing merchant decisions.
-    const liveDraftIds=new Set(drafts.map(d=>d.id));
+    // The 30 most recent drafts are an inbox sample, not a complete inventory.
+    // Verify the actual status of older pending recommendations before retiring
+    // them; omission from take:30 does not mean the draft was published/deleted.
+    const eligibleDraftIds=new Set(drafts.map(d=>d.id));
     const pendingContent=await tx.storeRecommendation.findMany({
       where:{shop,agent:"content",status:"pending"},select:{id:true,targetId:true}
     });
+    const unsampledIds=[...new Set(pendingContent
+      .map(item=>item.targetId).filter(id=>!eligibleDraftIds.has(id)))];
+    // Bound SQL parameters for SQLite and PostgreSQL, even for a long-lived shop.
+    for(let i=0;i<unsampledIds.length;i+=200){
+      const eligible=await tx.articleDraft.findMany({
+        where:{shop,id:{in:unsampledIds.slice(i,i+200)},
+          status:{in:["ready","needs_review"]}},
+        select:{id:true}
+      });
+      for(const row of eligible)eligibleDraftIds.add(row.id);
+    }
     for(const old of pendingContent){
-      if(liveDraftIds.has(old.targetId))continue;
+      if(eligibleDraftIds.has(old.targetId))continue;
       await tx.storeRecommendation.updateMany({
         where:{id:old.id,shop,status:"pending"},
         data:{status:"resolved",decidedAt:new Date()}

@@ -207,3 +207,49 @@ test("partial product samples cannot falsely retire duplicate-title findings",as
     await db.storeConfig.deleteMany({where:{shop}});
   }
 });
+
+test("manager does not retire eligible content recommendations outside its 30-draft sample",async()=>{
+  const shop="manager-content-window-"+randomUUID()+".myshopify.com";
+  await db.storeConfig.create({data:{shop}});
+  try{
+    const oldJob=await db.contentJob.create({data:{shop,topic:"evergreen care"}});
+    const oldDraft=await db.articleDraft.create({data:{
+      shop,jobId:oldJob.id,topic:"evergreen care",title:"Evergreen care guide",
+      summary:"Useful care information",body:"<p>Care instructions</p>",
+      seoScore:85,status:"ready",createdAt:new Date("2026-01-01T00:00:00Z")
+    }});
+    await syncManagerTasks(shop,[]);
+    const oldTask=await db.storeRecommendation.findUniqueOrThrow({
+      where:{shop_sourceKey:{shop,sourceKey:"blog:"+oldDraft.id}}
+    });
+    assert.equal(oldTask.status,"pending");
+
+    const newer=Array.from({length:30},(_,i)=>({
+      id:randomUUID(),shop,topic:"newer draft "+i
+    }));
+    await db.contentJob.createMany({data:newer});
+    await db.articleDraft.createMany({data:newer.map((job,i)=>({
+      shop,jobId:job.id,topic:job.topic,title:"Newer guide "+i,
+      summary:"Useful information",body:"<p>Care advice</p>",seoScore:85,
+      status:"ready",createdAt:new Date("2026-10-20T00:00:00Z")
+    }))});
+    await syncManagerTasks(shop,[]);
+    assert.equal((await db.storeRecommendation.findUniqueOrThrow({
+      where:{id:oldTask.id}
+    })).status,"pending",
+      "an older eligible draft omitted by take:30 must not be marked resolved");
+
+    await db.articleDraft.update({where:{id:oldDraft.id},data:{status:"published"}});
+    await syncManagerTasks(shop,[]);
+    assert.equal((await db.storeRecommendation.findUniqueOrThrow({
+      where:{id:oldTask.id}
+    })).status,"resolved",
+      "a verified terminal draft status can retire the recommendation");
+  }finally{
+    await db.storeActivity.deleteMany({where:{shop}});
+    await db.storeRecommendation.deleteMany({where:{shop}});
+    await db.articleDraft.deleteMany({where:{shop}});
+    await db.contentJob.deleteMany({where:{shop}});
+    await db.storeConfig.deleteMany({where:{shop}});
+  }
+});

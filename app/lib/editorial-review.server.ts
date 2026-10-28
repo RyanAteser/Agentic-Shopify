@@ -1,5 +1,5 @@
 import db from "../db.server";
-import { publicationReviewDigest } from "./editorial-review-integrity";
+import { publicationReviewDigest, reviewFormDigest } from "./editorial-review-integrity";
 
 export type ReviewDecision = "usable" | "rejected";
 
@@ -20,10 +20,15 @@ export function parseReviewMinutes(raw: FormDataEntryValue | null): number | nul
  */
 export async function recordEditorialReview(
   shop: string, draftId: string, decision: ReviewDecision,
-  reviewMinutes: number | null, feedback = ""
+  reviewMinutes: number | null, expectedFormDigest: string, feedback = ""
 ): Promise<{ok: boolean; message: string}> {
   if (!shop || !draftId || !["usable", "rejected"].includes(decision)) {
     return {ok: false, message: "Invalid review request."};
+  }
+  // A review is a decision about what was displayed, not the latest unseen edit.
+  // This is an optimistic version, not an authentication credential.
+  if (!/^[a-f0-9]{64}$/.test(expectedFormDigest)) {
+    return {ok: false, message: "Review form is missing or outdated. Refresh the draft."};
   }
   if (reviewMinutes !== null &&
       (!Number.isSafeInteger(reviewMinutes) || reviewMinutes < 1 || reviewMinutes > 240)) {
@@ -45,11 +50,14 @@ export async function recordEditorialReview(
       });
       const draft = await tx.articleDraft.findFirst({
         where: {id: draftId, shop, status: {in: ["ready", "needs_review"]}},
-        select: {id: true, status: true, title: true, body: true, summary: true, tags: true}
+        select: {id: true, status: true, title: true, body: true, summary: true, tags: true, keyword: true}
       });
       if (!draft) return {ok: false, message: "Draft is not eligible for review."};
       if (decision === "usable" && draft.status !== "ready") {
         return {ok: false, message: "This draft still needs corrections before it can be marked usable."};
+      }
+      if (reviewFormDigest(draft, destination) !== expectedFormDigest) {
+        return {ok: false, message: "Draft or publication destination changed since you opened it. Refresh and review again."};
       }
       const digest = publicationReviewDigest(draft, destination);
       const previous = await tx.editorialReview.findUnique({

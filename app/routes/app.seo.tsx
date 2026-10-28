@@ -4,7 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { auditProductSeo, type SeoProduct } from "../lib/seo";
-import { parseShopifyProductSample, summarizeShopifySeoSample } from "../lib/shopify-product-sample";
+import { readShopifySeoCatalog, summarizeShopifySeoSample } from "../lib/shopify-product-sample";
 import { sameRankTarget } from "../lib/manager";
 
 export const loader=async ({request}:LoaderFunctionArgs) => {
@@ -19,17 +19,8 @@ export const loader=async ({request}:LoaderFunctionArgs) => {
   let sampleCount=0;
   let coverageWarning="";
   try {
-    const response=await admin.graphql(`#graphql
-      query SeoAgentCatalogAudit {
-        products(first: 50, query: "status:active published_status:published") {
-          nodes {
-            id title description onlineStoreUrl
-            seo { title description }
-          }
-        }
-      }`);
-    const result:any=await response.json();
-    const coverage=summarizeShopifySeoSample(parseShopifyProductSample(result));
+    const catalog=await readShopifySeoCatalog(admin);
+    const coverage=summarizeShopifySeoSample(catalog.products, catalog.hasMore);
     products=coverage.eligibleProducts;
     sampleCount=coverage.sampledProducts;
     coverageWarning=coverage.warning;
@@ -61,7 +52,7 @@ export default function SeoDashboard(){
       <p>Connected store: <strong>{shop}</strong> · <Link to="/app">Blog Agent</Link> · <Link to="/app/manager">Manager Inbox</Link> · <Link to="/app/growth">Verified Growth</Link></p>
     </s-section>
     <s-section heading="Product metadata audit">
-      <p>Shopify returned <strong>{sampleCount}</strong> active Online Store-published products (up to 50 queried); <strong>{productCount}</strong> had usable HTTPS storefront URLs and were evaluated. Unlisted and other-channel-only inventory is excluded. This is not a complete crawl, proof of indexing or a Google ranking score.</p>
+      <p>Shopify returned <strong>{sampleCount}</strong> active Online Store-published products (up to 100 queried across two bounded pages); <strong>{productCount}</strong> had usable HTTPS storefront URLs and were evaluated. Unlisted and other-channel-only inventory is excluded. This is not a complete crawl, proof of indexing or a Google ranking score.</p>
       {!catalogError && coverageWarning && <p role="status">{coverageWarning}</p>}
       {catalogError && <p role="alert">Catalog unavailable: {catalogError}. Recheck read_products permission.</p>}
       {!catalogError && productCount===0 && <p>No product pages with usable storefront URLs were evaluated. This does not establish that the store has no published products or no metadata issues.</p>}

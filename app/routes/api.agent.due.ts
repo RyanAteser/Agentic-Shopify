@@ -1,9 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
-import db from "../db.server";
 import { authorizedBridge, dispatchArticleJob, UncertainDispatchError } from "../lib/agent.server";
 import { DispatchAlreadyClaimedError } from "../lib/dispatch-claim.server";
-import { FREE_LIFETIME_GENERATIONS } from "../lib/pricing";
-import { claimDueScheduledDraft, failScheduledDraft } from "../lib/scheduled-drafts.server";
+import { claimDueScheduledDraft, failScheduledDraft, findDueScheduledDrafts } from "../lib/scheduled-drafts.server";
 
 /**
  * Hourly, authenticated n8n trigger. The due slot, free credit and ContentJob
@@ -15,14 +13,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!authorizedBridge(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
   const now = new Date();
-  const configs = await db.storeConfig.findMany({
-    where: {
-      enabled: true, blogId: { not: "" },
-      freeDraftsUsed: { lt: FREE_LIFETIME_GENERATIONS },
-      OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }]
-    },
-    take: 10, orderBy: { updatedAt: "asc" },
-  });
+  const configs = await findDueScheduledDrafts(now);
   let launched = 0, failed = 0;
   for (const config of configs) {
     try {

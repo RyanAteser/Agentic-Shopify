@@ -11,6 +11,7 @@ import { publishApprovedArticle } from "../lib/publish.server";
 import { loadMerchantConfig, saveMerchantConfig } from "../lib/merchant-config.server";
 import { logStoreAction } from "../lib/manager.server";
 import { parseReviewMinutes, recordEditorialReview } from "../lib/editorial-review.server";
+import { hasCurrentUsableReview } from "../lib/editorial-review-integrity";
 
 function value(form: FormData, key: string, max = 500) {
   return String(form.get(key) ?? "").trim().slice(0, max);
@@ -37,9 +38,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
   const reviews = await db.editorialReview.findMany({
     where: {shop: session.shop, draftId: {in: drafts.map(d => d.id)}},
-    select: {draftId: true, decision: true, reviewMinutes: true}
+    select: {draftId: true, decision: true, reviewMinutes: true, contentDigest: true}
   });
-  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews };
+  const draftMap = new Map(drafts.map(draft => [draft.id, draft]));
+  const reviewStates = reviews.map(review => ({
+    draftId: review.draftId, decision: review.decision, reviewMinutes: review.reviewMinutes,
+    current: !!draftMap.get(review.draftId) &&
+      hasCurrentUsableReview(review, draftMap.get(review.draftId)!, config)
+  }));
+  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -167,8 +174,10 @@ export default function BlogAgent() {
           <div style={{padding:10,border:"1px solid #ddd",maxHeight:400,overflow:"auto"}} dangerouslySetInnerHTML={{__html:d.body}}/>
           <pre style={{whiteSpace:"pre-wrap"}}>{d.reviewNotes}</pre>
         </details>
-        {reviewMap.has(d.id) && <p><strong>Editorial review:</strong> {reviewMap.get(d.id)?.decision === "usable" ? "Usable" : "Rejected"} · {reviewMap.get(d.id)?.reviewMinutes ?? "No"} self-reported review minutes. This review does not publish.</p>}
-        {d.status === "ready" && !reviewMap.has(d.id) && <Form method="post" style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginTop:8}}>
+        {reviewMap.has(d.id) && <p><strong>Editorial review:</strong> {reviewMap.get(d.id)?.decision === "usable"
+          ? (reviewMap.get(d.id)?.current ? "Usable for current article" : "Outdated: review again before publishing")
+          : "Rejected"} · {reviewMap.get(d.id)?.reviewMinutes ?? "No"} self-reported review minutes. This review does not publish.</p>}
+        {d.status === "ready" && (!reviewMap.has(d.id) || (reviewMap.get(d.id)?.decision === "usable" && !reviewMap.get(d.id)?.current)) && <Form method="post" style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginTop:8}}>
           <input type="hidden" name="intent" value="review"/>
           <input type="hidden" name="decision" value="usable"/>
           <input type="hidden" name="draftId" value={d.id}/>
@@ -176,7 +185,7 @@ export default function BlogAgent() {
           <label><input type="checkbox" name="reviewed" required/> I inspected the full draft and consider it usable as written</label>
           <button type="submit" disabled={busy}>Record usable review (do not publish)</button>
         </Form>}
-        {d.status === "ready" && reviewMap.get(d.id)?.decision === "usable" && <Form method="post" onSubmit={e => {
+        {d.status === "ready" && reviewMap.get(d.id)?.decision === "usable" && reviewMap.get(d.id)?.current && <Form method="post" onSubmit={e => {
           if (!window.confirm("Publish this article immediately to your Shopify store? You must have verified all claims and source links.")) e.preventDefault();
         }}>
           <input type="hidden" name="intent" value="publish"/>
@@ -184,7 +193,7 @@ export default function BlogAgent() {
           <label><input type="checkbox" name="verified" required/> I have reviewed all facts, links and brand claims</label>
           <button type="submit" disabled={busy}>Publish to Shopify</button>
         </Form>}
-        {d.status === "ready" && reviewMap.get(d.id)?.decision !== "usable" && <p>Record a usable editorial review above before publishing. A structure score alone is not approval.</p>}
+        {d.status === "ready" && !(reviewMap.get(d.id)?.decision === "usable" && reviewMap.get(d.id)?.current) && <p>Record a current usable editorial review above before publishing. A structure score alone is not approval.</p>}
         {["ready", "needs_review"].includes(d.status) && !reviewMap.has(d.id) && <Form method="post" style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
           <input type="hidden" name="intent" value="reject"/>
           <input type="hidden" name="draftId" value={d.id}/>

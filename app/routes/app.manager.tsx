@@ -25,7 +25,7 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
   // Never fetch another shop's content based on a form value.
   const ids=tasks.filter(t=>t.kind==="blog_publish").map(t=>t.targetId);
   const articles=await db.articleDraft.findMany({
-    where:{shop,id:{in:ids}},select:{id:true,body:true,summary:true,seoScore:true,title:true,reviewNotes:true,status:true}
+    where:{shop,id:{in:ids}},select:{id:true,body:true,summary:true,tags:true,seoScore:true,title:true,reviewNotes:true,status:true}
   });
   const reviews=await db.editorialReview.findMany({
     where:{shop,draftId:{in:ids}},select:{draftId:true,decision:true,contentDigest:true}

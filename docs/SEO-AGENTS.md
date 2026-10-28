@@ -99,6 +99,27 @@ npx tsx scripts/ranking-connector-key.ts revoke example.myshopify.com --confirm=
 No key is created automatically at install. Missing, old global, wrong-shop and revoked keys get HTTP 401. A key rotated after the initial request check is rejected again at transaction commit. Do not share a Header Auth credential between shops or give merchants configurable n8n workflow access until written commercial licensing clearance. No live Bright Data payload, signed provenance, gateway/IP abuse protection or external cost-control validation has been completed. The application-side fixed-hour import budget is implemented but must still be exercised with live connector traffic.
 
 
+## Password-protected storefront URL coverage (2026-10-28)
+
+Shopify's `onlineStoreUrl` documentation says a null URL means the product is not
+published to the Online Store. However, [Shopify staff clarified in March 2026](https://community.shopify.dev/t/onlinestoreurl-returns-null-even-when-filtering-with-published-status-online-store-channel/32775/2)
+that **password-protected stores, including development stores, can return null
+URLs for published, active products**. Therefore a null URL is not reliable
+proof of unpublished inventory. We must not construct an assumed public URL
+or claim to have audited rendered metadata on a password-protected storefront.
+
+The SEO dashboard now reports the total sampled published products separately
+from the number with usable HTTPS storefront URLs. When Shopify returns null
+or invalid URLs, the dashboard and Store Manager show an explicit coverage
+warning; excluded pages are not evaluated, and missing samples do not retire
+existing recommendations. A fully empty valid GraphQL sample remains distinct
+from a nonempty sample with no evaluable URLs. This does **not** bypass password
+protection or create an SEO finding for inaccessible pages.
+
+Validation: deterministic pure coverage tests added. Confirm behavior against
+an authorized password-protected Shopify development store and a storefront
+without password protection. No change to app permissions or live store data.
+
 ## Product metadata accuracy and stale-alert lifecycle (2026-10-27)
 
 Shopify [documents](https://shopify.dev/docs/apps/build/marketing/optimize-storefront-seo) that a new product's search-engine title and description default to its product title and description. Therefore an empty `seo.description` alone is **not** evidence that a rendered product page lacks a meta description. The audit now flags a high-priority missing-description case only when both the custom SEO description and the product description are blank. This is a metadata heuristic, not a storefront HTML crawl: themes and apps can override rendered tags.

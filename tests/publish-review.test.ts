@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
 import { recordEditorialReview } from "./helpers/editorial-review";
+import { publishFromCurrentForm } from "./helpers/publish";
 import { publishApprovedArticle } from "../app/lib/publish.server";
+import { publishFormDigest } from "../app/lib/editorial-review-integrity";
 
 async function withDraft(fn: (shop: string, draftId: string) => Promise<void>) {
   const shop = "publish-" + randomUUID() + ".myshopify.com";
@@ -43,7 +45,7 @@ function fakeAdmin() {
 test("unreviewed high-score draft cannot reach Shopify and remains ready",async()=>{
   await withDraft(async(shop,draftId)=>{
     const admin=fakeAdmin();
-    const result=await publishApprovedArticle(shop,draftId,admin);
+    const result=await publishFromCurrentForm(shop,draftId,admin);
     assert.equal(result.ok,false);
     assert.match(result.message,/usable editorial review/i);
     assert.equal(admin.calls,0);
@@ -63,8 +65,8 @@ test("a review for another merchant or draft cannot authorize publication",async
       }});
       assert.equal((await recordEditorialReview(other,draft.id,"usable",3)).ok,true);
       const admin=fakeAdmin();
-      assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
-      assert.equal((await publishApprovedArticle(other,draftId,admin)).ok,false);
+      assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,false);
+      assert.equal((await publishFromCurrentForm(other,draftId,admin)).ok,false);
       assert.equal(admin.calls,0);
     }finally{
       await db.editorialReview.deleteMany({where:{shop:other}});
@@ -79,7 +81,7 @@ test("rejected review cannot publish",async()=>{
   await withDraft(async(shop,draftId)=>{
     assert.equal((await recordEditorialReview(shop,draftId,"rejected",4,"Unverified claim")).ok,true);
     const admin=fakeAdmin();
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,false);
     assert.equal(admin.calls,0);
     assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"rejected");
   });
@@ -89,8 +91,8 @@ test("usable review permits exactly one explicit publish attempt",async()=>{
   await withDraft(async(shop,draftId)=>{
     assert.equal((await recordEditorialReview(shop,draftId,"usable",5)).ok,true);
     const admin=fakeAdmin();
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,true);
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,true);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,false);
     assert.equal(admin.calls,1);
     const saved=await db.articleDraft.findUniqueOrThrow({where:{id:draftId}});
     assert.equal(saved.status,"published");
@@ -103,11 +105,11 @@ test("uncertain Shopify response requires reconciliation and forbids replay",asy
     assert.equal((await recordEditorialReview(shop,draftId,"usable",5)).ok,true);
     let calls=0;
     const admin={graphql:async()=>{calls++;throw new Error("simulated lost response");}};
-    const result=await publishApprovedArticle(shop,draftId,admin);
+    const result=await publishFromCurrentForm(shop,draftId,admin);
     assert.equal(result.ok,false);
     assert.match(result.message,/could not be confirmed/i);
     assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"needs_reconciliation");
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,false);
     assert.equal(calls,1);
   });
 });
@@ -117,7 +119,7 @@ test("redacted merchant cannot publish even with an earlier usable review",async
     assert.equal((await recordEditorialReview(shop,draftId,"usable",5)).ok,true);
     await db.storeConfig.delete({where:{shop}});
     const admin=fakeAdmin();
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,false);
     assert.equal(admin.calls,0);
   });
 });
@@ -127,7 +129,7 @@ test("missing destination blog leaves reviewed draft ready and sends no Shopify 
     assert.equal((await recordEditorialReview(shop,draftId,"usable",2)).ok,true);
     await db.storeConfig.update({where:{shop},data:{blogId:""}});
     const admin=fakeAdmin();
-    const result=await publishApprovedArticle(shop,draftId,admin);
+    const result=await publishFromCurrentForm(shop,draftId,admin);
     assert.equal(result.ok,false);
     assert.match(result.message,/destination blog/i);
     assert.equal(admin.calls,0);
@@ -143,13 +145,13 @@ test("Shopify response with unpublished article cannot be counted as published",
       article:{id:"gid://shopify/Article/456",title:"Useful buying guide",isPublished:false,blog:{id:"gid://shopify/Blog/1"}},
       userErrors:[]
     }}})};}};
-    const result=await publishApprovedArticle(shop,draftId,admin);
+    const result=await publishFromCurrentForm(shop,draftId,admin);
     assert.equal(result.ok,false);
     assert.match(result.message,/could not be confirmed/i);
     const saved=await db.articleDraft.findUniqueOrThrow({where:{id:draftId}});
     assert.equal(saved.status,"needs_reconciliation");
     assert.equal(saved.shopifyArticleId,null);
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,false);
     assert.equal(calls,1);
   });
 });
@@ -162,10 +164,10 @@ test("Shopify response from another blog cannot be counted as published",async()
       article:{id:"gid://shopify/Article/789",title:"Useful buying guide",isPublished:true,blog:{id:"gid://shopify/Blog/other"}},
       userErrors:[]
     }}})};}};
-    const result=await publishApprovedArticle(shop,draftId,admin);
+    const result=await publishFromCurrentForm(shop,draftId,admin);
     assert.equal(result.ok,false);
     assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"needs_reconciliation");
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,false);
     assert.equal(calls,1);
   });
 });
@@ -176,7 +178,7 @@ test("missing Shopify visibility evidence cannot be mistaken for a successful pu
     const admin={graphql:async()=>({json:async()=>({data:{articleCreate:{
       article:{id:"gid://shopify/Article/789",title:"Useful buying guide"},userErrors:[]
     }}})})};
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,false);
     assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"needs_reconciliation");
   });
 });
@@ -194,7 +196,7 @@ test("publish request uses the destination captured at claim time",async()=>{
         userErrors:[]
       }}})};
     }};
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,true);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,true);
     assert.equal(calls,1);
     assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"published");
   });
@@ -217,7 +219,7 @@ test("plain-text excerpt is encoded before Shopify receives its HTML summary", a
         userErrors:[]
       }}})};
     }};
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,true);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,true);
     assert.equal(calls,1);
   });
 });
@@ -233,7 +235,7 @@ test("editing reviewed article fields invalidates approval until explicit re-rev
       assert.equal((await recordEditorialReview(shop, draftId, "usable", 3)).ok, true);
       await db.articleDraft.update({where:{id:draftId},data:{[field]:value}});
       const admin=fakeAdmin();
-      const blocked=await publishApprovedArticle(shop,draftId,admin);
+      const blocked=await publishFromCurrentForm(shop,draftId,admin);
       assert.equal(blocked.ok,false,field);
       assert.match(blocked.message,/current usable editorial review/i);
       assert.equal(admin.calls,0,field);
@@ -241,7 +243,7 @@ test("editing reviewed article fields invalidates approval until explicit re-rev
       const renewed=await recordEditorialReview(shop,draftId,"usable",4);
       assert.equal(renewed.ok,true,field);
       assert.match(renewed.message,/renewed/i);
-      assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,true,field);
+      assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,true,field);
       assert.equal(admin.calls,1,field);
       assert.equal(await db.editorialReview.count({where:{shop,draftId}}),1);
     });
@@ -258,7 +260,7 @@ test("changing the destination blog or article author requires renewed approval"
       await db.storeConfig.update({where:{shop},data:{[field]:value}});
       let calls=0;
       const admin={graphql:async()=>{calls++;throw new Error("should not publish");}};
-      assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+      assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,false);
       assert.equal(calls,0);
       assert.equal((await recordEditorialReview(shop,draftId,"usable",3)).ok,true);
       const review=await db.editorialReview.findUniqueOrThrow({where:{shop_draftId:{shop,draftId}}});
@@ -274,10 +276,72 @@ test("legacy usable reviews without a payload digest fail closed and can be rene
       where:{shop_draftId:{shop,draftId}},data:{contentDigest:""}
     });
     const admin=fakeAdmin();
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,false);
     assert.equal(admin.calls,0);
     assert.equal((await recordEditorialReview(shop,draftId,"usable",4)).ok,true);
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,true);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,true);
     assert.equal(admin.calls,1);
   });
+});
+
+test("missing or malformed browser publication version blocks Shopify without claiming the draft",async()=>{
+  await withDraft(async(shop,draftId)=>{
+    assert.equal((await recordEditorialReview(shop,draftId,"usable",2)).ok,true);
+    const admin=fakeAdmin();
+    for(const version of ["","not-a-version","f".repeat(63)]) {
+      const result=await publishApprovedArticle(shop,draftId,admin,version);
+      assert.equal(result.ok,false);
+      assert.match(result.message,/missing or outdated/i);
+    }
+    assert.equal(admin.calls,0);
+    assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"ready");
+  });
+});
+
+test("stale publish page cannot publish newly edited and re-approved article",async()=>{
+  await withDraft(async(shop,draftId)=>{
+    assert.equal((await recordEditorialReview(shop,draftId,"usable",3)).ok,true);
+    const [before,destination]=await Promise.all([
+      db.articleDraft.findUniqueOrThrow({where:{id:draftId}}),
+      db.storeConfig.findUniqueOrThrow({where:{shop}})
+    ]);
+    const openedPage=publishFormDigest(before,destination);
+    await db.articleDraft.update({where:{id:draftId},data:{
+      body:"<p>Corrected claim reviewed by another editor.</p>"
+    }});
+    assert.equal((await recordEditorialReview(shop,draftId,"usable",4)).ok,true);
+    const admin=fakeAdmin();
+    const stale=await publishApprovedArticle(shop,draftId,admin,openedPage);
+    assert.equal(stale.ok,false);
+    assert.match(stale.message,/changed since this page loaded/i);
+    assert.equal(admin.calls,0);
+    assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"ready");
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,true);
+    assert.equal(admin.calls,1);
+  });
+});
+
+test("stale publish page cannot reuse approval after blog or author change",async()=>{
+  for(const [field,value] of [
+    ["blogId","gid://shopify/Blog/new"],
+    ["authorName","Another Author"]
+  ] as const) {
+    await withDraft(async(shop,draftId)=>{
+      assert.equal((await recordEditorialReview(shop,draftId,"usable",3)).ok,true);
+      const [before,destination]=await Promise.all([
+        db.articleDraft.findUniqueOrThrow({where:{id:draftId}}),
+        db.storeConfig.findUniqueOrThrow({where:{shop}})
+      ]);
+      const openedPage=publishFormDigest(before,destination);
+      await db.storeConfig.update({where:{shop},data:{[field]:value}});
+      assert.equal((await recordEditorialReview(shop,draftId,"usable",4)).ok,true);
+      let calls=0;
+      const admin={graphql:async()=>{calls++;throw new Error("Unexpected Shopify call");}};
+      const result=await publishApprovedArticle(shop,draftId,admin,openedPage);
+      assert.equal(result.ok,false,field);
+      assert.match(result.message,/changed since this page loaded/i);
+      assert.equal(calls,0);
+      assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"ready");
+    });
+  }
 });

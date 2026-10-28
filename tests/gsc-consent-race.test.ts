@@ -279,3 +279,60 @@ test("GSC snapshots retire omitted dates without touching other shops or histori
     }
   }
 });
+
+
+test("Google reconnection resets old measurement history without affecting another merchant",async()=>{
+  const previousKey=process.env.GSC_ENCRYPTION_KEY;
+  process.env.GSC_ENCRYPTION_KEY=Buffer.alloc(32,43).toString("base64");
+  const shop="reconsent-"+randomUUID()+".myshopify.com";
+  const neighbor="reconsent-neighbor-"+randomUUID()+".myshopify.com";
+  const oldProperty="https://old.example.test/";
+  const newProperty="https://new.example.test/";
+  const staleDate=new Date("2026-10-01T00:00:00Z");
+  try{
+    await connectWithPendingState(shop,oldProperty,"refresh-old");
+    await db.organicDailyMetric.createMany({data:[
+      {shop,property:oldProperty,date:"2026-10-01",clicks:5,impressions:50,ctr:0.1,position:8},
+      {shop,property:newProperty,date:"2026-10-02",clicks:3,impressions:30,ctr:0.1,position:9},
+      {shop:neighbor,property:oldProperty,date:"2026-10-01",clicks:7,impressions:70,ctr:0.1,position:6}
+    ]});
+    await db.searchConsoleConnection.update({where:{shop},data:{
+      lastSyncedAt:staleDate,lastSyncStartedAt:staleDate
+    }});
+
+    // Reconnecting with a different verified URL-prefix must not resurrect
+    // historical rows if the merchant later switches back to the old host.
+    await connectWithPendingState(shop,newProperty,"refresh-new");
+    let connection=await db.searchConsoleConnection.findUniqueOrThrow({where:{shop}});
+    assert.equal(connection.property,newProperty);
+    assert.equal(connection.lastSyncedAt,null);
+    assert.equal(connection.lastSyncStartedAt,null);
+    assert.ok(connection.connectedAt.getTime()>staleDate.getTime());
+    assert.equal(await db.organicDailyMetric.count({where:{shop}}),0);
+    assert.equal(await db.organicDailyMetric.count({where:{shop:neighbor}}),1);
+
+    // A failed/replayed OAuth state must not erase the new connection or data.
+    await db.organicDailyMetric.create({data:{
+      shop,property:newProperty,date:"2026-10-02",
+      clicks:4,impressions:40,ctr:0.1,position:7
+    }});
+    await assert.rejects(
+      storeGoogleConnection(shop,oldProperty,"invalid-refresh",randomUUID()),
+      /expired or revoked/
+    );
+    connection=await db.searchConsoleConnection.findUniqueOrThrow({where:{shop}});
+    assert.equal(connection.property,newProperty);
+    assert.equal(await db.organicDailyMetric.count({where:{shop}}),1);
+
+    // Reconsent for the same property also requires a fresh Google import.
+    await connectWithPendingState(shop,newProperty,"refresh-again");
+    assert.equal(await db.organicDailyMetric.count({where:{shop}}),0);
+    assert.equal(await db.organicDailyMetric.count({where:{shop:neighbor}}),1);
+  }finally{
+    await db.organicDailyMetric.deleteMany({where:{shop:{in:[shop,neighbor]}}});
+    await db.searchConsoleConnection.deleteMany({where:{shop:{in:[shop,neighbor]}}});
+    await db.googleAuthState.deleteMany({where:{shop:{in:[shop,neighbor]}}});
+    if(previousKey===undefined)delete process.env.GSC_ENCRYPTION_KEY;
+    else process.env.GSC_ENCRYPTION_KEY=previousKey;
+  }
+});

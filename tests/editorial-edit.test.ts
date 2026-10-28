@@ -128,6 +128,7 @@ test("weak edits require corrections and invalid or oversized edits never mutate
       {title:""},
       {body:"<script>alert(1)</script>"},
       {body:"x".repeat(60001)},
+      {body:"界".repeat(21000)}, // 63 KB UTF-8 despite fewer than 60,000 JS characters
       {tags:"one,two,three,four,five,six,seven,eight,nine"},
       {summary:"x".repeat(501)}
     ]){

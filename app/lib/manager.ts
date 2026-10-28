@@ -25,6 +25,44 @@ export function sameRankTarget(a:string,b:string):boolean {
   }catch{return false;}
 }
 
+
+/**
+ * Retire a pending SERP-drop alert only after a newer, same-market snapshot
+ * shows the SAME page back within two positions of its pre-drop baseline.
+ * This is evidence that the original sampled drop no longer holds, not proof
+ * of a traffic recovery or a durable ranking trend. Missing, stale, moved,
+ * or incomparable snapshots never imply recovery.
+ */
+export function rankingDropHasRecovered(
+  sourceKey:string, evidence:string, observations:RankLike[], now=new Date()
+):boolean {
+  let prior:Record<string,unknown>;
+  try {
+    const parsed:unknown=JSON.parse(evidence);
+    if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))return false;
+    prior=parsed as Record<string,unknown>;
+  } catch { return false; }
+  if(prior.source!=="brightdata-serp"||typeof prior.latestAt!=="string"||
+     typeof prior.url!=="string"||!Number.isInteger(prior.previousRank)||
+     (prior.previousRank as number)<1||(prior.previousRank as number)>200)return false;
+  const alertAt=new Date(prior.latestAt);
+  if(!Number.isFinite(alertAt.getTime())||alertAt.toISOString()!==prior.latestAt)return false;
+  const suffix=":"+prior.latestAt;
+  if(!sourceKey.startsWith("rank:")||!sourceKey.endsWith(suffix))return false;
+  const market=sourceKey.slice(5,-suffix.length);
+  let newest:RankLike|undefined;
+  for(const row of observations){
+    if([row.keyword,row.country,row.device,row.engine].join("|")!==market)continue;
+    if(!newest||row.observedAt.getTime()>newest.observedAt.getTime())newest=row;
+  }
+  if(!newest)return false;
+  const age=now.getTime()-newest.observedAt.getTime();
+  if(!Number.isFinite(age)||age<0||age>14*86400000||
+     newest.observedAt.getTime()<=alertAt.getTime()||
+     newest.position===null||!sameRankTarget(newest.targetUrl,prior.url))return false;
+  return newest.position<=(prior.previousRank as number)+2;
+}
+
 export function buildSeoTasks(findings:SeoFinding[]):SuggestedTask[] {
   return findings.slice(0,60).map(f=>({
     sourceKey:"seo:"+f.id, agent:"seo", kind:"seo_review", targetId:f.productId,

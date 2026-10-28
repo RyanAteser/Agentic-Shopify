@@ -41,6 +41,12 @@ A new **opt-in, inactive** n8n recovery workflow and authenticated `POST /api/ag
 
 **Verification gate:** PostgreSQL migration, SQLite/PostgreSQL tests, TypeScript/build and Docker smoke must pass CI on the final branch head. A real authorized n8n/Shopify staging test and commercial license clearance are still required before activating the workflow. No production recovery, publishing or merchant benefit has been demonstrated.
 
+## Merchant draft correction workflow (2026-10-28)
+
+The Blog Agent now offers a server-validated HTML draft editor before human review. Corrections stay in the app's unpublished draft, are sanitized, version-checked against concurrent browser edits, and invalidate prior usable review approval atomically. The app does **not** publish, re-run n8n, or spend generation credits when a merchant saves corrections. See [editorial editing contract and pilot metrics](EDITORIAL-EDITING.md).
+
+**Still unverified externally:** a real Shopify development-store article and theme, two-session browser conflict UX, accessibility, Shopify's 64 KB rich-text limit in GraphQL, and merchant-reported review-time savings. Do not infer SEO lift from the heuristic score or call the app production-ready based on CI.
+
 ## Hard go/no-go gates
 
 | Gate | Current status | Completion proof required |

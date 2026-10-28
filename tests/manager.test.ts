@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
-import { buildBlogTasks, buildRankTasks, buildSeoTasks } from "../app/lib/manager";
+import { buildBlogTasks, buildRankTasks, buildSeoTasks, rankingDropHasRecovered } from "../app/lib/manager";
 import { readMerchantProductSample, syncManagerTasks, logStoreAction } from "../app/lib/manager.server";
 import { eraseMerchantData } from "../app/lib/merchant-redaction.server";
 import { publishApprovedArticle } from "../app/lib/publish.server";
@@ -264,6 +264,74 @@ test("manager does not retire eligible content recommendations outside its 30-dr
     await db.storeRecommendation.deleteMany({where:{shop}});
     await db.articleDraft.deleteMany({where:{shop}});
     await db.contentJob.deleteMany({where:{shop}});
+    await db.storeConfig.deleteMany({where:{shop}});
+  }
+});
+
+
+test("ranking recovery requires a newer fresh observation of the same page and market",()=>{
+  const now=new Date("2026-10-28T12:00:00Z");
+  const base={keyword:"boots",country:"US",device:"desktop",engine:"google"};
+  const url="https://shop.example/products/boots";
+  const previous={...base,position:4,observedAt:new Date("2026-10-24T12:00:00Z"),targetUrl:url};
+  const drop={...base,position:12,observedAt:new Date("2026-10-25T12:00:00Z"),targetUrl:url};
+  const [alert]=buildRankTasks([drop,previous],now);
+  assert.ok(alert);
+  const recovered={...base,position:5,observedAt:new Date("2026-10-26T12:00:00Z"),targetUrl:url+"#size"};
+  assert.equal(rankingDropHasRecovered(alert.sourceKey,alert.evidence,[drop,previous,recovered],now),true);
+  for(const observations of [
+    [drop,previous],
+    [drop,previous,{...recovered,position:7}],
+    [drop,previous,{...recovered,position:null,targetUrl:""}],
+    [drop,previous,{...recovered,targetUrl:"https://shop.example/collections/boots"}],
+    [drop,previous,{...recovered,keyword:"sneakers"}],
+    [drop,previous,recovered,{...recovered,observedAt:new Date("2026-10-27T12:00:00Z"),targetUrl:"https://shop.example/collections/boots"}],
+  ]) assert.equal(rankingDropHasRecovered(alert.sourceKey,alert.evidence,observations,now),false);
+  assert.equal(rankingDropHasRecovered(alert.sourceKey,alert.evidence,[recovered],new Date("2026-11-20T12:00:00Z")),false);
+  assert.equal(rankingDropHasRecovered(alert.sourceKey,alert.evidence,[recovered],new Date("2026-10-25T12:00:00Z")),false);
+  assert.equal(rankingDropHasRecovered(alert.sourceKey,"{}",[recovered],now),false);
+  assert.equal(rankingDropHasRecovered(alert.sourceKey.replace("boots","sneakers"),alert.evidence,[recovered],now),false);
+});
+
+test("manager retires recovered SERP alerts but preserves accepted decisions and new drops",async()=>{
+  const shop="manager-rank-recovery-"+randomUUID()+".myshopify.com";
+  await db.storeConfig.create({data:{shop}});
+  const rank=(keyword:string,position:number,date:string)=>({
+    shop,keyword,position,engine:"google",country:"US",device:"desktop",
+    targetUrl:"https://shop.example/products/"+keyword,
+    observedAt:new Date(date)
+  });
+  try {
+    await db.seoRankObservation.createMany({data:[
+      rank("boots",4,"2026-10-24T12:00:00Z"),
+      rank("boots",12,"2026-10-25T12:00:00Z"),
+      rank("sneakers",3,"2026-10-24T12:00:00Z"),
+      rank("sneakers",10,"2026-10-25T12:00:00Z")
+    ]});
+    await syncManagerTasks(shop,[]);
+    const alerts=await db.storeRecommendation.findMany({where:{shop,kind:"ranking_drop"}});
+    assert.equal(alerts.length,2);
+    const boots=alerts.find(a=>a.title.includes("boots"))!;
+    const sneakers=alerts.find(a=>a.title.includes("sneakers"))!;
+    assert.equal(boots.status,"pending");
+    await db.storeRecommendation.update({where:{id:sneakers.id},data:{status:"approved"}});
+    await db.seoRankObservation.createMany({data:[
+      rank("boots",5,"2026-10-26T12:00:00Z"),
+      rank("sneakers",4,"2026-10-26T12:00:00Z")
+    ]});
+    await syncManagerTasks(shop,[]);
+    assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:boots.id}})).status,"superseded");
+    assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:sneakers.id}})).status,"approved");
+    await db.seoRankObservation.create({data:rank("boots",15,"2026-10-27T12:00:00Z")});
+    await syncManagerTasks(shop,[]);
+    const latest=await db.storeRecommendation.findMany({where:{shop,kind:"ranking_drop"}});
+    assert.equal(latest.filter(a=>a.status==="pending").length,1,
+      "a later distinct ranking drop creates a fresh alert without rewriting historical evidence");
+    assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:boots.id}})).status,"superseded");
+  }finally {
+    await db.storeActivity.deleteMany({where:{shop}});
+    await db.storeRecommendation.deleteMany({where:{shop}});
+    await db.seoRankObservation.deleteMany({where:{shop}});
     await db.storeConfig.deleteMany({where:{shop}});
   }
 });

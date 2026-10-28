@@ -11,6 +11,12 @@
 - Shopify privacy webhooks erase app data, OAuth tokens, organic metrics and recommendation history.
 - Local SQLite development schema; PostgreSQL production schema with generated migration chain; Docker runtime as unprivileged user; DB readiness endpoint; CI for SQLite and Postgres.
 
+## Automated verification and production-image smoke (2026-10-28)
+
+The recovered GitHub Actions run [40722675414](https://github.com/RyanAteser/Agentic-Shopify/actions/runs/40722675414) passed all three jobs (application tests/build, PostgreSQL migrations/tests/build, Docker image build) on commit `edfc2b0`. This demonstrates the previous runner-startup restriction is not blocking that run; it does **not** validate a real app installation.
+
+The subsequent CI-only script `scripts/ci-container-smoke.sh` exercises the **actual production Docker image**, not just the Dockerfile: non-root execution, a temporary PostgreSQL container, committed PostgreSQL migrations executed from the image, HTTP `GET /health` returning 200 with the database available, and HTTP 503 after PostgreSQL stops. It uses inert Shopify configuration and local test-only credentials, with automatic Docker cleanup. The new smoke step must pass hosted CI before counting it as verified. It does not test merchant authentication, Google/n8n, a public HTTPS deployment, production secrets, backups, scale or rollback.
+
 ## Hard go/no-go gates
 
 | Gate | Current status | Completion proof required |

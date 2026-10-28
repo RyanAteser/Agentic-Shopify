@@ -24,9 +24,11 @@ export function parseRanking(value: unknown, now = new Date()): SeoRanking {
   if (device !== "desktop" && device !== "mobile") throw new Error("Explicit device required");
   const country = row.country;
   if (typeof country !== "string" || !/^[A-Z]{2}$/.test(country)) throw new Error("Use ISO country code");
-  const position = row.position === null || row.position === undefined ? null : row.position;
+  // An omitted rank is an incomplete scrape or broken n8n mapping, NOT a
+  // verified "not found" result. Require an explicit null from the connector.
+  const position = row.position;
   if (position !== null && (!Number.isInteger(position) || (position as number) < 1 || (position as number) > 200)) {
-    throw new Error("Organic position must be an integer 1-200 or null");
+    throw new Error("Organic position must be explicitly null or an integer 1-200");
   }
   // Require an explicit RFC3339 offset. Local-time strings silently depend on
   // the server timezone and can turn a scraped snapshot into a false trend.
@@ -51,8 +53,12 @@ export function parseRanking(value: unknown, now = new Date()): SeoRanking {
       || observedAt.getTime() < now.getTime() - 365 * 86400000) {
     throw new Error("Ranking timestamp outside permitted window");
   }
-  const rawUrl = row.targetUrl === undefined ? "" : row.targetUrl;
+  // A found result needs its actual URL; a verified not-found result must
+  // explicitly carry an empty URL. Do not turn missing fields into evidence.
+  const rawUrl = row.targetUrl;
   if (typeof rawUrl !== "string" || rawUrl.length > 500) throw new Error("Invalid target URL");
+  if (position === null && rawUrl !== "") throw new Error("Not-found ranking requires an empty target URL");
+  if (position !== null && !rawUrl) throw new Error("Found ranking requires a result URL");
   if (rawUrl) {
     const url = new URL(rawUrl);
     if (url.protocol !== "https:" || !url.hostname) throw new Error("Target URL must be HTTPS");

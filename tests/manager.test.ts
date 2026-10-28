@@ -335,3 +335,24 @@ test("manager retires recovered SERP alerts but preserves accepted decisions and
     await db.storeConfig.deleteMany({where:{shop}});
   }
 });
+
+
+test("manager warns instead of claiming a malformed Shopify catalog is empty",async()=>{
+  const malformed = [
+    {data: {products: null}},
+    {data: {products: {nodes: null}}},
+    {data: {products: {nodes: [{id:"partial",title:"Boots"}]}}},
+    {errors: [{message:"denied"}], data: {products: {nodes: []}}},
+  ];
+  for (const payload of malformed) {
+    const admin = {graphql: async()=>({json:async()=>payload})};
+    const result = await readMerchantProductSample(admin);
+    assert.deepEqual(result.products, []);
+    assert.match(result.warning, /Catalog unavailable/i);
+  }
+  const empty = await readMerchantProductSample({
+    graphql: async()=>({json:async()=>({data:{products:{nodes:[]}}})})
+  });
+  assert.deepEqual(empty.products, []);
+  assert.equal(empty.warning, "");
+});

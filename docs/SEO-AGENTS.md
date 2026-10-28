@@ -54,7 +54,7 @@ The ingestion endpoint:
 
 ## New merchant-facing pages
 - `/app/team`: 10 specialist agents, statuses and safe action boundaries.
-- `/app/seo`: initial active-product metadata audit (up to 50 products) + imported rank snapshots.
+- `/app/seo`: initial active Online Store product metadata audit (up to 100 products across two pages) + imported rank snapshots.
 - `/app`: blog agent review/publish queue.
 - Product SEO audit is informational. It is not a 100-point scoring system or a guarantee of better rankings.
 - Shopify `read_products` access required for catalog audit. Only run on merchants who granted the scope.
@@ -65,9 +65,9 @@ The ingestion endpoint:
 
 The product metadata audit and Store Manager now query `status:active published_status:published` and additionally require Shopify's non-null, HTTPS `onlineStoreUrl` before evaluating a product. Shopify documents `published_status:published` as Online Store publication and `onlineStoreUrl: null` as not published to that channel. Active products sold only through POS or other channels are not storefront SEO opportunities; recommending Google title/meta edits for them wastes merchant time. A null URL is excluded rather than treated as an SEO error.
 
-This remains a **50-product sample**, not a full catalog audit. A published Online Store URL does not prove Google indexing, crawl access, canonical selection, or availability in every Shopify Market. If a product disappears from a subsequent sample, its old recommendation is preserved rather than automatically marked fixed; a separate verified publication-status check would be needed to retire it. Do not claim traffic or revenue improvement without merchant data.
+This is a **bounded 100-product maximum sample** (two 50-product cursor pages), not a full catalog audit. The dashboard and Store Manager use the same validated query and explicitly warn when Shopify reports additional pages. If either page fails or lacks pagination metadata, the entire catalog read is marked unavailable rather than presenting a partial sample as complete. A published Online Store URL does not prove Google indexing, crawl access, canonical selection, or availability in every Shopify Market. If a product disappears from a subsequent sample, its old recommendation is preserved rather than automatically marked fixed; a separate verified publication-status check would be needed to retire it. Do not claim traffic or revenue improvement without merchant data.
 
-Official references: [Shopify products query published_status](https://shopify.dev/docs/api/admin-graphql/latest/queries/products), [Shopify Product.onlineStoreUrl](https://shopify.dev/docs/api/admin-graphql/latest/objects/Product).
+Shopify's [cursor pagination guidance](https://shopify.dev/docs/api/usage/pagination-graphql) defines `pageInfo.hasNextPage` and `endCursor`. We deliberately stop after two pages to bound API cost and latency; remaining products are not silently considered audited. Cross-page duplicate IDs and invalid cursor progress fail closed. This improves sampled coverage, not verified SEO outcomes.\n\nOfficial references: [Shopify products query published_status](https://shopify.dev/docs/api/admin-graphql/latest/queries/products), [Shopify Product.onlineStoreUrl](https://shopify.dev/docs/api/admin-graphql/latest/objects/Product).
 
 ## Recommended next work
 - Full Shopify pagination, collection and article indexing, internal-link checks and canonical information.
@@ -126,13 +126,13 @@ Shopify [documents](https://shopify.dev/docs/apps/build/marketing/optimize-store
 
 The former 165-character warning was not a Google rule. [Google](https://developers.google.com/search/docs/appearance/snippet) states that snippets are generated primarily from page content, may use meta descriptions, and have **no fixed character limit**. Shopify's [product editor guidance](https://help.shopify.com/en/manual/products/add-update-products) warns that descriptions over 320 characters may be cut off in previews, so the advisory now uses that platform-specific threshold and never claims a ranking penalty.
 
-Store Manager marks pending `seo_review` alerts as `superseded` only when the same product was included in a successful nonempty catalog sample and the original finding is absent. Missing products in a 50-item sample are not evidence of resolution. If the same finding reappears, only a machine-superseded task reopens; manually approved, dismissed, applied, and resolved decisions remain unchanged. The Outdated filter exposes these machine-retired alerts. This improves task accuracy, not measured SEO lift or a verified storefront crawl. Verify with an authorized development store before production.
+Store Manager marks pending `seo_review` alerts as `superseded` only when the same product was included in a successful nonempty catalog sample and the original finding is absent. Missing products in a bounded 100-item sample are not evidence of resolution. If the same finding reappears, only a machine-superseded task reopens; manually approved, dismissed, applied, and resolved decisions remain unchanged. The Outdated filter exposes these machine-retired alerts. This improves task accuracy, not measured SEO lift or a verified storefront crawl. Verify with an authorized development store before production.
 
 ## Product title evidence and partial-catalog safety (2026-10-27)
 
 Shopify [defaults a product search title to the product title](https://shopify.dev/docs/apps/build/marketing/optimize-storefront-seo) when no custom SEO title is supplied. The audit now treats whitespace-only custom titles as blank and uses that fallback. [Google Search Central](https://developers.google.com/search/docs/appearance/title-link) states there is **no fixed title-element character limit**; the old 70-character warning was not a ranking rule and is removed. Review actual rendered titles rather than interpreting length as a penalty.
 
-Duplicate effective titles are now reported for **every sampled product** in a matching group, regardless of API order, with whitespace and case normalized. This is only a 50-product sample and not a full-catalog, rendered-HTML or indexability audit. Themes may add branding or change titles, and duplicates may be intentional. No product is edited.
+Duplicate effective titles are now reported for **every sampled product** in a matching group, regardless of API order, with whitespace and case normalized. This is only a bounded 100-product sample and not a full-catalog, rendered-HTML or indexability audit. Themes may add branding or change titles, and duplicates may be intentional. No product is edited.
 
 To avoid claiming a duplicate was fixed merely because its counterpart fell outside the next sample, the Store Manager retains a pending duplicate-title recommendation if the product's observed effective title is unchanged. It retires the specific prior observation only after seeing that product's title change; missing historical title evidence fails closed. Fresh findings update pending evidence, while merchant approvals and dismissals remain untouched. This is conservative and can retain an old warning until the product changes or a merchant reviews it. Full pagination, rendered-title verification and better group-level resolution are future work.
 

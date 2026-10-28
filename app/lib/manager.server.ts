@@ -1,6 +1,6 @@
 import db from "../db.server";
 import { auditProductSeo, effectiveSeoTitle, isOnlineStoreSeoCandidate, type SeoProduct } from "./seo";
-import { buildBlogTasks, buildRankTasks, buildSeoTasks, type SuggestedTask } from "./manager";
+import { buildBlogTasks, buildRankTasks, buildSeoTasks, rankingDropHasRecovered, type SuggestedTask } from "./manager";
 
 export async function readMerchantProductSample(admin:{graphql:Function}):Promise<{products:SeoProduct[];warning:string}> {
   try{
@@ -90,6 +90,22 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[]) {
           data:{status:"superseded",decidedAt:new Date()}
         });
       }
+    }
+    // A ranking drop can recover without any merchant action. Retire only
+    // pending alerts supported by a newer, fresh, same-market, same-page
+    // observation. The 300-row sample may omit markets; absence is not proof
+    // of recovery. Keep approved/dismissed/resolved merchant decisions intact.
+    const pendingRank=await tx.storeRecommendation.findMany({
+      where:{shop,kind:"ranking_drop",status:"pending"},
+      orderBy:{createdAt:"asc"},take:200,
+      select:{id:true,sourceKey:true,evidence:true}
+    });
+    for(const old of pendingRank){
+      if(!rankingDropHasRecovered(old.sourceKey,old.evidence,ranks))continue;
+      await tx.storeRecommendation.updateMany({
+        where:{id:old.id,shop,status:"pending"},
+        data:{status:"superseded",decidedAt:new Date()}
+      });
     }
     // The 30 most recent drafts are an inbox sample, not a complete inventory.
     // Verify the actual status of older pending recommendations before retiring

@@ -1,6 +1,6 @@
 import db from "../db.server";
 import { toSafeShopifySummaryHtml } from "./article-summary";
-import { hasCurrentUsableReview } from "./editorial-review-integrity";
+import { hasCurrentUsableReview, publishFormDigest } from "./editorial-review-integrity";
 
 type Admin = {graphql: (...args:any[])=>Promise<any>};
 
@@ -9,7 +9,10 @@ type Admin = {graphql: (...args:any[])=>Promise<any>};
  * Conditional claim ensures concurrent approval clicks cannot publish twice.
  * On an uncertain Shopify response, manual reconciliation is required.
  */
-export async function publishApprovedArticle(shop:string,draftId:string,admin:Admin) {
+export async function publishApprovedArticle(shop:string,draftId:string,admin:Admin,expectedPublishDigest:string) {
+  if (!/^[a-f0-9]{64}$/.test(expectedPublishDigest)) {
+    return {ok:false,message:"Publish confirmation is missing or outdated. Refresh and inspect the article again."};
+  }
   // A structure score is not evidence that a person checked factual claims.
   // Require an immutable, shop-scoped usable editorial review before the
   // irreversible Shopify mutation. Lock StoreConfig first to match review,
@@ -34,6 +37,9 @@ export async function publishApprovedArticle(shop:string,draftId:string,admin:Ad
       select:{title:true,body:true,summary:true,tags:true}
     });
     if(!draft || !hasCurrentUsableReview(review,draft,config))return null;
+    // Revalidate the browser-rendered version while holding the merchant lock.
+    // A later editor may renew approval, but cannot reuse this browser's old Publish form.
+    if(publishFormDigest(draft,config)!==expectedPublishDigest)return {stale:true as const};
     // The conditional claim rejects a concurrent content edit between the
     // digest comparison and status transition, even from an external writer.
     const claim=await tx.articleDraft.updateMany({
@@ -43,6 +49,7 @@ export async function publishApprovedArticle(shop:string,draftId:string,admin:Ad
     });
     return claim.count===1?{...draft,...config}:null;
   });
+  if(claimed && "stale" in claimed)return {ok:false,message:"Article or publication destination changed since this page loaded. Refresh and inspect before publishing."};
   if(!claimed)return {ok:false,message:"A connected destination blog, current usable editorial review and ready unpublished draft are required."};
   try{
     const response=await admin.graphql(

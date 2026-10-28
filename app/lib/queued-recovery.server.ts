@@ -40,6 +40,16 @@ export async function recoverQueuedJobs(
     let schedule;
     try { schedule = scheduledClaimFromJob(job); }
     catch {
+      // Quarantine corrupt rows rather than letting the oldest three block
+      // every later merchant indefinitely. Keep the credit and full record.
+      try {
+        await db.contentJob.updateMany({
+          where: { id: job.id, shop: job.shop, status: "queued", outboxVersion: 1 },
+          data: { outboxVersion: 0, error: "Recovery quarantined: invalid schedule metadata" }
+        });
+      } catch {
+        console.error("Could not quarantine corrupt queued recovery metadata");
+      }
       blocked++;
       console.error("Queued recovery blocked by corrupt schedule metadata");
       continue;

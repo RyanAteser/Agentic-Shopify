@@ -6,7 +6,7 @@ import db from "../db.server";
 import { readMerchantProductSample, syncManagerTasks, logStoreAction } from "../lib/manager.server";
 import { publishApprovedArticle } from "../lib/publish.server";
 import { canExecuteAction } from "../lib/action-policy";
-import { hasCurrentUsableReview } from "../lib/editorial-review-integrity";
+import { hasCurrentUsableReview, publishFormDigest } from "../lib/editorial-review-integrity";
 
 const statuses=["pending","approved","applied","dismissed","resolved","superseded"] as const;
 
@@ -39,7 +39,10 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
     return {draftId:review.draftId,decision:review.decision,
       current:!!article && !!destination && hasCurrentUsableReview(review,article,destination)};
   });
-  return {shop,warning,filter,tasks,activity,counts,articles,reviews:reviewStates};
+  const publishVersions=articles.map(article=>({draftId:article.id,
+    digest:destination?publishFormDigest(article,destination):""}));
+  return {shop,warning,filter,tasks,activity,counts,articles,reviews:reviewStates,
+    publishVersions,publicationDestination:destination};
 };
 
 export const action=async ({request}:ActionFunctionArgs)=>{
@@ -64,7 +67,8 @@ export const action=async ({request}:ActionFunctionArgs)=>{
       if(!canExecuteAction("content.article.publish",{humanApproved:true})) {
         return {ok:false,message:"Publishing forbidden by policy."};
       }
-      const result=await publishApprovedArticle(shop,task.targetId,admin);
+      const expectedDigest=String(form.get("expectedPublishDigest")??"").slice(0,64);
+      const result=await publishApprovedArticle(shop,task.targetId,admin,expectedDigest);
       if(result.ok){
         await db.storeRecommendation.updateMany({where:{id,shop,status:"pending"},data:{status:"applied",decidedAt:new Date()}}).catch(error=>console.error("Published article inbox sync failed",error));
       }
@@ -98,13 +102,14 @@ export const action=async ({request}:ActionFunctionArgs)=>{
 };
 
 export default function StoreManager(){
-  const {shop,warning,filter,tasks,activity,counts,articles,reviews}=useLoaderData<typeof loader>();
+  const {shop,warning,filter,tasks,activity,counts,articles,reviews,publishVersions,publicationDestination}=useLoaderData<typeof loader>();
   const outcome=useActionData<typeof action>();
   const nav=useNavigation();
   const busy=nav.state!=="idle";
   const totals=Object.fromEntries(counts.map(x=>[x.status,x._count._all])) as Record<string,number>;
   const draftMap=new Map(articles.map(a=>[a.id,a]));
   const usableReviewIds=new Set(reviews.filter(r=>r.decision==="usable"&&r.current).map(r=>r.draftId));
+  const publishVersionMap=new Map(publishVersions.map(version=>[version.draftId,version.digest]));
   return <s-page heading="Store Manager · Approval Inbox">
     <s-section heading="Your store, one team">
       <p>Connected merchant: <strong>{shop}</strong></p>
@@ -134,7 +139,10 @@ export default function StoreManager(){
             <summary>Inspect evidence and context</summary>
             <p><small>Source: {evidence.source||"internal"}</small></p>
             {task.kind==="blog_publish" && article && <>
+              <p><strong>Article:</strong> {article.title}</p>
               <p><strong>Excerpt:</strong> {article.summary}</p>
+              <p><strong>Tags:</strong> {article.tags || "None"}</p>
+              <p><strong>Destination blog ID:</strong> {publicationDestination?.blogId || "Not selected"} · <strong>Author:</strong> {publicationDestination?.authorName || "Not selected"}</p>
               <div style={{maxHeight:350,overflow:"auto",padding:12,border:"1px solid #ddd"}}
                 dangerouslySetInnerHTML={{__html:article.body}}/>
               <p style={{whiteSpace:"pre-wrap"}}>{article.reviewNotes}</p>
@@ -149,6 +157,9 @@ export default function StoreManager(){
             }}>
               <input type="hidden" name="id" value={task.id}/>
               <input type="hidden" name="intent" value="publish"/>
+              <input type="hidden" name="expectedPublishDigest" value={publishVersionMap.get(task.targetId) ?? ""}/>
+              <p><strong>Destination blog ID:</strong> {publicationDestination?.blogId || "Not selected"} · <strong>Author:</strong> {publicationDestination?.authorName || "Not selected"}</p>
+              <p>Expand “Inspect evidence and context” to review the exact article before confirming.</p>
               <label style={{marginRight:8}}><input type="checkbox" name="verified" required/> I verified claims, sources and brand fit</label>
               <button type="submit" disabled={busy||article?.status!=="ready"||!usableReviewIds.has(task.targetId)}>Approve & Publish</button>
               {!usableReviewIds.has(task.targetId) && <p>Record or renew a usable editorial review of the current article in the <Link to="/app">Blog Agent</Link> first.</p>}

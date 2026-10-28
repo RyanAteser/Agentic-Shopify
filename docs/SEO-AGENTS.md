@@ -195,3 +195,51 @@ Pure parser tests and mocked Manager tests were added; full repository CI,
 PostgreSQL and an authorized development-store response replay remain
 release gates. Measure false-clean audit incidence and merchant time spent
 before attributing business benefit.
+
+
+## Read-only Bright Data parsed-JSON preview (2026-10-28)
+
+The optional local adapter in app/lib/brightdata-organic.ts and the CLI in
+scripts/brightdata-organic-preview.ts help an operator validate a **real**
+Bright Data Google SERP JSON export before mapping it in n8n. This is **not**
+connected to a live connector, does not call Bright Data, and never POSTs to
+Shopify. It does not activate the workflows.
+
+Bright Data's parsed Google JSON separates organic[] from paid[] and exposes
+organic[].rank (organic position), organic[].global_rank (SERP-wide placement),
+and organic[].link (result URL). We intentionally use **organic[].rank**, never
+global_rank or paid results. The adapter checks the response query, engine,
+device, optional reported gl country, unique valid ranks, valid links and the
+exact HTTPS storefront host. It returns at most the highest-ranked matching
+organic URL, then applies the existing strict ranking parser.
+
+Create a **local** context.json using the actual request and authenticated
+Shopify primary domain (example values below are illustrative):
+
+~~~json
+{
+  "keyword": "leather boots",
+  "country": "US",
+  "device": "desktop",
+  "observedAt": "2026-10-28T11:55:00Z",
+  "primaryHost": "example.com"
+}
+~~~
+
+Run locally: npx tsx scripts/brightdata-organic-preview.ts raw-serp.json context.json
+
+The result is a JSON object with an observations array, **not** a signed or
+authorized import. No-match and empty organic lists produce an **empty array**,
+not a fabricated not-found rank. Never infer a null position from an
+incomplete SERP depth or a failed scrape. A real not-found observation requires
+separate proof of requested depth and successful completed pagination.
+
+The preview cannot independently verify that context.json represents the
+actual scrape request, that the primaryHost is Shopify-attested, that the
+SERP export is authentic, or that all requested pages completed. It supports
+Google parsed JSON only; other Bright Data formats, Bing and tablet require
+their own validated mapping. Do not copy raw merchant data or credentials into
+commits, logs or issues. Validate with an authorized export and keep the
+existing connector key, tenant isolation, rate limits and human approval gates.
+
+Source: Bright Data's [SERP API parsed JSON reference](https://github.com/brightdata/skills/blob/main/skills/bright-data-best-practices/references/serp-api.md).

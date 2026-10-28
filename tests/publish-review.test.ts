@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
-import { recordEditorialReview } from "../app/lib/editorial-review.server";
+import { recordEditorialReview } from "./helpers/editorial-review";
 import { publishApprovedArticle } from "../app/lib/publish.server";
 
 async function withDraft(fn: (shop: string, draftId: string) => Promise<void>) {

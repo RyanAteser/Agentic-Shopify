@@ -26,6 +26,16 @@ Each sweep selects at most **three** jobs that are still `queued`, version 1, an
 
 **Important boundary:** A crash *after* `queued -> running` but *before* n8n accepts the POST remains ambiguous to an external observer and is **not** auto-replayed. Exactly-once delivery across PostgreSQL and n8n is not claimed. A future n8n-side idempotency/acknowledgment protocol keyed by `jobId`, with durable execution lookup, is needed to safely reconcile that interval. The endpoint does not automatically publish articles.
 
+## Correlated early n8n acceptance acknowledgment (2026-10-28)
+
+The blog-writer workflow now switches from a generic `onReceived` response to a dedicated **Respond to Webhook** node immediately after `Prepare Brief`, before the paid drafting HTTP request. It returns HTTP **202** with JSON `{"accepted":true,"jobId":"...","shop":"..."}` taken from the authenticated input. The node passes its input forward to the drafting stage. The app accepts delivery only when the 202 JSON response exactly echoes the dispatched `jobId` and `shop`. The app bounds the response to 2 KiB and rejects wrong content types, missing bodies, malformed JSON, mismatched IDs and generic 200/204 successes.
+
+**Safety rule:** Every missing, malformed, mismatched or unreadable 2xx acknowledgment is **uncertain**. The job retains its credit and is never automatically retried, failed or refunded. A callback that already completed the job wins over any late ambiguous HTTP response. This prevents a proxy's generic success response or the wrong n8n execution from being mistaken for acceptance. It does not change the merchant's manual publishing gate.
+
+**What this does not prove:** n8n's early HTTP 202 is **not** durable execution persistence, paid-work completion, deduplication or an exactly-once delivery guarantee. A crash between `queued -> running` and n8n acceptance remains a manual reconciliation case. An early 202 followed by a failed workflow still needs monitoring and operator handling. A signed/durable n8n-side execution ledger keyed by tenant + job ID and an authenticated reconciliation endpoint remain future work. This change is not activated on any n8n instance and must be validated with a real n8n test webhook before enabling.
+
+**Upgrade requirement:** Deploy the matching app and import the updated inactive writer workflow together. The old writer returns a generic response and will now cause safe `dispatch_uncertain` results. Never enable a mixed-version rollout without staging verification. Official n8n documentation: [Webhook response modes](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/#respond), [Respond to Webhook behavior](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.respondtowebhook/).
+
 ## Opt-in n8n setup (not performed)
 
 1. Confirm commercial rights to operate n8n for configurable merchant automations. Written clearance or an appropriate Enterprise/OEM agreement is a launch gate; do not infer rights from source availability.

@@ -116,3 +116,33 @@ Duplicate effective titles are now reported for **every sampled product** in a m
 To avoid claiming a duplicate was fixed merely because its counterpart fell outside the next sample, the Store Manager retains a pending duplicate-title recommendation if the product's observed effective title is unchanged. It retires the specific prior observation only after seeing that product's title change; missing historical title evidence fails closed. Fresh findings update pending evidence, while merchant approvals and dismissals remain untouched. This is conservative and can retain an old warning until the product changes or a merchant reviews it. Full pagination, rendered-title verification and better group-level resolution are future work.
 
 **Validation:** automated pure audit tests and database-backed recommendation lifecycle tests; not verified against a real Shopify development store. Measure alert precision and merchant time spent per accepted recommendation before claiming benefit.
+
+## Recovered ranking-drop alert lifecycle (2026-10-28)
+
+Store Manager previously kept a pending `ranking_drop` alert indefinitely after a
+SERP observation showed a three-place or greater decline. Even when a newer
+same-market snapshot of the **same landing page** returned to within two
+positions of the pre-drop rank, the old task stayed actionable.
+
+The manager now moves a pending alert to **Outdated** (`superseded`) only when
+the newest available observation for the exact keyword, engine, country and
+device is (1) later than the alert, (2) no older than 14 days, (3) the same
+HTTPS landing page ignoring fragments, and (4) at most two places worse than
+the original pre-drop position. Missing observations, a different landing
+page, a not-found result, invalid/legacy evidence, or a stale observation
+**do not prove recovery**. Approved, dismissed and resolved merchant decisions
+are never rewritten. A subsequent distinct drop creates a new task with a
+new timestamp; historical evidence is preserved.
+
+The scan reads the latest 300 merchant-specific rank rows and reconciles at
+most 200 pending ranking alerts per sync. If a market is absent from that
+sample, its alert is retained. This is an operational noise-reduction rule,
+**not** evidence of durable ranking recovery, traffic growth, revenue lift,
+or content causality. Google cautions that search positions fluctuate and
+recommends investigating Search Console traffic before major content changes:
+https://developers.google.com/search/docs/monitor-debug/debugging-search-traffic-drops
+
+Validation: deterministic pure comparison and SQLite-backed manager regression
+tests added; hosted CI and real Bright Data payload validation remain release
+gates. Measure false-alert rate, merchant dismissals, and minutes per useful
+SEO action in an authorized pilot.

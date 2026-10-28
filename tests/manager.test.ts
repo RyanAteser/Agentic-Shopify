@@ -308,7 +308,7 @@ test("manager retires recovered SERP alerts but preserves accepted decisions and
       rank("sneakers",3,"2026-10-24T12:00:00Z"),
       rank("sneakers",10,"2026-10-25T12:00:00Z")
     ]});
-    await syncManagerTasks(shop,[]);
+    await syncManagerTasks(shop,[],new Date("2026-10-28T12:00:00Z"));
     const alerts=await db.storeRecommendation.findMany({where:{shop,kind:"ranking_drop"}});
     assert.equal(alerts.length,2);
     const boots=alerts.find(a=>a.title.includes("boots"))!;
@@ -319,11 +319,11 @@ test("manager retires recovered SERP alerts but preserves accepted decisions and
       rank("boots",5,"2026-10-26T12:00:00Z"),
       rank("sneakers",4,"2026-10-26T12:00:00Z")
     ]});
-    await syncManagerTasks(shop,[]);
+    await syncManagerTasks(shop,[],new Date("2026-10-28T12:00:00Z"));
     assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:boots.id}})).status,"superseded");
     assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:sneakers.id}})).status,"approved");
     await db.seoRankObservation.create({data:rank("boots",15,"2026-10-27T12:00:00Z")});
-    await syncManagerTasks(shop,[]);
+    await syncManagerTasks(shop,[],new Date("2026-10-28T12:00:00Z"));
     const latest=await db.storeRecommendation.findMany({where:{shop,kind:"ranking_drop"}});
     assert.equal(latest.filter(a=>a.status==="pending").length,1,
       "a later distinct ranking drop creates a fresh alert without rewriting historical evidence");

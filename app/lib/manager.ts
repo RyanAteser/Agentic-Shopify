@@ -43,7 +43,7 @@ export function rankingDropHasRecovered(
     prior=parsed as Record<string,unknown>;
   } catch { return false; }
   if(prior.source!=="brightdata-serp"||typeof prior.latestAt!=="string"||
-     typeof prior.url!=="string"||!Number.isInteger(prior.previousRank)||
+     typeof prior.url!=="string"||typeof prior.previousRank!=="number"||!Number.isInteger(prior.previousRank)||
      (prior.previousRank as number)<1||(prior.previousRank as number)>200)return false;
   const alertAt=new Date(prior.latestAt);
   if(!Number.isFinite(alertAt.getTime())||alertAt.toISOString()!==prior.latestAt)return false;

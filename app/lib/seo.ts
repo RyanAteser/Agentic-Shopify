@@ -85,10 +85,22 @@ export type SeoFinding = {id:string;productId:string;productTitle:string;url:str
 export function effectiveSeoTitle(product: SeoProduct): string {
   return (product.seo?.title?.trim() || product.title.trim()).replace(/\s+/g, " ");
 }
+/** Shopify returns a null onlineStoreUrl for products not published to the
+ * Online Store. Other-channel inventory is not a storefront SEO opportunity.
+ * A URL does not prove Google indexing or market availability. */
+export function isOnlineStoreSeoCandidate(product: SeoProduct): boolean {
+  if (typeof product.url !== "string") return false;
+  try {
+    const url = new URL(product.url);
+    return url.protocol === "https:" && !!url.hostname &&
+      !url.username && !url.password;
+  } catch { return false; }
+}
 export function auditProductSeo(products: SeoProduct[]): SeoFinding[] {
   const findings: SeoFinding[]=[];
   const titleGroups=new Map<string,SeoProduct[]>();
   for (const product of products) {
+    if (!isOnlineStoreSeoCandidate(product)) continue;
     const title=effectiveSeoTitle(product);
     const description=(product.seo?.description || "").trim();
     const url=product.url || "";

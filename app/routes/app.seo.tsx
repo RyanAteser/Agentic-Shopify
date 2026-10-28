@@ -3,7 +3,7 @@ import { Link, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { auditProductSeo, type SeoProduct } from "../lib/seo";
+import { auditProductSeo, isOnlineStoreSeoCandidate, type SeoProduct } from "../lib/seo";
 import { sameRankTarget } from "../lib/manager";
 
 export const loader=async ({request}:LoaderFunctionArgs) => {
@@ -18,7 +18,7 @@ export const loader=async ({request}:LoaderFunctionArgs) => {
   try {
     const response=await admin.graphql(`#graphql
       query SeoAgentCatalogAudit {
-        products(first: 50, query: "status:active") {
+        products(first: 50, query: "status:active published_status:published") {
           nodes {
             id title description onlineStoreUrl
             seo { title description }
@@ -32,7 +32,7 @@ export const loader=async ({request}:LoaderFunctionArgs) => {
       description:String(p.description??""),
       url:typeof p.onlineStoreUrl==="string"?p.onlineStoreUrl:null,
       seo:p.seo?{title:p.seo.title??null,description:p.seo.description??null}:null,
-    }));
+    })).filter(isOnlineStoreSeoCandidate);
   }catch(error){
     catalogError=error instanceof Error?error.message:"Could not inspect catalog";
   }
@@ -61,7 +61,7 @@ export default function SeoDashboard(){
       <p>Connected store: <strong>{shop}</strong> · <Link to="/app">Blog Agent</Link> · <Link to="/app/manager">Manager Inbox</Link> · <Link to="/app/growth">Verified Growth</Link></p>
     </s-section>
     <s-section heading="Product metadata audit">
-      <p>Scanned the first <strong>{productCount}</strong> active Shopify products. This is an initial metadata check, not a complete crawl or Google ranking score.</p>
+      <p>Sampled <strong>{productCount}</strong> active products with an Online Store URL (up to 50 published products queried). Unpublished, unlisted and other-channel-only products are excluded. This is not a complete crawl, proof of indexing or a Google ranking score.</p>
       {catalogError && <p role="alert">Catalog unavailable: {catalogError}. Recheck read_products permission.</p>}
       {!catalogError && !findings.length && <p>No obvious metadata issues detected in the sampled products.</p>}
       {Boolean(findings.length) && <div style={{overflowX:"auto"}}>

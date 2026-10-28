@@ -3,10 +3,24 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
 import { buildBlogTasks, buildRankTasks, buildSeoTasks } from "../app/lib/manager";
-import { syncManagerTasks, logStoreAction } from "../app/lib/manager.server";
+import { readMerchantProductSample, syncManagerTasks, logStoreAction } from "../app/lib/manager.server";
 import { eraseMerchantData } from "../app/lib/merchant-redaction.server";
 import { publishApprovedArticle } from "../app/lib/publish.server";
 import { recordEditorialReview } from "../app/lib/editorial-review.server";
+
+test("manager audits only published Online Store products, not other-channel inventory",async()=>{
+  const admin={graphql:async(query:string)=>{
+    assert.match(query,/status:active published_status:published/);
+    return {json:async()=>({data:{products:{nodes:[
+      {id:"public",title:"Public boots",description:"",onlineStoreUrl:"https://shop.example/products/boots",seo:null},
+      {id:"pos",title:"POS-only boots",description:"",onlineStoreUrl:null,seo:null},
+      {id:"bad",title:"Bad URL",description:"",onlineStoreUrl:"javascript:alert(1)",seo:null}
+    ]}}})};
+  }};
+  const sample=await readMerchantProductSample(admin);
+  assert.equal(sample.warning,"");
+  assert.deepEqual(sample.products.map(p=>p.id),["public"]);
+});
 
 test("manager ranks factual SEO findings, editorial drafts and comparable rank drops",()=>{
  const seo=buildSeoTasks([{

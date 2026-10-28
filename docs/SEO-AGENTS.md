@@ -61,6 +61,14 @@ The ingestion endpoint:
 - Link observations to the merchant's store via trusted app session for UI and scoped database.
 - Validate real n8n parsed output against this contract; screenshot alone cannot prove node field shapes or credential configuration.
 
+## Published Online Store scope (2026-10-28)
+
+The product metadata audit and Store Manager now query `status:active published_status:published` and additionally require Shopify's non-null, HTTPS `onlineStoreUrl` before evaluating a product. Shopify documents `published_status:published` as Online Store publication and `onlineStoreUrl: null` as not published to that channel. Active products sold only through POS or other channels are not storefront SEO opportunities; recommending Google title/meta edits for them wastes merchant time. A null URL is excluded rather than treated as an SEO error.
+
+This remains a **50-product sample**, not a full catalog audit. A published Online Store URL does not prove Google indexing, crawl access, canonical selection, or availability in every Shopify Market. If a product disappears from a subsequent sample, its old recommendation is preserved rather than automatically marked fixed; a separate verified publication-status check would be needed to retire it. Do not claim traffic or revenue improvement without merchant data.
+
+Official references: [Shopify products query published_status](https://shopify.dev/docs/api/admin-graphql/latest/queries/products), [Shopify Product.onlineStoreUrl](https://shopify.dev/docs/api/admin-graphql/latest/objects/Product).
+
 ## Recommended next work
 - Full Shopify pagination, collection and article indexing, internal-link checks and canonical information.
 - Google Search Console OAuth and verified domain-property mapping with data minimization.

@@ -1,11 +1,11 @@
 import db from "../db.server";
-import { auditProductSeo, effectiveSeoTitle, type SeoProduct } from "./seo";
+import { auditProductSeo, effectiveSeoTitle, isOnlineStoreSeoCandidate, type SeoProduct } from "./seo";
 import { buildBlogTasks, buildRankTasks, buildSeoTasks, type SuggestedTask } from "./manager";
 
 export async function readMerchantProductSample(admin:{graphql:Function}):Promise<{products:SeoProduct[];warning:string}> {
   try{
     const res=await admin.graphql(`#graphql query ManagerSeoSample {
-      products(first: 50, query: "status:active") {
+      products(first: 50, query: "status:active published_status:published") {
         nodes { id title description onlineStoreUrl seo { title description } }
       }
     }`);
@@ -15,7 +15,7 @@ export async function readMerchantProductSample(admin:{graphql:Function}):Promis
       id:String(p.id||""),title:String(p.title||""),description:String(p.description||""),
       url:typeof p.onlineStoreUrl==="string"?p.onlineStoreUrl:null,
       seo:p.seo?{title:p.seo.title??null,description:p.seo.description??null}:null,
-    })),warning:""};
+    })).filter(isOnlineStoreSeoCandidate),warning:""};
   }catch(e){return {products:[],warning:"Catalog unavailable; product recommendations may be incomplete."};}
 }
 

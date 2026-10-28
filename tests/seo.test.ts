@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRanking, auditProductSeo, assertRankingTargetsForPrimaryDomain, assertUniqueRankingObservations } from "../app/lib/seo";
+import { parseRanking, auditProductSeo, isOnlineStoreSeoCandidate, assertRankingTargetsForPrimaryDomain, assertUniqueRankingObservations } from "../app/lib/seo";
 
 const now = new Date("2026-10-24T12:00:00.000Z");
 const context = {engine:"google",country:"US",device:"desktop"} as const;
@@ -148,4 +148,18 @@ test("duplicate effective SEO titles flag every sampled product independent of o
     assert.ok(findings.every(f=>f.observedTitle==="leather boots"));
     assert.ok(findings.every(f=>f.message.includes("sampled")));
   }
+});
+
+test("storefront SEO audits exclude active inventory without a published Online Store URL", () => {
+  const base={title:"Leather boots",description:"",seo:{title:null,description:null}};
+  const published={...base,id:"public",url:"https://shop.example/products/boots"};
+  const unpublished={...base,id:"private",url:null};
+  const otherChannel={...base,id:"pos-only",url:null};
+  const unsafe={...base,id:"invalid",url:"javascript:alert(1)"};
+  assert.equal(isOnlineStoreSeoCandidate(published),true);
+  assert.equal(isOnlineStoreSeoCandidate(unpublished),false);
+  assert.equal(isOnlineStoreSeoCandidate(unsafe),false);
+  const findings=auditProductSeo([published,unpublished,otherChannel,unsafe]);
+  assert.deepEqual(findings.map(f=>f.productId),["public"]);
+  assert.equal(findings[0].kind,"missing-description");
 });

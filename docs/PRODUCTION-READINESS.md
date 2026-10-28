@@ -47,6 +47,12 @@ The Blog Agent now offers a server-validated HTML draft editor before human revi
 
 **Still unverified externally:** a real Shopify development-store article and theme, two-session browser conflict UX, accessibility, Shopify's 64 KB rich-text limit in GraphQL, and merchant-reported review-time savings. Do not infer SEO lift from the heuristic score or call the app production-ready based on CI.
 
+## Browser-versioned final Publish confirmation (2026-10-28)
+
+The existing stored human-review digest prevents publishing content without a **current usable review**, but a stale browser tab could still publish a different, subsequently re-reviewed version. Both Blog Agent and Store Manager now include a versioned SHA-256 confirmation fingerprint for the **publication payload visible at page render** (title, HTML, excerpt, tags, blog ID, author). The publisher checks it in the merchant-locked claim transaction before any Shopify mutation. A missing/stale fingerprint leaves the draft ready, requiring refresh and reinspection. See [EDITORIAL-EDITING.md](EDITORIAL-EDITING.md) for test cases, limitations and two-editor staging protocol.
+
+**Verification status:** code committed; require passing SQLite/PostgreSQL CI, production build and Docker smoke on this final head. This is not merchant authentication, proof of reading, live Shopify behavior or exactly-once delivery. No permissions, publishing automation, billing or live merchant data are changed.
+
 ## Hard go/no-go gates
 
 | Gate | Current status | Completion proof required |

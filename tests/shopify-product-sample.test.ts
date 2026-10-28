@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseShopifyProductSample, summarizeShopifySeoSample } from "../app/lib/shopify-product-sample";
+import { parseShopifyProductSample, summarizeShopifySeoSample, readShopifySeoCatalog } from "../app/lib/shopify-product-sample";
 
 const published = {
   id: "gid://shopify/Product/1", title: "Leather boots",
@@ -73,4 +73,68 @@ test("a verified empty product sample has no coverage warning; all-null URLs are
   assert.equal(inaccessible.eligibleProducts.length, 0);
   assert.equal(inaccessible.missingUrls, 1);
   assert.match(inaccessible.warning, /not audited/);
+});
+
+const page = (nodes: unknown[], hasNextPage: boolean, endCursor: string | null) => ({
+  data: {products: {nodes, pageInfo: {hasNextPage, endCursor}}}
+});
+const item = (id: number) => ({
+  ...published, id: "gid://shopify/Product/" + id,
+  onlineStoreUrl: "https://shop.example/products/item-" + id
+});
+
+test("bounded pagination evaluates 100 products and reports additional unsampled inventory", async () => {
+  const calls: Array<string | null> = [];
+  const admin = {graphql: async (query: string, options: {variables: {after: string | null}}) => {
+    assert.match(query, /published_status:published/);
+    const cursor = options.variables.after;
+    calls.push(cursor);
+    return {json: async () => cursor === null
+      ? page(Array.from({length: 50}, (_, i) => item(i + 1)), true, "cursor-50")
+      : page(Array.from({length: 50}, (_, i) => item(i + 51)), true, "cursor-100")};
+  }};
+  const result = await readShopifySeoCatalog(admin);
+  assert.deepEqual(calls, [null, "cursor-50"], "never make an unbounded third request");
+  assert.equal(result.products.length, 100);
+  assert.equal(new Set(result.products.map(p => p.id)).size, 100);
+  assert.equal(result.pagesFetched, 2);
+  assert.equal(result.hasMore, true);
+  const summary = summarizeShopifySeoSample(result.products, result.hasMore);
+  assert.equal(summary.eligibleProducts.length, 100);
+  assert.match(summary.warning, /Additional published products exist beyond the 100 sampled/);
+});
+
+test("single complete Shopify page needs no second request or truncation warning", async () => {
+  let calls = 0;
+  const result = await readShopifySeoCatalog({graphql: async () => {
+    calls++;
+    return {json: async () => page([item(1)], false, "cursor-1")};
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.pagesFetched, 1);
+  assert.equal(result.hasMore, false);
+  assert.equal(summarizeShopifySeoSample(result.products, result.hasMore).warning, "");
+});
+
+test("malformed second pages, cross-page duplicates and cursor loops fail closed", async () => {
+  const first = page([item(1)], true, "cursor-1");
+  for (const second of [
+    {data: {products: {nodes: null}}},
+    page([item(1)], false, "cursor-2"),
+    page([item(2)], true, "cursor-1"),
+    page([], true, "cursor-2"),
+    {data: {products: {nodes: [item(2)], pageInfo: {hasNextPage: true}}}},
+  ]) {
+    let calls = 0;
+    await assert.rejects(readShopifySeoCatalog({graphql: async () => ({
+      json: async () => ++calls === 1 ? first : second
+    })}), /Shopify/);
+    assert.equal(calls, 2);
+  }
+});
+
+test("missing pagination metadata is not accepted as a complete catalog", async () => {
+  await assert.rejects(readShopifySeoCatalog({graphql: async () => ({
+    json: async () => response([item(1)])
+  })}), /pagination information/);
 });

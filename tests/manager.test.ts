@@ -357,3 +357,20 @@ test("manager warns instead of claiming a malformed Shopify catalog is empty",as
   assert.deepEqual(empty.products, []);
   assert.equal(empty.warning, "");
 });
+
+test("manager never presents a successful first page as complete after a second-page failure", async () => {
+  let calls = 0;
+  const admin = {graphql: async () => ({
+    json: async () => ++calls === 1
+      ? {data: {products: {
+          nodes: [{id: "gid://shopify/Product/1", title: "Boots", description: "",
+            onlineStoreUrl: "https://shop.example/products/boots", seo: null}],
+          pageInfo: {hasNextPage: true, endCursor: "next-page"}
+        }}}
+      : {errors: [{message: "Shopify API throttled"}], data: {products: null}}
+  })};
+  const sample = await readMerchantProductSample(admin);
+  assert.equal(calls, 2);
+  assert.deepEqual(sample.products, []);
+  assert.match(sample.warning, /Catalog unavailable/);
+});

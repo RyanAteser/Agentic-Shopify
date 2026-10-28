@@ -28,6 +28,22 @@ export function publicationReviewDigest(
     .digest("hex");
 }
 
+/**
+ * Browser-rendered Publish confirmation version. This is deliberately separate
+ * from the stored editorial approval digest: a prior approval must not act as
+ * permission to publish content changed since this particular page loaded.
+ * Not a secret or proof of human inspection.
+ */
+export function publishFormDigest(
+  article: ReviewedArticleFields, destination: ReviewedDestination
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify([
+      "shopify-publish-form-v1", publicationReviewDigest(article, destination)
+    ]), "utf8")
+    .digest("hex");
+}
+
 /** Version of the precise article, editorial keyword and destination displayed to a reviewer. */
 export function reviewFormDigest(
   article: ReviewedArticleFields & { keyword: string }, destination: ReviewedDestination

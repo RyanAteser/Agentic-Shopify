@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import db from "../app/db.server";
 import {editorialEditDigest, saveMerchantDraftEdit} from "../app/lib/editorial-edit.server";
-import {recordEditorialReview} from "../app/lib/editorial-review.server";
+import {recordEditorialReview} from "./helpers/editorial-review";
 import {publishApprovedArticle} from "../app/lib/publish.server";
 
 const original = {

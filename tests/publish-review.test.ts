@@ -221,3 +221,63 @@ test("plain-text excerpt is encoded before Shopify receives its HTML summary", a
     assert.equal(calls,1);
   });
 });
+
+test("editing reviewed article fields invalidates approval until explicit re-review", async () => {
+  for (const [field, value] of [
+    ["title", "Different title after review"],
+    ["body", "<p>New claim after review.</p>"],
+    ["summary", "Different excerpt after review"],
+    ["tags", "new,claims"]
+  ] as const) {
+    await withDraft(async (shop, draftId) => {
+      assert.equal((await recordEditorialReview(shop, draftId, "usable", 3)).ok, true);
+      await db.articleDraft.update({where:{id:draftId},data:{[field]:value}});
+      const admin=fakeAdmin();
+      const blocked=await publishApprovedArticle(shop,draftId,admin);
+      assert.equal(blocked.ok,false,field);
+      assert.match(blocked.message,/current usable editorial review/i);
+      assert.equal(admin.calls,0,field);
+      assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"ready");
+      const renewed=await recordEditorialReview(shop,draftId,"usable",4);
+      assert.equal(renewed.ok,true,field);
+      assert.match(renewed.message,/renewed/i);
+      assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,true,field);
+      assert.equal(admin.calls,1,field);
+      assert.equal(await db.editorialReview.count({where:{shop,draftId}}),1);
+    });
+  }
+});
+
+test("changing the destination blog or article author requires renewed approval", async () => {
+  for (const [field,value] of [
+    ["blogId","gid://shopify/Blog/changed"],
+    ["authorName","Changed Author"]
+  ] as const) {
+    await withDraft(async(shop,draftId)=>{
+      assert.equal((await recordEditorialReview(shop,draftId,"usable",3)).ok,true);
+      await db.storeConfig.update({where:{shop},data:{[field]:value}});
+      let calls=0;
+      const admin={graphql:async()=>{calls++;throw new Error("should not publish");}};
+      assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+      assert.equal(calls,0);
+      assert.equal((await recordEditorialReview(shop,draftId,"usable",3)).ok,true);
+      const review=await db.editorialReview.findUniqueOrThrow({where:{shop_draftId:{shop,draftId}}});
+      assert.match(review.contentDigest,/^[0-9a-f]{64}$/);
+    });
+  }
+});
+
+test("legacy usable reviews without a payload digest fail closed and can be renewed", async()=>{
+  await withDraft(async(shop,draftId)=>{
+    assert.equal((await recordEditorialReview(shop,draftId,"usable",3)).ok,true);
+    await db.editorialReview.update({
+      where:{shop_draftId:{shop,draftId}},data:{contentDigest:""}
+    });
+    const admin=fakeAdmin();
+    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+    assert.equal(admin.calls,0);
+    assert.equal((await recordEditorialReview(shop,draftId,"usable",4)).ok,true);
+    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,true);
+    assert.equal(admin.calls,1);
+  });
+});

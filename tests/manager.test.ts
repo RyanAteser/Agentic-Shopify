@@ -15,10 +15,11 @@ test("manager audits only published Online Store products, not other-channel inv
       {id:"public",title:"Public boots",description:"",onlineStoreUrl:"https://shop.example/products/boots",seo:null},
       {id:"pos",title:"POS-only boots",description:"",onlineStoreUrl:null,seo:null},
       {id:"bad",title:"Bad URL",description:"",onlineStoreUrl:"javascript:alert(1)",seo:null}
-    ]}}})};
+    ],pageInfo:{hasNextPage:false,endCursor:"cursor-3"}}}})};
   }};
   const sample=await readMerchantProductSample(admin);
-  assert.equal(sample.warning,"");
+  assert.match(sample.warning,/Password-protected Shopify stores/);
+  assert.match(sample.warning,/non-HTTPS/);
   assert.deepEqual(sample.products.map(p=>p.id),["public"]);
 });
 
@@ -351,7 +352,7 @@ test("manager warns instead of claiming a malformed Shopify catalog is empty",as
     assert.match(result.warning, /Catalog unavailable/i);
   }
   const empty = await readMerchantProductSample({
-    graphql: async()=>({json:async()=>({data:{products:{nodes:[]}}})})
+    graphql: async()=>({json:async()=>({data:{products:{nodes:[],pageInfo:{hasNextPage:false,endCursor:null}}}})})
   });
   assert.deepEqual(empty.products, []);
   assert.equal(empty.warning, "");

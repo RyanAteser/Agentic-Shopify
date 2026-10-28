@@ -178,6 +178,7 @@ model EditorialReview {
   shop          String
   draftId       String
   decision      String
+  contentDigest String   @default("")
   reviewMinutes Int?
   feedback      String   @default("")
   reviewedAt    DateTime @default(now())

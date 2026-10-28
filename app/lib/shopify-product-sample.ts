@@ -1,4 +1,4 @@
-import type { SeoProduct } from "./seo";
+import { isOnlineStoreSeoCandidate, type SeoProduct } from "./seo";
 
 /**
  * Treat missing or malformed Shopify GraphQL catalog data as an unavailable
@@ -50,4 +50,30 @@ export function parseShopifyProductSample(payload: unknown): SeoProduct[] {
       seo: seo ? {title: seo.title as string | null, description: seo.description as string | null} : null,
     };
   });
+}
+
+/**
+ * URL coverage is not publication coverage. Shopify may return a null
+ * onlineStoreUrl for published products on password-protected storefronts,
+ * including development stores. Never synthesize a public URL or mark these
+ * products as unpublished, audited, or remediated.
+ */
+export function summarizeShopifySeoSample(products: SeoProduct[]) {
+  const eligibleProducts = products.filter(isOnlineStoreSeoCandidate);
+  const missingUrls = products.filter(product => product.url === null).length;
+  const invalidUrls = products.length - eligibleProducts.length - missingUrls;
+  const warnings: string[] = [];
+  if (missingUrls) {
+    warnings.push(`${missingUrls} sampled Online Store-published product(s) had no storefront URL. Password-protected Shopify stores can suppress these URLs even when products are published. These pages were not audited; a null URL does not prove a product is unpublished.`);
+  }
+  if (invalidUrls) {
+    warnings.push(`${invalidUrls} sampled product(s) had invalid or non-HTTPS storefront URLs and were not audited.`);
+  }
+  return {
+    eligibleProducts,
+    sampledProducts: products.length,
+    missingUrls,
+    invalidUrls,
+    warning: warnings.join(" "),
+  };
 }

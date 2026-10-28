@@ -12,6 +12,7 @@ import { loadMerchantConfig, saveMerchantConfig } from "../lib/merchant-config.s
 import { logStoreAction } from "../lib/manager.server";
 import { parseReviewMinutes, recordEditorialReview } from "../lib/editorial-review.server";
 import { hasCurrentUsableReview } from "../lib/editorial-review-integrity";
+import { editorialEditDigest, saveMerchantDraftEdit } from "../lib/editorial-edit.server";
 
 function value(form: FormData, key: string, max = 500) {
   return String(form.get(key) ?? "").trim().slice(0, max);
@@ -46,7 +47,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     current: !!draftMap.get(review.draftId) &&
       hasCurrentUsableReview(review, draftMap.get(review.draftId)!, config)
   }));
-  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates };
+  const editVersions = drafts.map(draft => ({draftId: draft.id, digest: editorialEditDigest(draft)}));
+  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates, editVersions };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -92,6 +94,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         throw error;
       }
     }
+    if (intent === "edit") {
+      const id = value(form, "draftId", 100);
+      const result = await saveMerchantDraftEdit(shop, id, value(form, "expectedDigest", 64), {
+        title: form.get("title"), summary: form.get("summary"), body: form.get("body"),
+        tags: form.get("tags"), keyword: form.get("keyword")
+      });
+      if (result.ok && !result.message.startsWith("No changes")) {
+        await logStoreAction(shop, null, "article.edit", "saved",
+          "Merchant revised an unpublished draft; approval renewal required", session.id)
+          .catch(error => console.error("Could not append draft-edit activity", error));
+      }
+      return result;
+    }
     if (intent === "review" || intent === "reject") {
       const id = value(form, "draftId", 100);
       const decision = intent === "reject" ? "rejected" : value(form, "decision", 20);
@@ -129,7 +144,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function BlogAgent() {
-  const { shop, blogs, config, drafts, jobs, reviews } = useLoaderData<typeof loader>();
+  const { shop, blogs, config, drafts, jobs, reviews, editVersions } = useLoaderData<typeof loader>();
+  const editVersionMap = new Map(editVersions.map(version => [version.draftId, version.digest]));
   const reviewMap = new Map(reviews.map(review => [review.draftId, review]));
   const result = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -175,6 +191,21 @@ export default function BlogAgent() {
           <div style={{padding:10,border:"1px solid #ddd",maxHeight:400,overflow:"auto"}} dangerouslySetInnerHTML={{__html:d.body}}/>
           <pre style={{whiteSpace:"pre-wrap"}}>{d.reviewNotes}</pre>
         </details>
+        {["ready", "needs_review"].includes(d.status) && <details>
+          <summary>Edit this unpublished draft</summary>
+          <p>Correct facts, wording and links before review. HTML supports paragraphs, headings, lists and safe links. Unsupported markup is removed. Saving does not publish, and any previous approval must be renewed.</p>
+          <Form method="post" key={d.id + ":" + d.updatedAt} style={{display:"grid",gap:10,maxWidth:850}}>
+            <input type="hidden" name="intent" value="edit"/>
+            <input type="hidden" name="draftId" value={d.id}/>
+            <input type="hidden" name="expectedDigest" value={editVersionMap.get(d.id) ?? ""}/>
+            <label>Title <input name="title" defaultValue={d.title} maxLength={160} required/></label>
+            <label>Excerpt (plain text) <textarea name="summary" rows={3} maxLength={500} defaultValue={d.summary} required/></label>
+            <label>Article HTML <textarea name="body" rows={14} maxLength={60000} defaultValue={d.body} required style={{fontFamily:"monospace"}}/></label>
+            <label>Tags (up to eight, comma-separated) <input name="tags" defaultValue={d.tags} maxLength={320}/></label>
+            <label>Primary topic/keyword <input name="keyword" defaultValue={d.keyword} maxLength={120}/></label>
+            <button type="submit" disabled={busy}>Save corrections (do not publish)</button>
+          </Form>
+        </details>}
         {reviewMap.has(d.id) && <p><strong>Editorial review:</strong> {reviewMap.get(d.id)?.decision === "usable"
           ? (reviewMap.get(d.id)?.current ? "Usable for current article" : "Outdated: review again before publishing")
           : "Rejected"} · {reviewMap.get(d.id)?.reviewMinutes ?? "No"} self-reported review minutes. This review does not publish.</p>}

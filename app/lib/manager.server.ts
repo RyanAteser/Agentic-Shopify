@@ -1,6 +1,6 @@
 import db from "../db.server";
-import { auditProductSeo, effectiveSeoTitle, isOnlineStoreSeoCandidate, type SeoProduct } from "./seo";
-import { parseShopifyProductSample } from "./shopify-product-sample";
+import { auditProductSeo, effectiveSeoTitle, type SeoProduct } from "./seo";
+import { parseShopifyProductSample, summarizeShopifySeoSample } from "./shopify-product-sample";
 import { buildBlogTasks, buildRankTasks, buildSeoTasks, rankingDropHasRecovered, type SuggestedTask } from "./manager";
 
 export async function readMerchantProductSample(admin:{graphql:Function}):Promise<{products:SeoProduct[];warning:string}> {
@@ -11,7 +11,8 @@ export async function readMerchantProductSample(admin:{graphql:Function}):Promis
       }
     }`);
     const json:any=await res.json();
-    return {products:parseShopifyProductSample(json).filter(isOnlineStoreSeoCandidate),warning:""};
+    const sample = summarizeShopifySeoSample(parseShopifyProductSample(json));
+    return {products:sample.eligibleProducts,warning:sample.warning};
   }catch(e){return {products:[],warning:"Catalog unavailable; product recommendations may be incomplete."};}
 }
 

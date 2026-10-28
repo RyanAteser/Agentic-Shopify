@@ -17,6 +17,12 @@ The recovered GitHub Actions run [40722675414](https://github.com/RyanAteser/Age
 
 The subsequent CI-only script `scripts/ci-container-smoke.sh` exercises the **actual production Docker image**, not just the Dockerfile: non-root execution, a temporary PostgreSQL container, committed PostgreSQL migrations executed from the image, HTTP `GET /health` returning 200 with the database available, and HTTP 503 after PostgreSQL stops. It uses inert Shopify configuration and local test-only credentials, with automatic Docker cleanup. The new smoke step must pass hosted CI before counting it as verified. It does not test merchant authentication, Google/n8n, a public HTTPS deployment, production secrets, backups, scale or rollback.
 
+## Human editorial approval integrity (2026-10-28)
+
+A usable review now stores a SHA-256 digest of the exact Shopify-bound article title, HTML body, excerpt, tags, destination blog ID and author name. Publication compares the digest **inside the same tenant-scoped database transaction** that claims the ready draft. A conditional status transition also checks those article fields so a concurrent edit cannot silently change the claimed payload. Changed content or destination, including a legacy review with no digest, blocks publication until the merchant explicitly reviews the current draft again. The Blog Agent exposes the outdated state and permits renewal; the Store Manager disables its publish control until the review is current.
+
+This is an application integrity control, **not proof that a human read the content**, source verification, cryptographic attestation of a reviewer, or protection against a privileged database writer changing the Shopify article after publication. Re-review updates the existing shop/draft decision row rather than inflating review counts. Reject decisions remain final. No automatic publishing, new Shopify scopes, buyer data, or external services are introduced. Migration `20261028170000_editorial_review_content_digest` defaults existing reviews to an empty digest and intentionally requires renewed approval. CI must validate SQLite, PostgreSQL migration/tests and the Docker smoke before this is considered verified.
+
 ## Hard go/no-go gates
 
 | Gate | Current status | Completion proof required |

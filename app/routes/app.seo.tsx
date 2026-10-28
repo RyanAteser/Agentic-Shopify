@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { auditProductSeo, isOnlineStoreSeoCandidate, type SeoProduct } from "../lib/seo";
+import { parseShopifyProductSample } from "../lib/shopify-product-sample";
 import { sameRankTarget } from "../lib/manager";
 
 export const loader=async ({request}:LoaderFunctionArgs) => {
@@ -26,13 +27,7 @@ export const loader=async ({request}:LoaderFunctionArgs) => {
         }
       }`);
     const result:any=await response.json();
-    if(result.errors?.length) throw new Error("Shopify denied the product catalog query");
-    products=(result.data?.products?.nodes??[]).map((p:any)=>({
-      id:String(p.id),title:String(p.title??""),
-      description:String(p.description??""),
-      url:typeof p.onlineStoreUrl==="string"?p.onlineStoreUrl:null,
-      seo:p.seo?{title:p.seo.title??null,description:p.seo.description??null}:null,
-    })).filter(isOnlineStoreSeoCandidate);
+    products=parseShopifyProductSample(result).filter(isOnlineStoreSeoCandidate);
   }catch(error){
     catalogError=error instanceof Error?error.message:"Could not inspect catalog";
   }

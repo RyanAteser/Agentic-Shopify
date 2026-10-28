@@ -6,7 +6,7 @@ import { buildBlogTasks, buildRankTasks, buildSeoTasks, rankingDropHasRecovered 
 import { readMerchantProductSample, syncManagerTasks, logStoreAction } from "../app/lib/manager.server";
 import { eraseMerchantData } from "../app/lib/merchant-redaction.server";
 import { publishApprovedArticle } from "../app/lib/publish.server";
-import { recordEditorialReview } from "../app/lib/editorial-review.server";
+import { recordEditorialReview } from "./helpers/editorial-review";
 
 test("manager audits only published Online Store products, not other-channel inventory",async()=>{
   const admin={graphql:async(query:string)=>{

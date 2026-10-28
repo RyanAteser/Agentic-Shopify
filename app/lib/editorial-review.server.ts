@@ -72,7 +72,9 @@ export async function recordEditorialReview(
         return {ok: false, message: "A review is already recorded for this draft."};
       }
       const claimed = await tx.articleDraft.updateMany({
-        where: {id: draftId, shop, status: draft.status},
+        where: {id: draftId, shop, status: draft.status,
+          title: draft.title, body: draft.body, summary: draft.summary,
+          tags: draft.tags, keyword: draft.keyword},
         data: decision === "rejected"
           ? {status: "rejected", reviewNotes: notes}
           : {updatedAt: new Date()}

@@ -11,7 +11,7 @@ import { publishApprovedArticle } from "../lib/publish.server";
 import { loadMerchantConfig, saveMerchantConfig } from "../lib/merchant-config.server";
 import { logStoreAction } from "../lib/manager.server";
 import { parseReviewMinutes, recordEditorialReview } from "../lib/editorial-review.server";
-import { hasCurrentUsableReview } from "../lib/editorial-review-integrity";
+import { hasCurrentUsableReview, reviewFormDigest } from "../lib/editorial-review-integrity";
 import { editorialEditDigest, saveMerchantDraftEdit } from "../lib/editorial-edit.server";
 
 function value(form: FormData, key: string, max = 500) {
@@ -48,7 +48,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       hasCurrentUsableReview(review, draftMap.get(review.draftId)!, config)
   }));
   const editVersions = drafts.map(draft => ({draftId: draft.id, digest: editorialEditDigest(draft)}));
-  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates, editVersions };
+  const reviewVersions = drafts.map(draft => ({draftId: draft.id, digest: reviewFormDigest(draft, config)}));
+  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates, editVersions, reviewVersions };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -118,7 +119,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
       return await recordEditorialReview(
         shop, id, decision, parseReviewMinutes(form.get("reviewMinutes")),
-        value(form, "feedback", 1000)
+        value(form, "expectedReviewDigest", 64), value(form, "feedback", 1000)
       );
     }
     if (intent === "publish") {
@@ -144,8 +145,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function BlogAgent() {
-  const { shop, blogs, config, drafts, jobs, reviews, editVersions } = useLoaderData<typeof loader>();
+  const { shop, blogs, config, drafts, jobs, reviews, editVersions, reviewVersions } = useLoaderData<typeof loader>();
   const editVersionMap = new Map(editVersions.map(version => [version.draftId, version.digest]));
+  const reviewVersionMap = new Map(reviewVersions.map(version => [version.draftId, version.digest]));
   const reviewMap = new Map(reviews.map(review => [review.draftId, review]));
   const result = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -213,6 +215,7 @@ export default function BlogAgent() {
           <input type="hidden" name="intent" value="review"/>
           <input type="hidden" name="decision" value="usable"/>
           <input type="hidden" name="draftId" value={d.id}/>
+          <input type="hidden" name="expectedReviewDigest" value={reviewVersionMap.get(d.id) ?? ""}/>
           <label>Review minutes (optional, self-reported) <input type="number" name="reviewMinutes" min={1} max={240} step={1} style={{width:85}}/></label>
           <label><input type="checkbox" name="reviewed" required/> I inspected the full draft and consider it usable as written</label>
           <button type="submit" disabled={busy}>Record usable review (do not publish)</button>
@@ -229,6 +232,7 @@ export default function BlogAgent() {
         {["ready", "needs_review"].includes(d.status) && !reviewMap.has(d.id) && <Form method="post" style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
           <input type="hidden" name="intent" value="reject"/>
           <input type="hidden" name="draftId" value={d.id}/>
+          <input type="hidden" name="expectedReviewDigest" value={reviewVersionMap.get(d.id) ?? ""}/>
           <input name="feedback" placeholder="Why is this draft unusable?" required maxLength={1000} style={{flex:1}}/>
           <label>Review minutes (optional) <input type="number" name="reviewMinutes" min={1} max={240} step={1} style={{width:85}}/></label>
           <button type="submit" disabled={busy}>Reject and teach agent</button>

@@ -26,3 +26,12 @@ Still required: authorized Shopify development-store browser test with two concu
 Record merchant-initiated `article.edit` actions (no draft text or URLs in the activity log) and existing voluntary review minutes. Compare **useful approved drafts / generated drafts**, **review minutes per usable draft**, **rejection reasons**, and **time to first reviewed draft** for a small consented pilot. Distinguish new vs returning merchants, track denominator and cohort dates, and do not infer causality from before/after observations. Do not call a score increase traffic or revenue growth. If usage is low or edits add more time than they save, prioritize reducing edit friction rather than more AI generation.
 
 **Sources:** [Shopify: adding and managing blog posts](https://help.shopify.com/en/manual/online-store/blogs/writing-blogs/working-with-blog-posts); [Shopify: rich text editor and HTML cautions](https://help.shopify.com/en/manual/shopify-admin/productivity-tools/rich-text-editor); [Google: helpful, reliable, people-first content](https://developers.google.com/search/docs/fundamentals/creating-helpful-content).
+
+
+## Stale review-form prevention (2026-10-28)
+
+A publication approval fingerprint alone does not prevent a second merchant editor from changing an article **between the first editor opening the review screen and submitting their decision**. Previously the server calculated a digest of the *new* draft at submission, potentially approving content the reviewer never saw. Rejections could likewise discard a corrected draft.
+
+The Blog Agent now supplies a versioned SHA-256 review-form fingerprint of the displayed title, body, excerpt, tags, editorial keyword, destination blog and author. The review service requires that exact fingerprint and recomputes it inside the merchant-locked transaction for **both usable and rejected decisions**. Missing, malformed, or stale versions fail closed with a refresh instruction; a new review must be explicitly submitted after inspecting the updated content. The fingerprint is a version check, not a signature, login credential or proof of actual human reading. This complements, rather than replaces, the existing publisher-side approval digest.
+
+Regression tests in `tests/editorial-review-stale.test.ts` cover missing versions, changed article bodies, changed blog/author, keyword-only changes, stale rejections, and successful explicit renewal. Production and PostgreSQL CI remain the verification gate; real concurrent browser sessions on a Shopify development store are still untested.

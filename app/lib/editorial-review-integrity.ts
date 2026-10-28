@@ -28,6 +28,17 @@ export function publicationReviewDigest(
     .digest("hex");
 }
 
+/** Version of the precise article, editorial keyword and destination displayed to a reviewer. */
+export function reviewFormDigest(
+  article: ReviewedArticleFields & { keyword: string }, destination: ReviewedDestination
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify([
+      "shopify-editorial-review-form-v1", publicationReviewDigest(article, destination), article.keyword
+    ]), "utf8")
+    .digest("hex");
+}
+
 export function hasCurrentUsableReview(
   review: ReviewEvidence | null | undefined,
   article: ReviewedArticleFields,

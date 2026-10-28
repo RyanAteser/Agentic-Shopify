@@ -11,7 +11,7 @@ test("SERP rank record retains source, country, device and observation time", ()
   assert.equal(a.position,4);
   assert.equal(a.source,"brightdata-serp");
   assert.equal(a.device,"mobile");
-  const b = parseRanking({...context,keyword:"running shoes",position:null,observedAt:"2026-10-24T11:00:00.000Z"},now);
+  const b = parseRanking({...context,keyword:"running shoes",position:null,targetUrl:"",observedAt:"2026-10-24T11:00:00.000Z"},now);
   assert.equal(b.position,null);
 });
 test("reject invalid ranks, unsafe URLs, and future observations", () => {
@@ -83,7 +83,7 @@ test("SERP target URLs must belong to Shopify's verified primary domain", () => 
   const found = parseRanking({...context,keyword:"boots",position:5,observedAt:now.toISOString(),
     targetUrl:"https://www.store.example/products/boots"},now);
   assert.doesNotThrow(() => assertRankingTargetsForPrimaryDomain([found], "www.store.example"));
-  const absent = parseRanking({...context,keyword:"boots",position:null,observedAt:now.toISOString()},now);
+  const absent = parseRanking({...context,keyword:"boots",position:null,targetUrl:"",observedAt:now.toISOString()},now);
   assert.doesNotThrow(() => assertRankingTargetsForPrimaryDomain([absent], "www.store.example"));
   for (const url of [
     "https://store.example/products/boots",

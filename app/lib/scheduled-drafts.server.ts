@@ -39,6 +39,21 @@ function scheduledTopic(config: DueDraftSnapshot): string {
   return topic.slice(0, 140);
 }
 
+/**
+ * Do not let permanently exhausted free plans monopolize the first ten due
+ * rows. Merchant UI still shows the exhausted quota; billing is not enabled.
+ */
+export async function findDueScheduledDrafts(now = new Date()) {
+  return db.storeConfig.findMany({
+    where: {
+      enabled: true, blogId: { not: "" },
+      freeDraftsUsed: { lt: FREE_LIFETIME_GENERATIONS },
+      OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }]
+    },
+    take: 10, orderBy: { updatedAt: "asc" }
+  });
+}
+
 export async function claimDueScheduledDraft(
   config: DueDraftSnapshot, now = new Date()
 ): Promise<ScheduledDraftClaim | null> {

@@ -63,10 +63,18 @@ export async function storeGoogleConnection(shop:string,property:string,refreshT
       where:{stateHash,shop,expiresAt:{gt:new Date()}}
     });
     if(claimed.count!==1)throw new Error("Google OAuth state expired or revoked during authorization");
+    // Re-consent starts a new measurement epoch. Lock the connection first,
+    // then erase prior observations under the same transaction. Otherwise
+    // reconnecting to an old property can display stale 28-day growth as new.
+    // This ordering matches the importer (connection lock -> metric rows).
+    const connectedAt=new Date();
     await tx.searchConsoleConnection.upsert({
-      where:{shop},create:{shop,property,encryptedRefresh,status:"active"},
-      update:{property,encryptedRefresh,status:"active",lastSyncedAt:null}
+      where:{shop},
+      create:{shop,property,encryptedRefresh,status:"active",connectedAt},
+      update:{property,encryptedRefresh,status:"active",connectedAt,
+        lastSyncedAt:null,lastSyncStartedAt:null}
     });
+    await tx.organicDailyMetric.deleteMany({where:{shop}});
   });
 }
 async function googleRefresh(refreshToken:string){

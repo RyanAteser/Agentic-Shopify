@@ -172,3 +172,38 @@ test("manager sync and delayed audit writes do not recreate redacted merchant da
    await eraseMerchantData(shop);
  }
 });
+
+test("partial product samples cannot falsely retire duplicate-title findings",async()=>{
+  const shop="seo-title-evidence-"+randomUUID()+".myshopify.com";
+  const a={id:"gid://shopify/Product/title-a",title:"Boots",description:"Useful description",
+    url:"https://store.example/products/a",seo:{title:"Same title",description:null}};
+  const b={...a,id:"gid://shopify/Product/title-b",url:"https://store.example/products/b"};
+  await db.storeConfig.create({data:{shop}});
+  try {
+    await syncManagerTasks(shop,[a,b]);
+    const initial=await db.storeRecommendation.findMany({where:{shop,kind:"seo_review"}});
+    assert.equal(initial.length,2,"both members of a duplicate group need review");
+    const aTask=initial.find(t=>t.targetId===a.id)!;
+    const bTask=initial.find(t=>t.targetId===b.id)!;
+    assert.equal(JSON.parse(aTask.evidence).observedTitle,"same title");
+    await syncManagerTasks(shop,[a]);
+    assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:aTask.id}})).status,"pending",
+      "a missing peer in a 50-item sample is not proof of remediation");
+    assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:bTask.id}})).status,"pending");
+    await syncManagerTasks(shop,[{...a,seo:{...a.seo,title:"A distinct title"}}]);
+    assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:aTask.id}})).status,"superseded",
+      "a changed effective title retires the specific old duplicate observation");
+    assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:bTask.id}})).status,"pending");
+    await syncManagerTasks(shop,[a,b]);
+    assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:aTask.id}})).status,"pending",
+      "recurring duplicate reopens only machine-superseded findings");
+    await db.storeRecommendation.update({where:{id:aTask.id},data:{status:"dismissed"}});
+    await syncManagerTasks(shop,[{...a,seo:{...a.seo,title:"Unique now"}}]);
+    assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:aTask.id}})).status,"dismissed",
+      "a merchant dismissal must not be rewritten by automated reconciliation");
+  }finally{
+    await db.storeActivity.deleteMany({where:{shop}});
+    await db.storeRecommendation.deleteMany({where:{shop}});
+    await db.storeConfig.deleteMany({where:{shop}});
+  }
+});

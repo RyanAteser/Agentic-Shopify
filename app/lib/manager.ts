@@ -30,7 +30,7 @@ export function buildSeoTasks(findings:SeoFinding[]):SuggestedTask[] {
     sourceKey:"seo:"+f.id, agent:"seo", kind:"seo_review", targetId:f.productId,
     title:f.productTitle+": "+f.kind.replace(/-/g," "),
     rationale:f.message+" Review this finding in Shopify; accepting it does not automatically edit your store.",
-    evidence:JSON.stringify({source:"shopify_product_catalog",url:f.url,kind:f.kind}),
+    evidence:JSON.stringify({source:"shopify_product_catalog",url:f.url,kind:f.kind,observedTitle:f.observedTitle}),
     priority:f.severity==="high"?85:60,
   }));
 }

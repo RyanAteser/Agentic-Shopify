@@ -123,3 +123,29 @@ test("duplicate same-market SERP snapshots are rejected before last-write-wins u
     base, {...base,device:"mobile"}, {...base,observedAt:new Date(now.getTime()-60_000)}
   ]));
 });
+
+test("Shopify blank custom titles fall back to product names; Google has no 70-character limit", () => {
+  const products = [
+    {id:"blank",title:"A useful product name",url:"https://shop.example/a",
+      description:"Useful product description",seo:{title:"   ",description:null}},
+    {id:"long",title:"A ".repeat(55).trim(),url:"https://shop.example/long",
+      description:"Useful product description",seo:{title:null,description:null}}
+  ];
+  assert.deepEqual(auditProductSeo(products),[],
+    "a blank SEO override and a long title do not prove missing metadata or a ranking penalty");
+});
+
+test("duplicate effective SEO titles flag every sampled product independent of order", () => {
+  const products = [
+    {id:"a",title:"Boots",url:"https://shop.example/a",description:"Details",seo:{title:"Leather  Boots",description:null}},
+    {id:"b",title:"Different",url:"https://shop.example/b",description:"Details",seo:{title:" leather boots ",description:null}},
+    {id:"c",title:"LEATHER BOOTS",url:"https://shop.example/c",description:"Details",seo:{title:null,description:null}},
+    {id:"d",title:"Unique",url:"https://shop.example/d",description:"Details",seo:{title:null,description:null}}
+  ];
+  for (const sample of [products,[...products].reverse()]) {
+    const findings=auditProductSeo(sample).filter(f=>f.kind==="duplicate-title");
+    assert.deepEqual(findings.map(f=>f.productId).sort(),["a","b","c"]);
+    assert.ok(findings.every(f=>f.observedTitle==="leather boots"));
+    assert.ok(findings.every(f=>f.message.includes("sampled")));
+  }
+});

@@ -80,12 +80,16 @@ export function assertUniqueRankingObservations(records: SeoRanking[]): void {
 }
 
 export type SeoProduct = {id:string;title:string;url:string|null;seo:{title:string|null;description:string|null}|null;description:string};
-export type SeoFinding = {id:string;productId:string;productTitle:string;url:string;kind:string;message:string;severity:"high"|"medium"};
+export type SeoFinding = {id:string;productId:string;productTitle:string;url:string;kind:string;message:string;severity:"high"|"medium";observedTitle?:string};
+/** Shopify falls back to the product title when the custom SEO title is blank. */
+export function effectiveSeoTitle(product: SeoProduct): string {
+  return (product.seo?.title?.trim() || product.title.trim()).replace(/\s+/g, " ");
+}
 export function auditProductSeo(products: SeoProduct[]): SeoFinding[] {
   const findings: SeoFinding[]=[];
-  const titleMap=new Map<string,string>();
+  const titleGroups=new Map<string,SeoProduct[]>();
   for (const product of products) {
-    const title=(product.seo?.title || product.title || "").trim();
+    const title=effectiveSeoTitle(product);
     const description=(product.seo?.description || "").trim();
     const url=product.url || "";
     const add=(kind:string,message:string,severity:"high"|"medium") =>
@@ -99,12 +103,25 @@ export function auditProductSeo(products: SeoProduct[]): SeoFinding[] {
       // snippet-length limit and may use on-page text instead of this field.
       add("long-description","Custom SEO description exceeds Shopify's 320-character preview guidance. Review clarity and storefront rendering; Google snippets vary by query and device.","medium");
     }
-    if (title.length > 70) add("long-title","Title exceeds 70 characters; inspect readability and possible SERP truncation.","medium");
+    // Google has no fixed title-length limit; truncation depends on device width.
+    // Avoid inventing a ranking penalty or a 70-character cutoff.
     if (!title) add("missing-title","Missing meaningful product title.","high");
     else {
-      const other=titleMap.get(title.toLowerCase());
-      if (other && other !== product.id) add("duplicate-title","Another sampled product uses an identical SEO title.","high");
-      else titleMap.set(title.toLowerCase(),product.id);
+      const key=title.toLocaleLowerCase("en-US");
+      titleGroups.set(key,[...(titleGroups.get(key)||[]),product]);
+    }
+  }
+  // A duplicate is a property of every member of the observed group, not just
+  // whichever product happened to appear second in Shopify's 50-item sample.
+  for (const [normalizedTitle,group] of titleGroups) {
+    if (group.length<2) continue;
+    for (const product of group) {
+      findings.push({
+        id:product.id+":duplicate-title",productId:product.id,productTitle:product.title,
+        url:product.url||"",kind:"duplicate-title",severity:"high",
+        observedTitle:normalizedTitle,
+        message:"Multiple sampled products use the same effective SEO title. Check whether their rendered, indexable pages need more distinct titles."
+      });
     }
   }
   return findings;

@@ -1,5 +1,5 @@
 import db from "../db.server";
-import { auditProductSeo, type SeoProduct } from "./seo";
+import { auditProductSeo, effectiveSeoTitle, type SeoProduct } from "./seo";
 import { buildBlogTasks, buildRankTasks, buildSeoTasks, type SuggestedTask } from "./manager";
 
 export async function readMerchantProductSample(admin:{graphql:Function}):Promise<{products:SeoProduct[];warning:string}> {
@@ -53,8 +53,10 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[]) {
       // Only machine-superseded metadata findings can reopen when the same
       // product is sampled again. Never undo a merchant's manual decision.
       if (task.kind === "seo_review") {
+        // Refresh evidence for still-pending tasks without changing merchant
+        // approvals/dismissals. A superseded finding may recur.
         await tx.storeRecommendation.updateMany({
-          where:{shop,sourceKey:task.sourceKey,status:"superseded"},
+          where:{shop,sourceKey:task.sourceKey,status:{in:["pending","superseded"]}},
           data:{status:"pending",decidedAt:null,title:task.title,
             rationale:task.rationale,evidence:task.evidence,priority:task.priority}
         });
@@ -63,16 +65,26 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[]) {
     // The catalog is only a sample (up to 50 products). A finding can be
     // retired only if that exact product was inspected on this sync; missing
     // products and failed/empty API reads are NOT evidence of remediation.
-    const sampledProductIds = new Set(products.map(product => product.id));
-    if (sampledProductIds.size) {
+    const sampledProducts = new Map(products.map(product => [product.id,product]));
+    if (sampledProducts.size) {
       const currentSeoKeys = new Set(seoFindings.map(finding => "seo:" + finding.id));
       const pendingSeo = await tx.storeRecommendation.findMany({
         where:{shop,kind:"seo_review",status:"pending",
-          targetId:{in:[...sampledProductIds]}},
-        select:{id:true,sourceKey:true}
+          targetId:{in:[...sampledProducts.keys()]}},
+        select:{id:true,sourceKey:true,targetId:true,evidence:true}
       });
       for (const old of pendingSeo) {
         if (currentSeoKeys.has(old.sourceKey)) continue;
+        if (old.sourceKey.endsWith(":duplicate-title")) {
+          // Absence of a peer in a 50-product sample does NOT establish that
+          // duplicate titles were fixed. Only a change to this product's
+          // previously observed effective title can retire that specific alert.
+          let priorTitle:unknown;
+          try { priorTitle=JSON.parse(old.evidence).observedTitle; } catch { /* legacy evidence */ }
+          const current=sampledProducts.get(old.targetId);
+          if (typeof priorTitle!=="string" || !current ||
+              effectiveSeoTitle(current).toLocaleLowerCase("en-US")===priorTitle) continue;
+        }
         await tx.storeRecommendation.updateMany({
           where:{id:old.id,shop,status:"pending"},
           data:{status:"superseded",decidedAt:new Date()}

@@ -4,7 +4,7 @@ import {randomUUID} from "node:crypto";
 import db from "../app/db.server";
 import {editorialEditDigest, saveMerchantDraftEdit} from "../app/lib/editorial-edit.server";
 import {recordEditorialReview} from "./helpers/editorial-review";
-import {publishApprovedArticle} from "../app/lib/publish.server";
+import { publishFromCurrentForm } from "./helpers/publish";
 
 const original = {
   title: "How to choose the right product for your needs",
@@ -58,7 +58,7 @@ test("merchant correction is sanitized, rescored, unpublished and requires renew
     assert.equal(review.contentDigest,"");
     let published=0;
     const admin={graphql:async()=>{published++;throw Error("must not publish");}};
-    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,false);
+    assert.equal((await publishFromCurrentForm(shop,draftId,admin)).ok,false);
     assert.equal(published,0);
     assert.equal((await recordEditorialReview(shop,draftId,"usable",5)).ok,true);
     assert.notEqual((await db.editorialReview.findUniqueOrThrow({where:{shop_draftId:{shop,draftId}}})).contentDigest,"");

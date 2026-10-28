@@ -228,7 +228,7 @@ export default function BlogAgent() {
           <input type="hidden" name="intent" value="publish"/>
           <input type="hidden" name="draftId" value={d.id}/>
           <input type="hidden" name="expectedPublishDigest" value={publishVersionMap.get(d.id) ?? ""}/>
-          <p><strong>Publish destination:</strong> {blogs.find(b => b.id === config.blogId)?.title ?? config.blogId} ({config.blogId}) · <strong>Author:</strong> {config.authorName}</p>
+          <p><strong>Publish destination:</strong> {blogs.find((b: {id:string;title:string}) => b.id === config.blogId)?.title ?? config.blogId} ({config.blogId}) · <strong>Author:</strong> {config.authorName}</p>
           <p><strong>Tags:</strong> {d.tags || "None"} · <strong>Excerpt:</strong> {d.summary}</p>
           <details><summary>Inspect exact article HTML before publishing</summary>
             <div style={{padding:10,border:"1px solid #ddd",maxHeight:400,overflow:"auto"}} dangerouslySetInnerHTML={{__html:d.body}}/>

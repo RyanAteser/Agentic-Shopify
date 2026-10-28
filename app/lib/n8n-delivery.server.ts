@@ -47,6 +47,53 @@ async function preserveUncertainOutcome(record: () => Promise<void>): Promise<ne
 }
 
 /**
+ * An HTTP success code alone is not proof that the intended n8n execution
+ * accepted THIS job. The pinned workflow must echo both tenant and job ID
+ * from its authenticated webhook, before any paid generation step.
+ * The bounded body read prevents an unexpectedly large proxy response from
+ * becoming a memory hazard. This is an acceptance signal, NOT a durable
+ * n8n execution record or exactly-once guarantee.
+ */
+async function hasMatchingN8nAck(response: Response, shop: string, jobId: string): Promise<boolean> {
+  if (response.status !== 202 ||
+      !/^application\/json(?:\s*;|\s*$)/i.test(response.headers.get("content-type") ?? "")) {
+    return false;
+  }
+  const declared = response.headers.get("content-length");
+  if (declared !== null && Number(declared) > 2048) return false;
+  if (!response.body) return false;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > 2048) {
+        await reader.cancel().catch(() => undefined);
+        return false;
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    const ack: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    if (!ack || typeof ack !== "object" || Array.isArray(ack)) return false;
+    const value = ack as Record<string, unknown>;
+    return value.accepted === true && value.jobId === jobId && value.shop === shop;
+  } catch {
+    return false;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
  * Send one ALREADY CLAIMED job. No automatic retry, no redirects, no
  * refund. The caller handles only definitively rejected requests.
  * Kept separate from Shopify product discovery for transport fault tests.
@@ -77,5 +124,11 @@ export async function deliverClaimedN8nJob(
   if (outcome === "rejected") {
     // Only a caller with a definitive rejection may invoke failCreditedJob.
     throw new Error("n8n rejected generation request (HTTP " + response.status + ")");
+  }
+  // 2xx without a matching 202 job-specific acknowledgment is ambiguous,
+  // not an accepted generation. Never refund or send the same job again.
+  if (!(await hasMatchingN8nAck(response, shop, jobId))) {
+    return preserveUncertainOutcome(() => recordUncertain(shop, jobId,
+      "n8n response lacked matching job acceptance acknowledgment; reconcile execution"));
   }
 }

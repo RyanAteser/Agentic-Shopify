@@ -156,7 +156,11 @@ test("corrupt scheduled metadata blocks dispatch and preserves evidence for an o
     const result = await recoverQueuedJobs(now, async () => { sends++; });
     assert.equal(result.blocked, 1);
     assert.equal(sends, 0);
-    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: job.id } })).status, "queued");
+    const quarantined = await db.contentJob.findUniqueOrThrow({ where: { id: job.id } });
+    assert.equal(quarantined.status, "queued");
+    assert.equal(quarantined.outboxVersion, 0, "malformed snapshot cannot starve later jobs");
+    assert.match(quarantined.error ?? "", /quarantined/);
+    assert.equal((await recoverQueuedJobs(now, async () => { sends++; })).candidates, 0);
   });
 });
 

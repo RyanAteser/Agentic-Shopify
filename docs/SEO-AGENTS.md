@@ -54,6 +54,14 @@ The ingestion endpoint:
 - Bright Data ranks are point-in-time sampled organic placements; Google Search Console aggregated average position/clicks/impressions remain **separate source types**.
 - The manager only flags a page-level ranking drop when the two most recent distinct observations for the same keyword, engine, country and device also have the same nonempty HTTPS target URL (ignoring URL fragments). A changed or missing result URL is **not** proof of a page-level loss; the dashboard abstains from displaying a cross-page delta. The importer now attests the primary domain using Shopify, but other verified Markets domains and tenant-specific connector authorization remain production gates.
 
+## Read-only Bright Data preview: request-context integrity (2026-10-28)
+
+The standalone `normalizeBrightDataOrganicGoogle` adapter and `scripts/brightdata-organic-preview.ts` now require `requestUrl` in the local context JSON, **copied from the actual Google search URL submitted to Bright Data**, not reconstructed from a merchant profile. For example, a hypothetical English-language US desktop request could use `https://www.google.com/search?q=leather+boots&gl=us&hl=en&brd_json=1&start=0&pws=0`. This is a **format illustration**, not a live search or measured ranking.
+
+The adapter verifies that the request's query, `gl` country and `brd_mobile` device match the claimed context. Because the current ranking schema does not store language, search vertical or SERP page, it deliberately supports only `hl=en`, the first standard Google web-results page (`start=0` or omitted), `brd_json=1`, and the standard desktop or `brd_mobile=1` mobile mode. It rejects unknown URL parameters, unsupported locales, personalized `pws=1`, extra search dimensions and duplicate parameters rather than merging incomparable observations. This is **not** a restriction on the existing ingestion endpoint, which is unchanged and still requires separate provenance verification.
+
+Bright Data's [parsed-response example](https://github.com/brightdata/skills/blob/main/skills/bright-data-best-practices/references/serp-api.md) does **not** promise `general.gl` in the response, so a missing country echo is not by itself a validation failure when the original request URL supplies `gl`. The request URL is caller-supplied evidence and can itself be forged; this check does **not** authenticate Bright Data, prove a scrape occurred, or establish result completeness. An authenticated request/response export with job identity, locale and capture time remains a production gate. Non-English or later-page monitoring requires extending the persisted comparison dimensions before import.
+
 ## New merchant-facing pages
 - `/app/team`: 10 specialist agents, statuses and safe action boundaries.
 - `/app/seo`: initial active Online Store product metadata audit (up to 100 products across two pages) + imported rank snapshots.

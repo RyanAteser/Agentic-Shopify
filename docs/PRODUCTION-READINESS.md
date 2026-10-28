@@ -379,3 +379,51 @@ These checks do not prove real OAuth persistence, webhook delivery, or
 Shopify SDK behavior with expired offline tokens. A development-store
 install, idle-token expiry, uninstall, webhook HMAC and redaction test is still
 required before launch. No live merchant stores or content were touched.
+
+## Search Console fail-closed response and permission checks (2026-10-27)
+
+Google's Search Analytics API can omit `rows` entirely when no data exists;
+that is distinct from a malformed explicit `rows: null`, `false`, `0`, or `""`.
+Previously the importer used `result.rows || []`, silently converting these
+malformed HTTP 200 responses into a valid empty snapshot and deleting the
+shop's previously verified observations for the 56-day import window.
+The importer now accepts only a genuinely omitted `rows` field or an array;
+malformed values fail before the consent-fenced database transaction and
+preserve existing observations. A verified empty array or omitted field can
+still clear stale dates within the requested shop/property/date window.
+
+The Google property selector now accepts only documented verified permission
+levels (`siteOwner`, `siteFullUser`, `siteRestrictedUser`). Missing, unknown,
+and `siteUnverifiedUser` levels are rejected rather than treated as verified.
+Regression tests reproduce both original defects and check recovery, tenant
+isolation, and preservation of historical observations.
+
+Primary references:
+https://developers.google.com/webmaster-tools/v1/searchanalytics/query
+https://developers.google.com/webmaster-tools/v1/sites
+
+**Remaining gate:** These are mocked Google HTTP responses and local database
+tests, not real Google consent, Search Console access, or merchant growth.
+Validate an authorized Google property and live Shopify primary domain before
+using this scorecard for merchant decisions. Hosted CI and PostgreSQL tests
+must pass on the final commit before production readiness can be asserted.
+
+## Hosted CI account-level blocker (confirmed 2026-10-27)
+
+GitHub Actions run
+[40635528606](https://github.com/RyanAteser/Agentic-Shopify/actions/runs/40635528606)
+reported **zero billed runner milliseconds** for all three jobs. The `test`
+check-run annotation explicitly states: *"The job was not started because
+recent account payments have failed or your spending limit needs to be
+increased."* The accompanying Ubuntu runner-image migration notice is not
+the failure reason. This is a runner-dispatch/billing entitlement block, **not
+a failing test or Docker build**. The account's actual billing state cannot
+be inferred from the annotation alone.
+
+The repository owner must inspect the personal account's **Settings → Billing
+& plans** for failed/pending payments, included Actions minutes, and Actions
+spending limits; if these are healthy, contact GitHub Support with the run URL
+and exact annotation. Do not change billing/spending limits without explicit
+approval. Once GitHub restores runner eligibility, rerun all three jobs and
+require green SQLite, PostgreSQL, and Docker checks on the latest PR head.
+GitHub reference: https://docs.github.com/en/actions/concepts/billing-and-usage

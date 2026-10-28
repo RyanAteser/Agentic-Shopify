@@ -155,6 +155,9 @@ test("GSC verification selects only an exact HTTPS storefront URL-prefix",async(
     return Response.json({siteEntry:[
       {siteUrl:"sc-domain:example.com",permissionLevel:"siteOwner"},
       {siteUrl:"https://other.example.com/",permissionLevel:"siteOwner"},
+      {siteUrl:"https://store.example.com/",permissionLevel:"siteUnverifiedUser"},
+      {siteUrl:"https://store.example.com/",permissionLevel:"siteUnknown"},
+      {siteUrl:"https://store.example.com/"},
       ...(includeExact?[{siteUrl:"https://store.example.com/",permissionLevel:"siteRestrictedUser"}]:[])
     ]});
   };
@@ -205,13 +208,14 @@ test("GSC snapshots retire omitted dates without touching other shops or histori
   const otherShop="neighbor-"+randomUUID()+".myshopify.com";
   const property="https://example.test/";
   const day=(date:string)=>({keys:[date],clicks:5,impressions:50,ctr:0.1,position:8});
-  let rows=[day("2026-10-01"),day("2026-10-02")];
+  let rows:unknown=[day("2026-10-01"),day("2026-10-02")];
   let aggregationType="byProperty";
   globalThis.fetch=async input=>{
     const url=typeof input==="string"?input:input instanceof URL?input.href:input.url;
     if(url==="https://oauth2.googleapis.com/token")return Response.json({access_token:"snapshot-access"});
     if(url.includes("/searchAnalytics/query"))return Response.json({
-      responseAggregationType:aggregationType,rows
+      responseAggregationType:aggregationType,
+      ...(rows===undefined?{}:{rows})
     });
     throw new Error("Unexpected Google request: "+url);
   };
@@ -240,17 +244,29 @@ test("GSC snapshots retire omitted dates without touching other shops or histori
     assert.equal(await db.organicDailyMetric.count({where:{shop,date:currentDates}}),1);
     aggregationType="byProperty";
 
+    // A malformed HTTP 200 response must never be interpreted as an empty
+    // snapshot and erase the last verified merchant observation.
+    for(const malformed of [null,false,0,""]){
+      rows=malformed;
+      await assert.rejects(run(3),/Google Search Console rows array/);
+      assert.equal(await db.organicDailyMetric.count({where:{shop,date:currentDates}}),1);
+    }
+
     // A legitimate zero-row response removes all stale dates in the window,
     // but not older history or an unrelated tenant's same-property data.
     rows=[];
-    assert.equal((await run(3)).rows,0);
+    assert.equal((await run(4)).rows,0);
+    assert.equal(await db.organicDailyMetric.count({where:{shop,date:currentDates}}),0);
+    // Google also legitimately omits the `rows` property for zero results.
+    rows=undefined;
+    assert.equal((await run(5)).rows,0);
     assert.equal(await db.organicDailyMetric.count({where:{shop,date:currentDates}}),0);
     assert.equal(await db.organicDailyMetric.count({where:{shop,date:"2026-08-01"}}),1);
     assert.equal(await db.organicDailyMetric.count({where:{shop:otherShop}}),1);
 
     // A date returned on a subsequent sync is restored normally.
     rows=[day("2026-10-02")];
-    assert.equal((await run(4)).rows,1);
+    assert.equal((await run(6)).rows,1);
     assert.equal(await db.organicDailyMetric.count({where:{shop,date:currentDates}}),1);
   }finally{
     globalThis.fetch=originalFetch;

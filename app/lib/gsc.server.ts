@@ -45,7 +45,9 @@ export async function googleExchangeCode(code:string){
 export async function verifyGoogleSite(accessToken:string,primaryHost:string) {
   const result=await googleFetch(GSC_BASE+"/sites",{headers:{Authorization:"Bearer "+accessToken}});
   const options=(Array.isArray(result.siteEntry)?result.siteEntry:[])
-    .filter((x:any)=>x?.permissionLevel!=="siteUnverifiedUser"&&
+    // Fail closed: unknown/missing permission values are not evidence of
+    // verified access. Google documents exactly three verified access levels.
+    .filter((x:any)=>["siteOwner","siteFullUser","siteRestrictedUser"].includes(x?.permissionLevel)&&
       typeof x.siteUrl==="string"&&matchesPrimaryDomain(x.siteUrl,primaryHost));
   if(!options.length)throw new Error("Add a verified HTTPS URL-prefix Search Console property for your exact Shopify primary host. Domain properties include other hosts and cannot support this storefront-only scorecard.");
   return String(options[0].siteUrl);
@@ -104,7 +106,10 @@ export async function syncOrganicMetrics(shop:string,now=new Date()){
     // A successful HTTP response is not proof of the requested metric scope.
     // Refuse page-aggregated or malformed data rather than misleading merchants.
     assertPropertyAggregation(result.responseAggregationType);
-    const rows=parseSearchConsoleRows(result.rows||[],startDate,endDate);
+    // Google may omit `rows` when no data exists. Explicit null, false, zero
+    // or empty string are malformed, not a valid empty snapshot. `|| []`
+    // would silently erase prior observations during snapshot reconciliation.
+    const rows=parseSearchConsoleRows(result.rows===undefined?[]:result.rows,startDate,endDate);
     await db.$transaction(async tx=>{
       // Revalidate consent and the exact lease before writing any observations.
       // This conditional UPDATE locks the connection row until commit on PostgreSQL.

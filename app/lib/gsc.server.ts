@@ -119,6 +119,18 @@ export async function syncOrganicMetrics(shop:string,now=new Date()){
         data:{lastSyncedAt:now,lastSyncStartedAt:null}
       });
       if(active.count!==1)throw new Error("Search Console consent or sync lease changed during import");
+      // A later successful Google snapshot may omit a previously reported date.
+      // Keeping the old observation would falsely satisfy the 28-day coverage
+      // gate and combine measurements from different snapshots. Reconcile only
+      // this shop, property, and requested date range, inside the consent lock.
+      const observedDates=rows.map(row=>row.date);
+      await tx.organicDailyMetric.deleteMany({
+        where:{
+          shop,property:connection.property,
+          date:{gte:startDate,lte:endDate,
+            ...(observedDates.length?{notIn:observedDates}:{})}
+        }
+      });
       for(const row of rows){
         await tx.organicDailyMetric.upsert({
           where:{shop_property_date:{shop,property:connection.property,date:row.date}},

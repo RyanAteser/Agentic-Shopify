@@ -26,7 +26,7 @@ export async function readMerchantProductSample(admin:{graphql:Function}):Promis
  * the same transaction. Never create orphaned recommendations for a deleted
  * shop. Keep external Shopify calls outside this transaction.
  */
-export async function syncManagerTasks(shop:string, products:SeoProduct[]) {
+export async function syncManagerTasks(shop:string, products:SeoProduct[], now=new Date()) {
   return db.$transaction(async tx => {
     const active=await tx.storeConfig.updateMany({
       where:{shop},data:{updatedAt:new Date()}
@@ -40,7 +40,7 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[]) {
     const seoFindings = auditProductSeo(products);
     const seoTasks = buildSeoTasks(seoFindings);
     const tasks:SuggestedTask[]=[
-      ...buildBlogTasks(drafts),...seoTasks,...buildRankTasks(ranks)
+      ...buildBlogTasks(drafts),...seoTasks,...buildRankTasks(ranks,now)
     ];
     // Insert only; reviewed/dismissed recommendations never reopen on refresh.
     // Unique(shop,sourceKey) makes concurrent page loads idempotent.
@@ -101,7 +101,7 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[]) {
       select:{id:true,sourceKey:true,evidence:true}
     });
     for(const old of pendingRank){
-      if(!rankingDropHasRecovered(old.sourceKey,old.evidence,ranks))continue;
+      if(!rankingDropHasRecovered(old.sourceKey,old.evidence,ranks,now))continue;
       await tx.storeRecommendation.updateMany({
         where:{id:old.id,shop,status:"pending"},
         data:{status:"superseded",decidedAt:new Date()}

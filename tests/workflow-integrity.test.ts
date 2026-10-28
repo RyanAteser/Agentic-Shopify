@@ -22,6 +22,35 @@ test("writer workflow references only existing nodes and starts inactive", () =>
   assert.doesNotMatch(raw, /sk-proj-[a-zA-Z0-9]{12,}/);
   assert.doesNotMatch(raw, /shpat_[a-zA-Z0-9]{12,}/);
 });
+test("writer returns a job-and-tenant-scoped 202 before paid generation, not a generic HTTP 200", () => {
+  const workflow = load("n8n/shopify-blog-writer.json") as Workflow & {
+    nodes: Array<NodeShape & { parameters: Record<string, unknown> }>
+  };
+  const find = (name: string) => {
+    const node = workflow.nodes.find(n => n.name === name);
+    assert.ok(node, "Missing node " + name);
+    return node;
+  };
+  assert.equal(find("Receive Draft Request").parameters.responseMode, "responseNode");
+  const ack = find("Acknowledge Job Acceptance");
+  assert.equal(ack.type, "n8n-nodes-base.respondToWebhook");
+  assert.equal(ack.parameters.respondWith, "json");
+  assert.equal((ack.parameters.options as { responseCode: number }).responseCode, 202);
+  assert.equal(workflow.connections["Prepare Brief"].main[0][0].node, ack.name);
+  assert.equal(workflow.connections[ack.name].main[0][0].node, "Draft Article");
+  const expression = ack.parameters.responseBody;
+  assert.equal(typeof expression, "string");
+  assert.ok((expression as string).startsWith("={{ ") && (expression as string).endsWith(" }}"));
+  const code = (expression as string).slice(3, -3);
+  const result = runInNewContext(code, {
+    $json: { jobId: "job-123", shop: "example.myshopify.com" }
+  }) as string;
+  assert.deepEqual(JSON.parse(result), {
+    accepted: true, jobId: "job-123", shop: "example.myshopify.com"
+  });
+  assert.equal(workflow.active, false, "No workflow activation permitted in development");
+});
+
 test("hourly scheduler is inert until configured", () => {
   const workflow = load("n8n/shopify-blog-scheduler.json");
   assert.equal(workflow.active, false);

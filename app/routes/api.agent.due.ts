@@ -1,44 +1,52 @@
 import type { ActionFunctionArgs } from "react-router";
 import db from "../db.server";
 import { authorizedBridge, dispatchArticleJob, UncertainDispatchError } from "../lib/agent.server";
-import { createCreditedJob, failCreditedJob } from "../lib/credits.server";
 import { DispatchAlreadyClaimedError } from "../lib/dispatch-claim.server";
+import { FREE_LIFETIME_GENERATIONS } from "../lib/pricing";
+import { claimDueScheduledDraft, failScheduledDraft } from "../lib/scheduled-drafts.server";
 
-// Called hourly by an authenticated n8n Schedule Trigger.
-// Lock each due row by comparing its existing nextRunAt before advancing it.
+/**
+ * Hourly, authenticated n8n trigger. The due slot, free credit and ContentJob
+ * are committed atomically, not advanced before a separate credit reservation.
+ * Failed/expired free plans cannot occupy all ten selected slots indefinitely.
+ * This endpoint only creates drafts; it never publishes Shopify content.
+ */
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (!authorizedBridge(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
   const now = new Date();
   const configs = await db.storeConfig.findMany({
-    where: { enabled: true, blogId: { not: "" }, OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }] },
+    where: {
+      enabled: true, blogId: { not: "" },
+      freeDraftsUsed: { lt: FREE_LIFETIME_GENERATIONS },
+      OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }]
+    },
     take: 10, orderBy: { updatedAt: "asc" },
   });
-  let launched = 0;
+  let launched = 0, failed = 0;
   for (const config of configs) {
-    const cadence = Math.max(1, Math.min(30, config.cadenceDays));
-    const next = new Date(now.getTime() + cadence * 86400000);
-    const claimed = await db.storeConfig.updateMany({
-      where: { shop: config.shop, enabled: true, nextRunAt: config.nextRunAt },
-      data: { nextRunAt: next, topicCursor: { increment: 1 } },
-    });
-    if (!claimed.count) continue;
-    const topics = config.seedTopics.split(",").map(t => t.trim()).filter(Boolean);
-    const topic = topics.length
-      ? topics[config.topicCursor % topics.length]
-      : "Helpful practical guide for " + (config.audience || "our customers");
-    let job;
-    try { job = await createCreditedJob(config.shop, topic.slice(0, 140)); }
-    catch { continue; }
     try {
-      await dispatchArticleJob(job.id, config.shop);
-      launched++;
-    } catch (error) {
-      if (!(error instanceof UncertainDispatchError) && !(error instanceof DispatchAlreadyClaimedError)) {
-        await failCreditedJob(config.shop, job.id, error);
+      const claim = await claimDueScheduledDraft(config, now);
+      if (!claim) continue; // Lost a concurrent claim or merchant changed settings.
+      try {
+        await dispatchArticleJob(claim.jobId, config.shop);
+        launched++;
+      } catch (error) {
+        // A lost HTTP response is NOT proof of rejection. Do not rewind the
+        // schedule, refund, or retry an uncertain dispatch.
+        if (!(error instanceof UncertainDispatchError) &&
+            !(error instanceof DispatchAlreadyClaimedError)) {
+          await failScheduledDraft(claim, error);
+        }
+        failed++;
+        console.error("Scheduled draft delivery failed for", config.shop,
+          error instanceof Error ? error.name : "unknown");
       }
-      console.error("Scheduled blog dispatch failed for", config.shop);
+    } catch (error) {
+      failed++;
+      console.error("Scheduled draft reservation failed for", config.shop,
+        error instanceof Error ? error.name : "unknown");
     }
   }
-  return Response.json({ dueStores: configs.length, launched });
+  return Response.json({ dueStores: configs.length, launched, failed });
 };

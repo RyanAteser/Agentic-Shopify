@@ -4,7 +4,8 @@ import { normalizeBrightDataOrganicGoogle } from "../app/lib/brightdata-organic"
 
 const now = new Date("2026-10-28T12:00:00.000Z");
 const context = {keyword: "Leather boots", country: "US", device: "desktop" as const,
-  observedAt: "2026-10-28T11:55:00.000Z", primaryHost: "shop.example"};
+  observedAt: "2026-10-28T11:55:00.000Z", primaryHost: "shop.example",
+  requestUrl: "https://www.google.com/search?q=Leather+boots&gl=us&hl=en&brd_json=1&start=0&pws=0"};
 const sample = {
   general: {search_engine: "google", query: "Leather boots", device: "desktop", gl: "us"},
   organic: [
@@ -57,4 +58,38 @@ test("timestamp and market fields still pass the canonical ranking validator", (
   assert.throws(() => normalizeBrightDataOrganicGoogle(sample, {...context, observedAt: "tomorrow"}, now));
   assert.throws(() => normalizeBrightDataOrganicGoogle(sample, {...context, country: "ZZZ"}, now));
   assert.throws(() => normalizeBrightDataOrganicGoogle(sample, {...context, observedAt: "2026-10-28T12:10:00Z"}, now));
+});
+
+test("request URL attests market even when Bright Data response omits general.gl", () => {
+  const noCountryEcho = {...sample, general: {
+    search_engine: "google", query: "Leather boots", device: "desktop"
+  }};
+  assert.equal(normalizeBrightDataOrganicGoogle(noCountryEcho, context, now)[0].position, 3);
+  const mobile = {...context, device: "mobile" as const,
+    requestUrl: context.requestUrl + "&brd_mobile=1"};
+  const mobileSample = {...noCountryEcho, general: {...noCountryEcho.general, device: "mobile"}};
+  assert.equal(normalizeBrightDataOrganicGoogle(mobileSample, mobile, now)[0].position, 3);
+});
+
+test("mislabeled or unsupported Google request dimensions fail closed", () => {
+  const invalid = [
+    "",
+    context.requestUrl.replace("gl=us", "gl=ca"),
+    context.requestUrl + "&gl=us",
+    context.requestUrl + "&tbm=nws",
+    context.requestUrl + "&uule=somewhere",
+    context.requestUrl.replace("hl=en", "hl=es"),
+    context.requestUrl.replace("start=0", "start=10"),
+    context.requestUrl.replace("www.google.com", "www.google.com.attacker.test"),
+    context.requestUrl.replace("brd_json=1", "brd_json=0"),
+    context.requestUrl + "&brd_mobile=1",
+    context.requestUrl.replace("q=Leather+boots", "q=Leather+shoes"),
+    context.requestUrl.replace("pws=0", "pws=1"),
+  ];
+  for (const requestUrl of invalid) {
+    assert.throws(() => normalizeBrightDataOrganicGoogle(sample, {...context, requestUrl}, now),
+      /Bright Data|Unsupported/);
+  }
+  assert.throws(() => normalizeBrightDataOrganicGoogle(sample,
+    {...context, device: "mobile"}, now), /Bright Data/);
 });

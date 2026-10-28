@@ -89,3 +89,12 @@ npx tsx scripts/ranking-connector-key.ts revoke example.myshopify.com --confirm=
 ```
 
 No key is created automatically at install. Missing, old global, wrong-shop and revoked keys get HTTP 401. A key rotated after the initial request check is rejected again at transaction commit. Do not share a Header Auth credential between shops or give merchants configurable n8n workflow access until written commercial licensing clearance. No live Bright Data payload, signed provenance, gateway/IP abuse protection or external cost-control validation has been completed. The application-side fixed-hour import budget is implemented but must still be exercised with live connector traffic.
+
+
+## Product metadata accuracy and stale-alert lifecycle (2026-10-27)
+
+Shopify [documents](https://shopify.dev/docs/apps/build/marketing/optimize-storefront-seo) that a new product's search-engine title and description default to its product title and description. Therefore an empty `seo.description` alone is **not** evidence that a rendered product page lacks a meta description. The audit now flags a high-priority missing-description case only when both the custom SEO description and the product description are blank. This is a metadata heuristic, not a storefront HTML crawl: themes and apps can override rendered tags.
+
+The former 165-character warning was not a Google rule. [Google](https://developers.google.com/search/docs/appearance/snippet) states that snippets are generated primarily from page content, may use meta descriptions, and have **no fixed character limit**. Shopify's [product editor guidance](https://help.shopify.com/en/manual/products/add-update-products) warns that descriptions over 320 characters may be cut off in previews, so the advisory now uses that platform-specific threshold and never claims a ranking penalty.
+
+Store Manager marks pending `seo_review` alerts as `superseded` only when the same product was included in a successful nonempty catalog sample and the original finding is absent. Missing products in a 50-item sample are not evidence of resolution. If the same finding reappears, only a machine-superseded task reopens; manually approved, dismissed, applied, and resolved decisions remain unchanged. The Outdated filter exposes these machine-retired alerts. This improves task accuracy, not measured SEO lift or a verified storefront crawl. Verify with an authorized development store before production.

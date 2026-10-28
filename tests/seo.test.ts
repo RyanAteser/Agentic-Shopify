@@ -25,13 +25,35 @@ test("reject invalid ranks, unsafe URLs, and future observations", () => {
 });
 test("metadata audit detects blank descriptions and duplicate titles without mutating products", () => {
   const products=[
-    {id:"1",title:"Sample",url:"https://example.com/a",description:"hello",seo:{title:"Same",description:null}},
+    {id:"1",title:"Sample",url:"https://example.com/a",description:"",seo:{title:"Same",description:null}},
     {id:"2",title:"Sample2",url:"https://example.com/b",description:"hello",seo:{title:"Same",description:"Valid meta"}}
   ];
   const findings=auditProductSeo(products);
   assert.ok(findings.some(x=>x.kind==="missing-description"));
   assert.ok(findings.some(x=>x.kind==="duplicate-title"));
   assert.equal(products[0].seo.title,"Same");
+});
+
+test("Shopify description fallback prevents false missing-meta alerts and arbitrary length warnings", () => {
+  const products = [
+    {id:"fallback",title:"Useful product",url:"https://example.com/fallback",
+      description:"A specific, useful description of this product and its features.",seo:{title:null,description:null}},
+    {id:"empty",title:"No description",url:"https://example.com/empty",
+      description:"  ",seo:{title:null,description:null}},
+    {id:"custom200",title:"Custom 200",url:"https://example.com/200",
+      description:"",seo:{title:null,description:"a".repeat(200)}},
+    {id:"custom321",title:"Custom 321",url:"https://example.com/321",
+      description:"",seo:{title:null,description:"b".repeat(321)}},
+  ];
+  const findings = auditProductSeo(products);
+  assert.equal(findings.filter(f=>f.productId==="fallback").length,0,
+    "Shopify's product description is the default meta description");
+  assert.equal(findings.find(f=>f.productId==="empty")?.kind,"missing-description");
+  assert.equal(findings.find(f=>f.productId==="empty")?.severity,"high");
+  assert.equal(findings.filter(f=>f.productId==="custom200").length,0,
+    "Google has no 165-character meta-description limit");
+  assert.equal(findings.find(f=>f.productId==="custom321")?.kind,"long-description");
+  assert.equal(findings.find(f=>f.productId==="custom321")?.severity,"medium");
 });
 
 

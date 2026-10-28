@@ -66,7 +66,7 @@ test("merchant tasks deduplicate, preserve dismissals and never bleed into anoth
      shop:shopA,jobId:job.id,topic:"boot buying guide",title:"How to choose boots",
      body:"<p>Body</p>",summary:"This is a merchant draft",seoScore:82,status:"ready"
    }});
-   const catalog=[{id:"gid://shopify/Product/1",title:"Leather boots",description:"Boots",url:"https://store.example/p/boots",
+   const catalog=[{id:"gid://shopify/Product/1",title:"Leather boots",description:"",url:"https://store.example/p/boots",
      seo:{title:"Leather boots",description:null}}];
    await syncManagerTasks(shopA,catalog);
    const first=await db.storeRecommendation.findMany({where:{shop:shopA}});
@@ -87,6 +87,40 @@ test("merchant tasks deduplicate, preserve dismissals and never bleed into anoth
      await db.contentJob.deleteMany({where:{shop}});
      await db.storeConfig.deleteMany({where:{shop}});
    }
+ }
+});
+
+test("manager retires only sampled stale SEO alerts, reopens recurrence, and preserves merchant decisions",async()=>{
+ const shop="seo-lifecycle-"+randomUUID()+".myshopify.com";
+ const first={id:"gid://shopify/Product/seo1",title:"Leather boots",description:"",
+   url:"https://store.example/p/boots",seo:{title:null,description:null}};
+ const other={...first,id:"gid://shopify/Product/seo2",title:"Wool socks",
+   url:"https://store.example/p/socks"};
+ await db.storeConfig.create({data:{shop}});
+ try{
+   await syncManagerTasks(shop,[first,other]);
+   const initial=await db.storeRecommendation.findMany({where:{shop,kind:"seo_review"}});
+   assert.equal(initial.length,2);
+   const firstTask=initial.find(t=>t.targetId===first.id)!;
+   const otherTask=initial.find(t=>t.targetId===other.id)!;
+   await syncManagerTasks(shop,[{...first,description:"Detailed fit and material information."}]);
+   assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:firstTask.id}})).status,"superseded");
+   assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:otherTask.id}})).status,"pending",
+     "a product omitted from the current sample is not proven fixed");
+   await syncManagerTasks(shop,[]);
+   assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:otherTask.id}})).status,"pending",
+     "an empty or failed catalog read cannot retire historical evidence");
+   await syncManagerTasks(shop,[first]);
+   assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:firstTask.id}})).status,"pending",
+     "a recurring issue reopens only a machine-superseded task");
+   await db.storeRecommendation.update({where:{id:firstTask.id},data:{status:"dismissed"}});
+   await syncManagerTasks(shop,[{...first,description:"Now has a useful product description"}]);
+   assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:firstTask.id}})).status,"dismissed",
+     "never overwrite a merchant dismissal");
+ }finally{
+   await db.storeActivity.deleteMany({where:{shop}});
+   await db.storeRecommendation.deleteMany({where:{shop}});
+   await db.storeConfig.deleteMany({where:{shop}});
  }
 });
 

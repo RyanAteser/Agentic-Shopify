@@ -7,7 +7,7 @@ import { readMerchantProductSample, syncManagerTasks, logStoreAction } from "../
 import { publishApprovedArticle } from "../lib/publish.server";
 import { canExecuteAction } from "../lib/action-policy";
 
-const statuses=["pending","approved","applied","dismissed","resolved"] as const;
+const statuses=["pending","approved","applied","dismissed","resolved","superseded"] as const;
 
 export const loader=async ({request}:LoaderFunctionArgs)=>{
   const {admin,session}=await authenticate.admin(request);
@@ -107,8 +107,9 @@ export default function StoreManager(){
       <div style={{display:"flex",flexWrap:"wrap",gap:16,marginBottom:18}}>
         {statuses.map(s=><Link key={s} to={"/app/manager?status="+s} style={{
           fontWeight:filter===s?"bold":"normal",textDecoration:filter===s?"underline":"none"
-        }}>{s.charAt(0).toUpperCase()+s.slice(1)} ({totals[s]??0})</Link>)}
+        }}>{s==="superseded"?"Outdated":s.charAt(0).toUpperCase()+s.slice(1)} ({totals[s]??0})</Link>)}
       </div>
+      <p>Outdated SEO metadata alerts are retired only when the affected product is sampled again. Merchant decisions are preserved; an outdated alert can reopen if the same issue returns.</p>
       {!tasks.length&&<p>No {filter} tasks. New content drafts and SEO findings will appear here after the corresponding connectors produce data.</p>}
       {tasks.map(task=>{
         const article=draftMap.get(task.targetId);

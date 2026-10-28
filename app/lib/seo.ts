@@ -90,8 +90,15 @@ export function auditProductSeo(products: SeoProduct[]): SeoFinding[] {
     const url=product.url || "";
     const add=(kind:string,message:string,severity:"high"|"medium") =>
       findings.push({id:product.id+":"+kind,productId:product.id,productTitle:product.title,url,kind,message,severity});
-    if (!description) add("missing-description","SEO description is empty; review whether a custom description would be helpful.","high");
-    else if (description.length > 165) add("long-description","SEO description is longer than 165 characters; inspect possible SERP truncation.","medium");
+    // Shopify defaults product meta descriptions to product descriptions.
+    // A blank custom SEO field is not proof of missing storefront metadata.
+    if (!description && !product.description.trim()) {
+      add("missing-description","Both the custom SEO description and product description are empty; inspect the rendered storefront metadata and add useful product information.","high");
+    } else if (description.length > 320) {
+      // Shopify warns about previews above 320 characters. Google has no fixed
+      // snippet-length limit and may use on-page text instead of this field.
+      add("long-description","Custom SEO description exceeds Shopify's 320-character preview guidance. Review clarity and storefront rendering; Google snippets vary by query and device.","medium");
+    }
     if (title.length > 70) add("long-title","Title exceeds 70 characters; inspect readability and possible SERP truncation.","medium");
     if (!title) add("missing-title","Missing meaningful product title.","high");
     else {

@@ -37,8 +37,10 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[]) {
       tx.seoRankObservation.findMany({where:{shop},take:300,orderBy:{observedAt:"desc"},
         select:{keyword:true,position:true,country:true,device:true,engine:true,targetUrl:true,observedAt:true}})
     ]);
+    const seoFindings = auditProductSeo(products);
+    const seoTasks = buildSeoTasks(seoFindings);
     const tasks:SuggestedTask[]=[
-      ...buildBlogTasks(drafts),...buildSeoTasks(auditProductSeo(products)),...buildRankTasks(ranks)
+      ...buildBlogTasks(drafts),...seoTasks,...buildRankTasks(ranks)
     ];
     // Insert only; reviewed/dismissed recommendations never reopen on refresh.
     // Unique(shop,sourceKey) makes concurrent page loads idempotent.
@@ -48,6 +50,34 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[]) {
         create:{shop,...task},
         update:{},
       });
+      // Only machine-superseded metadata findings can reopen when the same
+      // product is sampled again. Never undo a merchant's manual decision.
+      if (task.kind === "seo_review") {
+        await tx.storeRecommendation.updateMany({
+          where:{shop,sourceKey:task.sourceKey,status:"superseded"},
+          data:{status:"pending",decidedAt:null,title:task.title,
+            rationale:task.rationale,evidence:task.evidence,priority:task.priority}
+        });
+      }
+    }
+    // The catalog is only a sample (up to 50 products). A finding can be
+    // retired only if that exact product was inspected on this sync; missing
+    // products and failed/empty API reads are NOT evidence of remediation.
+    const sampledProductIds = new Set(products.map(product => product.id));
+    if (sampledProductIds.size) {
+      const currentSeoKeys = new Set(seoFindings.map(finding => "seo:" + finding.id));
+      const pendingSeo = await tx.storeRecommendation.findMany({
+        where:{shop,kind:"seo_review",status:"pending",
+          targetId:{in:[...sampledProductIds]}},
+        select:{id:true,sourceKey:true}
+      });
+      for (const old of pendingSeo) {
+        if (currentSeoKeys.has(old.sourceKey)) continue;
+        await tx.storeRecommendation.updateMany({
+          where:{id:old.id,shop,status:"pending"},
+          data:{status:"superseded",decidedAt:new Date()}
+        });
+      }
     }
     // Resolve stale pending content items without changing merchant decisions.
     const liveDraftIds=new Set(drafts.map(d=>d.id));

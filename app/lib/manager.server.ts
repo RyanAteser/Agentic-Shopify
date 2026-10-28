@@ -68,7 +68,7 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[], now=n
       for (const old of pendingSeo) {
         if (currentSeoKeys.has(old.sourceKey)) continue;
         if (old.sourceKey.endsWith(":duplicate-title")) {
-          // Absence of a peer in a 50-product sample does NOT establish that
+          // Absence of a peer in a bounded product sample does NOT establish that
           // duplicate titles were fixed. Only a change to this product's
           // previously observed effective title can retire that specific alert.
           let priorTitle:unknown;

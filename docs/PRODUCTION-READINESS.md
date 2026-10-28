@@ -23,6 +23,18 @@ A usable review now stores a SHA-256 digest of the exact Shopify-bound article t
 
 This is an application integrity control, **not proof that a human read the content**, source verification, cryptographic attestation of a reviewer, or protection against a privileged database writer changing the Shopify article after publication. Re-review updates the existing shop/draft decision row rather than inflating review counts. Reject decisions remain final. No automatic publishing, new Shopify scopes, buyer data, or external services are introduced. Migration `20261028170000_editorial_review_content_digest` defaults existing reviews to an empty digest and intentionally requires renewed approval. CI must validate SQLite, PostgreSQL migration/tests and the Docker smoke before this is considered verified.
 
+## Scheduled-draft delivery correctness (2026-10-28)
+
+**Failure discovered:** the hourly scheduler advanced `nextRunAt` and `topicCursor` *before* creating a credited job. An exhausted free plan, a failed job insert or a definitive n8n rejection could silently consume a scheduled slot without delivering a draft. Exhausted stores remained in the first ten due candidates and could starve eligible merchants.
+
+**Development fix:** `app/lib/scheduled-drafts.server.ts` now atomically reserves the due slot, one of the three lifetime free credits, the topic cursor and the queued job in a single short database transaction. It conditionally claims the exact schedule snapshot and verifies the row is still due. Quota-exhausted, disabled and future-due stores are excluded before the ten-store selection. A definitive pre-acceptance rejection marks the job failed, refunds exactly once and conditionally restores the original due slot/cursor. If the merchant changed schedule settings in the meantime, the new settings win. Transport timeouts, ambiguous HTTP responses and completed callbacks **never** trigger automatic refund, replay or schedule rewind. A restored due slot is considered only on a later hourly sweep; there is no immediate retry storm. The Blog Agent displays a free-quota pause explanation, without activating paid billing.
+
+**Testing:** `tests/scheduled-drafts.test.ts` covers atomic claim, duplicate stale claims, topic order, refund/reclaim, uncertain outcome, merchant setting edits, quota-aware fairness and PostgreSQL concurrency/callback races. All tests are synthetic, using isolated temporary merchant records; hosted CI must pass before counting the new tests as verified.
+
+**Merchant impact hypothesis:** fewer silent missed drafts, no duplicate paid generation on uncertain delivery, and more equitable scheduler capacity. Measure scheduled jobs that reach an actual reviewed draft, failure/reconciliation rate and merchant retention in an authorized pilot. No actual draft delivery, revenue, SEO or retention improvement has been observed.
+
+**Remaining limitation:** A server crash after committing a queued job but before the n8n POST still leaves a queued job without a confirmed delivery. The existing 30-minute stale-job notice is advisory; a durable outbox/worker lease and operator reconciliation remain production gates. The scheduler is inactive until the n8n integration and commercial license are cleared.
+
 ## Hard go/no-go gates
 
 | Gate | Current status | Completion proof required |

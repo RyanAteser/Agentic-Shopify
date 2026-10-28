@@ -23,6 +23,28 @@ test("reject invalid ranks, unsafe URLs, and future observations", () => {
     {keyword:"test",position:3,observedAt:now.toISOString(),targetUrl:"javascript:alert(1)"}
   ]) assert.throws(()=>parseRanking(input,now));
 });
+test("SERP imports must distinguish explicit not-found from missing or unmapped rank data", () => {
+  const base = {...context, keyword:"boots", observedAt:now.toISOString()};
+  // A missing field can mean a broken n8n mapping, a truncated SERP response,
+  // or an unexecuted scrape. It must never silently become "Not found".
+  for (const invalid of [
+    base,
+    {...base, position:undefined, targetUrl:""},
+    {...base, position:null},
+    {...base, position:null, targetUrl:undefined},
+    {...base, position:null, targetUrl:null},
+    {...base, position:4},
+    {...base, position:4, targetUrl:""},
+  ]) {
+    assert.throws(() => parseRanking(invalid, now), /position|target URL|result URL/i);
+  }
+  const notFound = parseRanking({...base, position:null, targetUrl:""}, now);
+  assert.equal(notFound.position, null);
+  assert.equal(notFound.targetUrl, "");
+  const found = parseRanking({...base, position:4, targetUrl:"https://shop.example/boots"}, now);
+  assert.equal(found.position, 4);
+});
+
 test("metadata audit detects blank descriptions and duplicate titles without mutating products", () => {
   const products=[
     {id:"1",title:"Sample",url:"https://example.com/a",description:"",seo:{title:"Same",description:null}},

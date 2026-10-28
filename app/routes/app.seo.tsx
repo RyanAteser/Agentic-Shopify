@@ -3,8 +3,8 @@ import { Link, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { auditProductSeo, isOnlineStoreSeoCandidate, type SeoProduct } from "../lib/seo";
-import { parseShopifyProductSample } from "../lib/shopify-product-sample";
+import { auditProductSeo, type SeoProduct } from "../lib/seo";
+import { parseShopifyProductSample, summarizeShopifySeoSample } from "../lib/shopify-product-sample";
 import { sameRankTarget } from "../lib/manager";
 
 export const loader=async ({request}:LoaderFunctionArgs) => {
@@ -16,6 +16,8 @@ export const loader=async ({request}:LoaderFunctionArgs) => {
   });
   let products:SeoProduct[]=[];
   let catalogError="";
+  let sampleCount=0;
+  let coverageWarning="";
   try {
     const response=await admin.graphql(`#graphql
       query SeoAgentCatalogAudit {
@@ -27,7 +29,10 @@ export const loader=async ({request}:LoaderFunctionArgs) => {
         }
       }`);
     const result:any=await response.json();
-    products=parseShopifyProductSample(result).filter(isOnlineStoreSeoCandidate);
+    const coverage=summarizeShopifySeoSample(parseShopifyProductSample(result));
+    products=coverage.eligibleProducts;
+    sampleCount=coverage.sampledProducts;
+    coverageWarning=coverage.warning;
   }catch(error){
     catalogError=error instanceof Error?error.message:"Could not inspect catalog";
   }
@@ -45,20 +50,21 @@ export const loader=async ({request}:LoaderFunctionArgs) => {
     }
   }
   const rankingRows=Array.from(seen.values()).slice(0,40);
-  return {shop,productCount:products.length,findings,catalogError,rankingRows,rankingCount:observations.length};
+  return {shop,productCount:products.length,sampleCount,coverageWarning,findings,catalogError,rankingRows,rankingCount:observations.length};
 };
 
 export default function SeoDashboard(){
-  const {shop,productCount,findings,catalogError,rankingRows,rankingCount}=useLoaderData<typeof loader>();
+  const {shop,productCount,sampleCount,coverageWarning,findings,catalogError,rankingRows,rankingCount}=useLoaderData<typeof loader>();
   return <s-page heading="Agentic Shopify · SEO Intelligence">
     <s-section heading="SEO agents">
       <p>This dashboard connects product-page checks with your Bright Data ranking workflow. All detected issues are recommendations; nothing on this page edits your store.</p>
       <p>Connected store: <strong>{shop}</strong> · <Link to="/app">Blog Agent</Link> · <Link to="/app/manager">Manager Inbox</Link> · <Link to="/app/growth">Verified Growth</Link></p>
     </s-section>
     <s-section heading="Product metadata audit">
-      <p>Sampled <strong>{productCount}</strong> active products with an Online Store URL (up to 50 published products queried). Unpublished, unlisted and other-channel-only products are excluded. This is not a complete crawl, proof of indexing or a Google ranking score.</p>
+      <p>Shopify returned <strong>{sampleCount}</strong> active Online Store-published products (up to 50 queried); <strong>{productCount}</strong> had usable HTTPS storefront URLs and were evaluated. Unlisted and other-channel-only inventory is excluded. This is not a complete crawl, proof of indexing or a Google ranking score.</p>
+      {!catalogError && coverageWarning && <p role="status">{coverageWarning}</p>}
       {catalogError && <p role="alert">Catalog unavailable: {catalogError}. Recheck read_products permission.</p>}
-      {!catalogError && productCount===0 && <p>No eligible published Online Store products were returned, so no metadata pages were evaluated.</p>}
+      {!catalogError && productCount===0 && <p>No product pages with usable storefront URLs were evaluated. This does not establish that the store has no published products or no metadata issues.</p>}
       {!catalogError && productCount>0 && !findings.length && <p>No obvious metadata issues detected in the sampled products.</p>}
       {Boolean(findings.length) && <div style={{overflowX:"auto"}}>
         <table style={{borderCollapse:"collapse",width:"100%"}}>

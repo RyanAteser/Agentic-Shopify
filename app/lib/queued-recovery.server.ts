@@ -1,5 +1,5 @@
 import db from "../db.server";
-import { dispatchArticleJob, UncertainDispatchError } from "./agent.server";
+import { UncertainDispatchError } from "./n8n-delivery.server";
 import { DispatchAlreadyClaimedError } from "./dispatch-claim.server";
 import { failCreditedJob } from "./credits.server";
 import { failScheduledDraft, scheduledClaimFromJob } from "./scheduled-drafts.server";
@@ -15,8 +15,15 @@ export const QUEUED_RECOVERY_BATCH = 3;
 
 type Dispatch = (jobId: string, shop: string) => Promise<void>;
 
+// Avoid initializing Shopify SDK in pure database recovery tests. Production
+// imports the actual publisher only when a queued job is selected for dispatch.
+const dispatchProduction: Dispatch = async (jobId, shop) => {
+  const { dispatchArticleJob } = await import("./agent.server");
+  await dispatchArticleJob(jobId, shop);
+};
+
 export async function recoverQueuedJobs(
-  now = new Date(), dispatch: Dispatch = dispatchArticleJob
+  now = new Date(), dispatch: Dispatch = dispatchProduction
 ) {
   if (!Number.isFinite(now.getTime())) throw new Error("Invalid recovery clock");
   const cutoff = new Date(now.getTime() - QUEUED_RECOVERY_MIN_AGE_MS);

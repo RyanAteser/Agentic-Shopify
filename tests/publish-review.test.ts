@@ -199,3 +199,25 @@ test("publish request uses the destination captured at claim time",async()=>{
     assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"published");
   });
 });
+
+test("plain-text excerpt is encoded before Shopify receives its HTML summary", async()=>{
+  await withDraft(async(shop,draftId)=>{
+    await db.articleDraft.update({where:{id:draftId},data:{
+      summary:'A & B <img src=x onerror="alert(1)">'
+    }});
+    assert.equal((await recordEditorialReview(shop,draftId,"usable",3)).ok,true);
+    let calls=0;
+    const admin={graphql:async(_query:string,options:any)=>{
+      calls++;
+      assert.equal(options.variables.article.summary,
+        "A &amp; B &lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+      return {json:async()=>({data:{articleCreate:{
+        article:{id:"gid://shopify/Article/123",title:"Useful buying guide",
+          isPublished:true,blog:{id:"gid://shopify/Blog/1"}},
+        userErrors:[]
+      }}})};
+    }};
+    assert.equal((await publishApprovedArticle(shop,draftId,admin)).ok,true);
+    assert.equal(calls,1);
+  });
+});

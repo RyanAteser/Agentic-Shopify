@@ -22,7 +22,7 @@ Each sweep selects at most **three** jobs that are still `queued`, version 1, an
 | Definitive permanent n8n rejection / pre-network failure | Mark failed and refund once; scheduled jobs conditionally restore the due slot using stored snapshot |
 | Timeout, HTTP 408/409/429/5xx or lost response | Keep credit; mark uncertain when possible; inspect n8n before manual reconciliation |
 | Concurrent callback or another worker wins | No refund, replay or status overwrite |
-| Corrupt schedule snapshot | No dispatch; leave queued and flag blocked for operator |
+| Corrupt schedule snapshot | No dispatch; atomically quarantine to version 0 while preserving queued status, credit and error evidence; operator investigates |
 
 **Important boundary:** A crash *after* `queued -> running` but *before* n8n accepts the POST remains ambiguous to an external observer and is **not** auto-replayed. Exactly-once delivery across PostgreSQL and n8n is not claimed. A future n8n-side idempotency/acknowledgment protocol keyed by `jobId`, with durable execution lookup, is needed to safely reconcile that interval. The endpoint does not automatically publish articles.
 

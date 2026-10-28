@@ -58,7 +58,7 @@ The ranking workflow shown in the merchant-provided n8n screenshot can send norm
 - Merchant-approved publishing calls the 2026-10 Shopify Admin GraphQL `articleCreate` mutation. On uncertain outcomes, status changes to `needs_reconciliation`; inspect the Shopify admin before retrying.
 - Store-specific feedback is reused in subsequent prompts. There is **no fabricated traffic data** or SEO lift promise.
 - For production: use PostgreSQL and migrations, encrypted at-rest data, per-tenant permissions and limits, queue backpressure, failure retries, consent / privacy compliance, credential rotation, observability, and verified end-to-end tests.
-- Search Console and attributed conversion analytics will be a separate opt-in connector. Assess performance with 28-day impressions, clicks, qualified visits and revenue outcomes relative to seasonality; do not optimize on a model's own score.
+- The opt-in Search Console scorecard accepts only a verified HTTPS URL-prefix property for the exact Shopify primary storefront host. Broad `sc-domain:` properties include other hosts and are rejected; legacy broad-property metrics are hidden until the merchant disconnects and reconnects. Do not combine old and new baselines. GSC is not conversion attribution; assess 28-day clicks and impressions against seasonality without claiming revenue lift.
 
 ## Product backlog
 1. Merchant product catalog context (read_products scope only if the merchant enables this feature).

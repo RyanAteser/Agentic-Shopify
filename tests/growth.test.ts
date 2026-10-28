@@ -1,11 +1,23 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {assertPropertyAggregation,gscReportingWindow,matchesPrimaryDomain,parseSearchConsoleRows,compareOrganicWindows} from "../app/lib/growth";
+import {assertPropertyAggregation,gscReportingWindow,isExactHttpsStorefrontProperty,matchesPrimaryDomain,parseSearchConsoleRows,compareOrganicWindows} from "../app/lib/growth";
 import {encryptToken,decryptToken,randomOAuthState,hashState} from "../app/lib/gsc-crypto.server";
 
 test("Search Console OAuth property must match Shopify primary host",()=>{
   assert.equal(matchesPrimaryDomain("https://store.example.com/","store.example.com"),true);
-  assert.equal(matchesPrimaryDomain("sc-domain:example.com","store.example.com"),true);
+  assert.equal(matchesPrimaryDomain("sc-domain:example.com","store.example.com"),false);
+  assert.equal(matchesPrimaryDomain("sc-domain:store.example.com","store.example.com"),false);
+  assert.equal(isExactHttpsStorefrontProperty("https://store.example.com/"),true);
+  for(const broadOrInvalid of [
+    "sc-domain:example.com","sc-domain:store.example.com",
+    "http://store.example.com/","https://store.example.com/products/",
+    "https://store.example.com/?q=1","https://store.example.com/#fragment",
+    "https://store.example.com:443/","https://store.example.com.evil.test/"
+  ]) {
+    // The evil host is syntactically a valid property but not this merchant's.
+    if(!broadOrInvalid.includes(".evil.test"))assert.equal(isExactHttpsStorefrontProperty(broadOrInvalid),false);
+    assert.equal(matchesPrimaryDomain(broadOrInvalid,"store.example.com"),false);
+  }
   assert.equal(matchesPrimaryDomain("https://competitor.example.com/","store.example.com"),false);
   assert.equal(matchesPrimaryDomain("sc-domain:attacker.com","store.example.com"),false);
   assert.equal(matchesPrimaryDomain("https://store.example.com.evil.io/","store.example.com"),false);

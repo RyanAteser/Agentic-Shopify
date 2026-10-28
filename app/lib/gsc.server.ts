@@ -1,6 +1,6 @@
 import db from "../db.server";
 import {decryptToken,encryptToken} from "./gsc-crypto.server";
-import {assertPropertyAggregation,gscReportingWindow,matchesPrimaryDomain,parseSearchConsoleRows} from "./growth";
+import {assertPropertyAggregation,gscReportingWindow,isExactHttpsStorefrontProperty,matchesPrimaryDomain,parseSearchConsoleRows} from "./growth";
 
 const SCOPE="https://www.googleapis.com/auth/webmasters.readonly";
 const GOOGLE_AUTHORIZE="https://accounts.google.com/o/oauth2/v2/auth";
@@ -47,12 +47,11 @@ export async function verifyGoogleSite(accessToken:string,primaryHost:string) {
   const options=(Array.isArray(result.siteEntry)?result.siteEntry:[])
     .filter((x:any)=>x?.permissionLevel!=="siteUnverifiedUser"&&
       typeof x.siteUrl==="string"&&matchesPrimaryDomain(x.siteUrl,primaryHost));
-  if(!options.length)throw new Error("No verified Google Search Console property matches your Shopify primary domain");
-  // Prefer the HTTPS URL-prefix property if available; otherwise use the matching domain property.
-  options.sort((a:any,b:any)=>Number(b.siteUrl.startsWith("https:"))-Number(a.siteUrl.startsWith("https:")));
+  if(!options.length)throw new Error("Add a verified HTTPS URL-prefix Search Console property for your exact Shopify primary host. Domain properties include other hosts and cannot support this storefront-only scorecard.");
   return String(options[0].siteUrl);
 }
 export async function storeGoogleConnection(shop:string,property:string,refreshToken:string,stateHash:string) {
+  if(!isExactHttpsStorefrontProperty(property))throw new Error("Storefront-only metrics require an exact HTTPS URL-prefix property");
   const encryptedRefresh=encryptToken(refreshToken);
   await db.$transaction(async tx=>{
     // Keep the pending state until the same transaction that stores consent.
@@ -88,6 +87,11 @@ export async function syncOrganicMetrics(shop:string,now=new Date()){
   if(!claim.count)throw new Error("Search Console synchronization is already in progress");
   try{
     const connection=await db.searchConsoleConnection.findUniqueOrThrow({where:{shop}});
+    // Older connections may have used a broad sc-domain property. Do not
+    // continue importing misleading cross-host traffic under a legacy token.
+    if(!isExactHttpsStorefrontProperty(connection.property)){
+      throw new Error("Reconnect Search Console using an exact HTTPS URL-prefix property");
+    }
     const token=await googleRefresh(decryptToken(connection.encryptedRefresh));
     // 56 Pacific calendar days, excluding the three most recent days.
     // Google may still omit finalized dates; the scorecard abstains on gaps.

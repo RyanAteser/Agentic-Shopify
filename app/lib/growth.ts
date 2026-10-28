@@ -86,18 +86,23 @@ export function compareOrganicWindows(metrics:OrganicMetric[],now=new Date()):Wi
   return {current,previous,clicksChangePct:change(current.clicks,previous.clicks),
     impressionsChangePct:change(current.impressions,previous.impressions),comparable};
 }
+/**
+ * The scorecard uses GSC byProperty aggregation. Domain properties include
+ * other subdomains and protocols, so they cannot establish traffic for one
+ * Shopify storefront. Accept only the exact HTTPS origin URL-prefix property.
+ */
+export function isExactHttpsStorefrontProperty(siteUrl:string):boolean {
+  try {
+    const url=new URL(siteUrl);
+    return url.protocol==="https:" && !!url.hostname &&
+      !url.username && !url.password && !url.port &&
+      url.pathname==="/" && !url.search && !url.hash &&
+      siteUrl===url.origin+"/";
+  } catch {return false;}
+}
 export function matchesPrimaryDomain(siteUrl:string,host:string) {
   const primary=host.trim().toLowerCase().replace(/\.$/,"");
   if(!primary||!primary.includes(".")||primary.includes("/")||primary.includes(":"))return false;
-  if(siteUrl.startsWith("sc-domain:")){
-    const domain=siteUrl.slice("sc-domain:".length).toLowerCase().replace(/\.$/,"");
-    // Limit domain properties to registrable merchant domains, not public suffixes.
-    if(domain.split(".").length<2||["com","co.uk","net","org","myshopify.com"].includes(domain))return false;
-    return primary===domain||primary.endsWith("."+domain);
-  }
-  try{
-    const url=new URL(siteUrl);
-    return url.protocol==="https:" && url.hostname.toLowerCase()===primary &&
-      (!url.port || url.port==="443") && url.pathname==="/" && !url.search;
-  }catch{return false;}
+  return isExactHttpsStorefrontProperty(siteUrl) &&
+    new URL(siteUrl).hostname.toLowerCase()===primary;
 }

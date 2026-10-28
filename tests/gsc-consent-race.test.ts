@@ -2,7 +2,8 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import db from "../app/db.server";
-import {disconnectGoogle,storeGoogleConnection,syncOrganicMetrics} from "../app/lib/gsc.server";
+import {disconnectGoogle,storeGoogleConnection,syncOrganicMetrics,verifyGoogleSite} from "../app/lib/gsc.server";
+import {encryptToken} from "../app/lib/gsc-crypto.server";
 
 async function connectWithPendingState(shop:string,property:string,token:string){
   const stateHash=randomUUID();
@@ -53,7 +54,7 @@ test("GSC import is cancelled by consent deletion and still works with active co
     throw new Error("Unexpected external request: "+url);
   };
   try{
-    await connectWithPendingState(revokedShop,"sc-domain:example.test","refresh-token-1");
+    await connectWithPendingState(revokedShop,"https://example.test/","refresh-token-1");
     pending=syncOrganicMetrics(revokedShop,new Date("2026-10-26T12:00:00Z"));
     await refreshStarted;
     await disconnectGoogle(revokedShop);
@@ -64,7 +65,7 @@ test("GSC import is cancelled by consent deletion and still works with active co
 
     // Positive control: the guard must not suppress legitimate imports.
     pauseRefresh=false;
-    await connectWithPendingState(activeShop,"sc-domain:example.test","refresh-token-2");
+    await connectWithPendingState(activeShop,"https://example.test/","refresh-token-2");
     const syncNow=new Date("2026-10-26T12:00:00Z");
     aggregationType="byPage";
     await assert.rejects(syncOrganicMetrics(activeShop,syncNow),/aggregation type/);
@@ -95,7 +96,7 @@ test("pending Google OAuth cannot reconnect after disconnect, expire, replay, or
   process.env.GSC_ENCRYPTION_KEY=Buffer.alloc(32,31).toString("base64");
   const shop="oauth-"+randomUUID()+".myshopify.com";
   const other="other-"+randomUUID()+".myshopify.com";
-  const property="sc-domain:example.test";
+  const property="https://example.test/";
   const revokedHash=randomUUID(),expiredHash=randomUUID(),validHash=randomUUID();
   const createState=(stateHash:string,owner=shop,expiresAt=new Date(Date.now()+60_000))=>
     db.googleAuthState.create({data:{stateHash,shop:owner,expiresAt}});
@@ -113,6 +114,15 @@ test("pending Google OAuth cannot reconnect after disconnect, expire, replay, or
     await assert.rejects(
       storeGoogleConnection(shop,property,"expired-refresh",expiredHash),/expired or revoked/
     );
+    // A stale broad-domain callback cannot consume OAuth consent or create
+    // misleading cross-host site metrics, even if called directly.
+    const broadHash=randomUUID();
+    await createState(broadHash);
+    await assert.rejects(
+      storeGoogleConnection(shop,"sc-domain:example.test","broad-refresh",broadHash),
+      /exact HTTPS URL-prefix/
+    );
+    assert.equal(await db.googleAuthState.count({where:{stateHash:broadHash}}),1);
     await createState(validHash);
     await assert.rejects(
       storeGoogleConnection(other,property,"wrong-shop-refresh",validHash),/expired or revoked/
@@ -132,5 +142,52 @@ test("pending Google OAuth cannot reconnect after disconnect, expire, replay, or
     await db.searchConsoleConnection.deleteMany({where:{shop:{in:[shop,other]}}});
     if(oldKey===undefined)delete process.env.GSC_ENCRYPTION_KEY;
     else process.env.GSC_ENCRYPTION_KEY=oldKey;
+  }
+});
+
+
+test("GSC verification selects only an exact HTTPS storefront URL-prefix",async()=>{
+  const originalFetch=globalThis.fetch;
+  let includeExact=true;
+  globalThis.fetch=async input=>{
+    const url=typeof input==="string"?input:input instanceof URL?input.href:input.url;
+    assert.equal(url,"https://www.googleapis.com/webmasters/v3/sites");
+    return Response.json({siteEntry:[
+      {siteUrl:"sc-domain:example.com",permissionLevel:"siteOwner"},
+      {siteUrl:"https://other.example.com/",permissionLevel:"siteOwner"},
+      ...(includeExact?[{siteUrl:"https://store.example.com/",permissionLevel:"siteRestrictedUser"}]:[])
+    ]});
+  };
+  try{
+    assert.equal(await verifyGoogleSite("test-token","store.example.com"),"https://store.example.com/");
+    includeExact=false;
+    await assert.rejects(verifyGoogleSite("test-token","store.example.com"),
+      /HTTPS URL-prefix/);
+  }finally{
+    globalThis.fetch=originalFetch;
+  }
+});
+
+
+test("legacy broad GSC connection cannot sync or spend Google quota",async()=>{
+  const priorKey=process.env.GSC_ENCRYPTION_KEY;
+  const oldFetch=globalThis.fetch;
+  process.env.GSC_ENCRYPTION_KEY=Buffer.alloc(32,29).toString("base64");
+  const shop="legacy-"+randomUUID()+".myshopify.com";
+  let calls=0;
+  globalThis.fetch=async()=>{calls++;throw new Error("Google must not be contacted");};
+  try{
+    await db.searchConsoleConnection.create({data:{
+      shop,property:"sc-domain:example.test",encryptedRefresh:encryptToken("old-refresh")
+    }});
+    await assert.rejects(syncOrganicMetrics(shop,new Date("2026-10-26T12:00:00Z")),
+      /Reconnect Search Console/);
+    assert.equal(calls,0);
+    assert.equal(await db.organicDailyMetric.count({where:{shop}}),0);
+  }finally{
+    globalThis.fetch=oldFetch;
+    await db.searchConsoleConnection.deleteMany({where:{shop}});
+    if(priorKey===undefined)delete process.env.GSC_ENCRYPTION_KEY;
+    else process.env.GSC_ENCRYPTION_KEY=priorKey;
   }
 });

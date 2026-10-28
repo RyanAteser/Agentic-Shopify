@@ -3,7 +3,7 @@ import {Form,Link,useActionData,useLoaderData,useNavigation} from "react-router"
 import {boundary} from "@shopify/shopify-app-react-router/server";
 import {authenticate} from "../shopify.server";
 import db from "../db.server";
-import {compareOrganicWindows} from "../lib/growth";
+import {compareOrganicWindows,isExactHttpsStorefrontProperty} from "../lib/growth";
 import {summarizeEditorialCohort,summarizeEditorialReviews} from "../lib/editorial-funnel";
 import {disconnectGoogle,syncOrganicMetrics} from "../lib/gsc.server";
 
@@ -13,7 +13,10 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
   const connection=await db.searchConsoleConnection.findUnique({
     where:{shop},select:{property:true,status:true,lastSyncedAt:true,connectedAt:true}
   });
-  const rows=connection?await db.organicDailyMetric.findMany({
+  // Hide legacy domain-property data: it may include other subdomains and
+  // protocols and must never appear as this merchant's storefront growth.
+  const scoped=!!connection&&isExactHttpsStorefrontProperty(connection.property);
+  const rows=scoped&&connection?await db.organicDailyMetric.findMany({
     where:{shop,property:connection.property},orderBy:{date:"desc"},take:90,
     select:{date:true,clicks:true,impressions:true,ctr:true,position:true}
   }):[];
@@ -42,7 +45,7 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
     decision:row.decision,count:row._count._all,
     minutesSamples:row._count.reviewMinutes,minutesTotal:row._sum.reviewMinutes??0
   })));
-  return {shop,connection,comparison,editorial,reviews,recent:chronological.slice(-14),connected:new URL(request.url).searchParams.has("connected")};
+  return {shop,connection,scoped,comparison,editorial,reviews,recent:chronological.slice(-14),connected:new URL(request.url).searchParams.has("connected")};
 };
 
 export const action=async ({request}:ActionFunctionArgs)=>{
@@ -58,6 +61,9 @@ export const action=async ({request}:ActionFunctionArgs)=>{
   if(intent==="sync"){
     const conn=await db.searchConsoleConnection.findUnique({where:{shop}});
     if(!conn||conn.status!=="active")return {ok:false,message:"Connect a Search Console property first."};
+    if(!isExactHttpsStorefrontProperty(conn.property)){
+      return {ok:false,message:"This legacy domain property includes other hosts. Disconnect and reconnect an exact HTTPS URL-prefix property."};
+    }
     if(conn.lastSyncedAt&&Date.now()-conn.lastSyncedAt.getTime()<60*60000){
       return {ok:false,message:"Search Console was refreshed recently. Try again later."};
     }
@@ -74,7 +80,7 @@ export const action=async ({request}:ActionFunctionArgs)=>{
 function number(x:number){return Math.round(x).toLocaleString();}
 function pct(x:number|null){return x===null?"Insufficient baseline":(x>0?"+":"")+x.toFixed(1)+"%";}
 export default function GrowthDashboard(){
-  const {shop,connection,comparison,editorial,reviews,recent,connected}=useLoaderData<typeof loader>();
+  const {shop,connection,scoped,comparison,editorial,reviews,recent,connected}=useLoaderData<typeof loader>();
   const result=useActionData<typeof action>();
   const busy=useNavigation().state!=="idle";
   return <s-page heading="Growth · Verified Organic Search">
@@ -103,8 +109,9 @@ export default function GrowthDashboard(){
         <a href="/app/growth/connect" target="_top" rel="noopener noreferrer">Connect Search Console (read-only Google consent)</a>
       </div>:<>
         <p><strong>Property:</strong> {connection.property} · <strong>Last sync:</strong> {connection.lastSyncedAt?new Date(connection.lastSyncedAt).toLocaleString():"Never"}</p>
+        {!scoped&&<p role="alert">This legacy domain property includes other hosts or protocols. Its historical metrics are hidden and new imports are blocked. Disconnect, then connect a verified HTTPS URL-prefix property for the exact Shopify primary host. Disconnecting erases the old metrics and Google token.</p>}
         <div style={{display:"flex",gap:12}}>
-          <Form method="post"><input type="hidden" name="intent" value="sync"/><button type="submit" disabled={busy}>Import latest measurements</button></Form>
+          {scoped&&<Form method="post"><input type="hidden" name="intent" value="sync"/><button type="submit" disabled={busy}>Import latest measurements</button></Form>}
           <Form method="post" onSubmit={e=>{if(!window.confirm("Erase stored Google Search Console credentials and metrics for this store?"))e.preventDefault();}}>
             <input type="hidden" name="intent" value="disconnect"/><button type="submit" disabled={busy}>Disconnect and erase</button>
           </Form>
@@ -112,7 +119,7 @@ export default function GrowthDashboard(){
       </>}
     </s-section>
     <s-section heading="Organic growth scorecard · Last 28 days versus previous 28 days">
-      {!comparison.comparable?<p>Not enough comparable Search Console dates yet. We require all 28 observed dates in each window; Google can omit no-traffic dates, which are not assumed to be zero. No growth claim can be made.</p>:<>
+      {!scoped&&connection?<p>Storefront-only growth measurements are unavailable until the legacy domain property is replaced. Historical cross-host metrics are intentionally hidden.</p>:!comparison.comparable?<p>Not enough comparable Search Console dates yet. We require all 28 observed dates in each window; Google can omit no-traffic dates, which are not assumed to be zero. No growth claim can be made.</p>:<>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:16}}>
           <div><strong>Organic clicks</strong><p style={{fontSize:24}}>{number(comparison.current.clicks)}</p><p>Previous: {number(comparison.previous.clicks)} · {pct(comparison.clicksChangePct)}</p></div>
           <div><strong>Search impressions</strong><p style={{fontSize:24}}>{number(comparison.current.impressions)}</p><p>Previous: {number(comparison.previous.impressions)} · {pct(comparison.impressionsChangePct)}</p></div>

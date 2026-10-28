@@ -1,17 +1,12 @@
 import db from "../db.server";
 import { auditProductSeo, effectiveSeoTitle, type SeoProduct } from "./seo";
-import { parseShopifyProductSample, summarizeShopifySeoSample } from "./shopify-product-sample";
+import { readShopifySeoCatalog, summarizeShopifySeoSample } from "./shopify-product-sample";
 import { buildBlogTasks, buildRankTasks, buildSeoTasks, rankingDropHasRecovered, type SuggestedTask } from "./manager";
 
 export async function readMerchantProductSample(admin:{graphql:Function}):Promise<{products:SeoProduct[];warning:string}> {
   try{
-    const res=await admin.graphql(`#graphql query ManagerSeoSample {
-      products(first: 50, query: "status:active published_status:published") {
-        nodes { id title description onlineStoreUrl seo { title description } }
-      }
-    }`);
-    const json:any=await res.json();
-    const sample = summarizeShopifySeoSample(parseShopifyProductSample(json));
+    const catalog = await readShopifySeoCatalog(admin);
+    const sample = summarizeShopifySeoSample(catalog.products, catalog.hasMore);
     return {products:sample.eligibleProducts,warning:sample.warning};
   }catch(e){return {products:[],warning:"Catalog unavailable; product recommendations may be incomplete."};}
 }
@@ -59,7 +54,7 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[], now=n
         });
       }
     }
-    // The catalog is only a sample (up to 50 products). A finding can be
+    // The catalog is only a bounded sample (up to 100 products). A finding can be
     // retired only if that exact product was inspected on this sync; missing
     // products and failed/empty API reads are NOT evidence of remediation.
     const sampledProducts = new Map(products.map(product => [product.id,product]));

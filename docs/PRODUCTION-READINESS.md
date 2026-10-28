@@ -102,6 +102,31 @@ reconnect the exact property. The new property has a different scope, so
 synthetic Google responses; live property access and data accuracy remain
 release gates.
 
+### Search Console OAuth re-consent and measurement reset (2026-10-27)
+
+**Reconnecting Search Console invalidates the previous local organic-metric
+baseline, even when the new consent selects the same URL-prefix property.**
+A previous implementation reset `lastSyncedAt` but retained the old daily
+rows. Switching properties and later reconnecting to a previously used host
+could immediately redisplay historical 28-day totals without a new Google
+import, misleading the merchant about the current authorization and scope.
+
+The OAuth state is consumed and the connection row is updated/locked before
+deleting that shop's old `OrganicDailyMetric` observations, all in **one
+database transaction**. Re-consent resets the connection timestamp, sync
+lease and last-success timestamp. Invalid/expired OAuth state rolls back
+without erasing measurements; other shops' rows are never touched. This
+intentionally clears old **app-stored** metrics, not any data in Google Search
+Console or Shopify. The merchant must import a fresh 56-day Google snapshot
+before the growth comparison can resume. A disconnected merchant can use
+the existing explicit disconnect flow to erase credentials and metrics.
+
+Regression coverage exercises a different-property re-consent, same-property
+re-consent, failed OAuth state and neighboring-merchant isolation. The
+PostgreSQL concurrency and authentic Google OAuth flows still require
+verification once hosted CI is available. No merchant data has been changed
+by this code-only development update.
+
 ### Search Console date coverage and interpretation
 
 Google Search Analytics reports calendar dates in **America/Los_Angeles**, not UTC; the import and comparison now share one DST-aware 56-day window excluding the three most recent Pacific dates. The API can omit dates with no search data, and even finalized data can arrive late. Do **not** turn missing API rows into zero clicks or compare a 21-day total to a 28-day total. The growth scorecard only displays a percentage change when both adjacent 28-day windows contain 28 unique daily observations; otherwise it shows coverage and abstains. This conservative rule means a genuinely zero-traffic day omitted by Google can prevent a scorecard from displaying a comparison. A future, separately audited coverage-provenance model is required before safely reporting complete zero-traffic periods.

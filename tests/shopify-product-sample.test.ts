@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseShopifyProductSample } from "../app/lib/shopify-product-sample";
+import { parseShopifyProductSample, summarizeShopifySeoSample } from "../app/lib/shopify-product-sample";
 
 const published = {
   id: "gid://shopify/Product/1", title: "Leather boots",
@@ -47,4 +47,30 @@ test("partial product records cannot masquerade as a successful empty SEO audit"
   }
   assert.throws(() => parseShopifyProductSample(response([published, published])), /Shopify/);
   assert.throws(() => parseShopifyProductSample(response(Array(51).fill(posOnly))), /Shopify/);
+});
+
+
+test("password-protected Shopify product URL gaps do not imply unpublished inventory", () => {
+  const coverage = summarizeShopifySeoSample(parseShopifyProductSample(response([
+    published, posOnly,
+    {...published, id: "gid://shopify/Product/3", onlineStoreUrl: "http://unsafe.example/boots"},
+  ])));
+  assert.equal(coverage.sampledProducts, 3);
+  assert.deepEqual(coverage.eligibleProducts.map(p => p.id), [published.id]);
+  assert.equal(coverage.missingUrls, 1);
+  assert.equal(coverage.invalidUrls, 1);
+  assert.match(coverage.warning, /Password-protected Shopify stores/);
+  assert.match(coverage.warning, /null URL does not prove a product is unpublished/);
+  assert.match(coverage.warning, /non-HTTPS/);
+});
+
+test("a verified empty product sample has no coverage warning; all-null URLs are not a clean audit", () => {
+  const empty = summarizeShopifySeoSample(parseShopifyProductSample(response([])));
+  assert.equal(empty.sampledProducts, 0);
+  assert.equal(empty.warning, "");
+  const inaccessible = summarizeShopifySeoSample(parseShopifyProductSample(response([posOnly])));
+  assert.equal(inaccessible.sampledProducts, 1);
+  assert.equal(inaccessible.eligibleProducts.length, 0);
+  assert.equal(inaccessible.missingUrls, 1);
+  assert.match(inaccessible.warning, /not audited/);
 });

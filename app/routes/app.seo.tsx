@@ -27,7 +27,8 @@ export const loader=async ({request}:LoaderFunctionArgs) => {
   }catch(error){
     catalogError=error instanceof Error?error.message:"Could not inspect catalog";
   }
-  const findings=auditProductSeo(products).slice(0,60);
+  const allFindings=auditProductSeo(products);
+  const findings=allFindings.slice(0,60);
   const seen=new Map<string,{keyword:string;engine:string;country:string;device:string;position:number|null;targetUrl:string;observedAt:Date;previous:number|null;count:number}>();
   for(const o of observations){
     const key=[o.keyword,o.engine,o.country,o.device].join("|");
@@ -41,11 +42,11 @@ export const loader=async ({request}:LoaderFunctionArgs) => {
     }
   }
   const rankingRows=Array.from(seen.values()).slice(0,40);
-  return {shop,productCount:products.length,sampleCount,coverageWarning,findings,catalogError,rankingRows,rankingCount:observations.length};
+  return {shop,productCount:products.length,sampleCount,coverageWarning,findings,findingCount:allFindings.length,catalogError,rankingRows,rankingCount:observations.length};
 };
 
 export default function SeoDashboard(){
-  const {shop,productCount,sampleCount,coverageWarning,findings,catalogError,rankingRows,rankingCount}=useLoaderData<typeof loader>();
+  const {shop,productCount,sampleCount,coverageWarning,findings,findingCount,catalogError,rankingRows,rankingCount}=useLoaderData<typeof loader>();
   return <s-page heading="Agentic Shopify · SEO Intelligence">
     <s-section heading="SEO agents">
       <p>This dashboard connects product-page checks with your Bright Data ranking workflow. All detected issues are recommendations; nothing on this page edits your store.</p>
@@ -57,6 +58,7 @@ export default function SeoDashboard(){
       {catalogError && <p role="alert">Catalog unavailable: {catalogError}. Recheck read_products permission.</p>}
       {!catalogError && productCount===0 && <p>No product pages with usable storefront URLs were evaluated. This does not establish that the store has no published products or no metadata issues.</p>}
       {!catalogError && productCount>0 && !findings.length && <p>No obvious metadata issues detected in the sampled products.</p>}
+      {findingCount>findings.length && <p role="status">Showing the first {findings.length} of {findingCount} sampled metadata findings. More findings exist; this is a bounded review queue, not a complete issue list.</p>}
       {Boolean(findings.length) && <div style={{overflowX:"auto"}}>
         <table style={{borderCollapse:"collapse",width:"100%"}}>
           <thead><tr><th style={{textAlign:"left"}}>Product</th><th style={{textAlign:"left"}}>Priority</th><th style={{textAlign:"left"}}>Recommendation</th></tr></thead>

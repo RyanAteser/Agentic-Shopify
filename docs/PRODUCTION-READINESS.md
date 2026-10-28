@@ -514,3 +514,12 @@ Production gate: run the full Node/Prisma suite and a development-store
 article preview under the selected theme. Hosted Actions may remain blocked
 before runner execution; isolated pure-function checks do not establish
 end-to-end publication safety. No live merchant article was published.
+
+
+## Editorial approval time-of-check integrity (2026-10-28)
+
+The Blog Agent now binds review submissions to the exact draft and destination visible when the review form was rendered. The server rejects stale/missing review-form fingerprints inside the merchant-locked transaction before recording a usable review or rejection. This prevents a stale browser approval from silently blessing newly edited content, or a stale rejection from discarding corrected content. The existing publisher-side content digest and explicit merchant publication confirmation remain mandatory.
+
+The new fingerprint includes the editorial keyword even though Shopify's publication payload does not, because merchant edits to the keyword must not silently preserve an old review screen. This is an optimistic concurrency check, not cryptographic proof of merchant attention. See `docs/EDITORIAL-EDITING.md` and `tests/editorial-review-stale.test.ts`. A two-editor development-store browser test and final hosted CI are still required. No live store was modified.
+
+Primary API reference: https://shopify.dev/docs/api/admin-graphql/2026-10/mutations/articleCreate

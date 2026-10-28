@@ -11,7 +11,7 @@ import { publishApprovedArticle } from "../lib/publish.server";
 import { loadMerchantConfig, saveMerchantConfig } from "../lib/merchant-config.server";
 import { logStoreAction } from "../lib/manager.server";
 import { parseReviewMinutes, recordEditorialReview } from "../lib/editorial-review.server";
-import { hasCurrentUsableReview, reviewFormDigest } from "../lib/editorial-review-integrity";
+import { hasCurrentUsableReview, reviewFormDigest, publishFormDigest } from "../lib/editorial-review-integrity";
 import { editorialEditDigest, saveMerchantDraftEdit } from "../lib/editorial-edit.server";
 
 function value(form: FormData, key: string, max = 500) {
@@ -49,7 +49,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }));
   const editVersions = drafts.map(draft => ({draftId: draft.id, digest: editorialEditDigest(draft)}));
   const reviewVersions = drafts.map(draft => ({draftId: draft.id, digest: reviewFormDigest(draft, config)}));
-  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates, editVersions, reviewVersions };
+  const publishVersions = drafts.map(draft => ({draftId: draft.id, digest: publishFormDigest(draft, config)}));
+  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates, editVersions, reviewVersions, publishVersions };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -125,7 +126,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (intent === "publish") {
       const id = value(form, "draftId", 100);
       if (form.get("verified") !== "on") return { ok: false, message: "Review the full article and verify claims, links and brand fit before publishing." };
-      const result = await publishApprovedArticle(shop, id, admin);
+      const result = await publishApprovedArticle(shop, id, admin, value(form, "expectedPublishDigest", 64));
       // The publisher is shared with the Store Manager inbox.
       if (result.ok) {
         await db.storeRecommendation.updateMany({
@@ -145,9 +146,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function BlogAgent() {
-  const { shop, blogs, config, drafts, jobs, reviews, editVersions, reviewVersions } = useLoaderData<typeof loader>();
+  const { shop, blogs, config, drafts, jobs, reviews, editVersions, reviewVersions, publishVersions } = useLoaderData<typeof loader>();
   const editVersionMap = new Map(editVersions.map(version => [version.draftId, version.digest]));
   const reviewVersionMap = new Map(reviewVersions.map(version => [version.draftId, version.digest]));
+  const publishVersionMap = new Map(publishVersions.map(version => [version.draftId, version.digest]));
   const reviewMap = new Map(reviews.map(review => [review.draftId, review]));
   const result = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -225,6 +227,12 @@ export default function BlogAgent() {
         }}>
           <input type="hidden" name="intent" value="publish"/>
           <input type="hidden" name="draftId" value={d.id}/>
+          <input type="hidden" name="expectedPublishDigest" value={publishVersionMap.get(d.id) ?? ""}/>
+          <p><strong>Publish destination:</strong> {blogs.find(b => b.id === config.blogId)?.title ?? config.blogId} ({config.blogId}) · <strong>Author:</strong> {config.authorName}</p>
+          <p><strong>Tags:</strong> {d.tags || "None"} · <strong>Excerpt:</strong> {d.summary}</p>
+          <details><summary>Inspect exact article HTML before publishing</summary>
+            <div style={{padding:10,border:"1px solid #ddd",maxHeight:400,overflow:"auto"}} dangerouslySetInnerHTML={{__html:d.body}}/>
+          </details>
           <label><input type="checkbox" name="verified" required/> I have reviewed all facts, links and brand claims</label>
           <button type="submit" disabled={busy}>Publish to Shopify</button>
         </Form>}

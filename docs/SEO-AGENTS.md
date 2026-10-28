@@ -146,3 +146,29 @@ Validation: deterministic pure comparison and SQLite-backed manager regression
 tests added; hosted CI and real Bright Data payload validation remain release
 gates. Measure false-alert rate, merchant dismissals, and minutes per useful
 SEO action in an authorized pilot.
+
+
+## Shopify catalog response completeness (2026-10-28)
+
+A successful HTTP/GraphQL request is not evidence that Shopify returned the
+requested product connection. Previously, both SEO surfaces converted missing
+`data.products.nodes` or an explicit `null` node list into an empty sample.
+The SEO dashboard could then report "No obvious metadata issues" without
+having inspected any product, and Store Manager silently treated the catalog
+as available.
+
+Both surfaces now use the same fail-closed product response parser. A
+**verified empty** `nodes: []` is valid; missing connections, malformed
+nodes, duplicate product IDs, incomplete selected fields and GraphQL errors
+are treated as **unavailable**, not as a clean SEO result. The dashboard
+displays a catalog warning; Store Manager preserves existing recommendations
+rather than treating absent evidence as remediation. Legitimate null
+`onlineStoreUrl` values remain supported and are excluded by the existing
+Online Store eligibility check. No Shopify content is modified.
+
+This is a defensive response-integrity improvement, not a guarantee of full
+catalog coverage. The query still samples at most 50 published products.
+Pure parser tests and mocked Manager tests were added; full repository CI,
+PostgreSQL and an authorized development-store response replay remain
+release gates. Measure false-clean audit incidence and merchant time spent
+before attributing business benefit.

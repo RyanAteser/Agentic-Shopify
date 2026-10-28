@@ -1,4 +1,5 @@
 import db from "../db.server";
+import { publicationReviewDigest } from "./editorial-review-integrity";
 
 export type ReviewDecision = "usable" | "rejected";
 
@@ -39,18 +40,29 @@ export async function recordEditorialReview(
         where: {shop}, data: {updatedAt: new Date()}
       });
       if (store.count !== 1) return {ok: false, message: "Store is no longer connected."};
+      const destination = await tx.storeConfig.findUniqueOrThrow({
+        where: {shop}, select: {blogId: true, authorName: true}
+      });
       const draft = await tx.articleDraft.findFirst({
         where: {id: draftId, shop, status: {in: ["ready", "needs_review"]}},
-        select: {id: true, status: true}
+        select: {id: true, status: true, title: true, body: true, summary: true, tags: true}
       });
       if (!draft) return {ok: false, message: "Draft is not eligible for review."};
       if (decision === "usable" && draft.status !== "ready") {
         return {ok: false, message: "This draft still needs corrections before it can be marked usable."};
       }
+      const digest = publicationReviewDigest(draft, destination);
       const previous = await tx.editorialReview.findUnique({
-        where: {shop_draftId: {shop, draftId}}, select: {id: true}
+        where: {shop_draftId: {shop, draftId}},
+        select: {id: true, decision: true, contentDigest: true}
       });
-      if (previous) return {ok: false, message: "A review is already recorded for this draft."};
+      // A legacy or stale usable review can be renewed after the merchant
+      // explicitly inspects the new payload. Rejections stay final.
+      const renewal = !!previous && previous.decision === "usable" &&
+        decision === "usable" && previous.contentDigest !== digest;
+      if (previous && !renewal) {
+        return {ok: false, message: "A review is already recorded for this draft."};
+      }
       const claimed = await tx.articleDraft.updateMany({
         where: {id: draftId, shop, status: draft.status},
         data: decision === "rejected"
@@ -58,11 +70,21 @@ export async function recordEditorialReview(
           : {updatedAt: new Date()}
       });
       if (claimed.count !== 1) return {ok: false, message: "Draft changed during review."};
-      await tx.editorialReview.create({
-        data: {shop, draftId, decision, reviewMinutes, feedback: decision === "rejected" ? notes : ""}
-      });
+      if (renewal) {
+        await tx.editorialReview.update({
+          where: {shop_draftId: {shop, draftId}},
+          data: {contentDigest: digest, reviewMinutes, reviewedAt: new Date(), feedback: ""}
+        });
+      } else {
+        await tx.editorialReview.create({
+          data: {shop, draftId, decision, contentDigest: decision === "usable" ? digest : "",
+            reviewMinutes, feedback: decision === "rejected" ? notes : ""}
+        });
+      }
       return {ok: true, message: decision === "usable"
-        ? "Usable review recorded. The article has NOT been published."
+        ? (renewal
+          ? "Usable review renewed for the current article. The article has NOT been published."
+          : "Usable review recorded. The article has NOT been published.")
         : "Rejection and review feedback recorded."};
     });
   } catch (error) {

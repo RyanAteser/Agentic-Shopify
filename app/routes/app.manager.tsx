@@ -6,6 +6,7 @@ import db from "../db.server";
 import { readMerchantProductSample, syncManagerTasks, logStoreAction } from "../lib/manager.server";
 import { publishApprovedArticle } from "../lib/publish.server";
 import { canExecuteAction } from "../lib/action-policy";
+import { hasCurrentUsableReview } from "../lib/editorial-review-integrity";
 
 const statuses=["pending","approved","applied","dismissed","resolved","superseded"] as const;
 
@@ -27,9 +28,18 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
     where:{shop,id:{in:ids}},select:{id:true,body:true,summary:true,seoScore:true,title:true,reviewNotes:true,status:true}
   });
   const reviews=await db.editorialReview.findMany({
-    where:{shop,draftId:{in:ids}},select:{draftId:true,decision:true}
+    where:{shop,draftId:{in:ids}},select:{draftId:true,decision:true,contentDigest:true}
   });
-  return {shop,warning,filter,tasks,activity,counts,articles,reviews};
+  const destination=await db.storeConfig.findUnique({
+    where:{shop},select:{blogId:true,authorName:true}
+  });
+  const articleMap=new Map(articles.map(article=>[article.id,article]));
+  const reviewStates=reviews.map(review=>{
+    const article=articleMap.get(review.draftId);
+    return {draftId:review.draftId,decision:review.decision,
+      current:!!article && !!destination && hasCurrentUsableReview(review,article,destination)};
+  });
+  return {shop,warning,filter,tasks,activity,counts,articles,reviews:reviewStates};
 };
 
 export const action=async ({request}:ActionFunctionArgs)=>{
@@ -94,7 +104,7 @@ export default function StoreManager(){
   const busy=nav.state!=="idle";
   const totals=Object.fromEntries(counts.map(x=>[x.status,x._count._all])) as Record<string,number>;
   const draftMap=new Map(articles.map(a=>[a.id,a]));
-  const usableReviewIds=new Set(reviews.filter(r=>r.decision==="usable").map(r=>r.draftId));
+  const usableReviewIds=new Set(reviews.filter(r=>r.decision==="usable"&&r.current).map(r=>r.draftId));
   return <s-page heading="Store Manager · Approval Inbox">
     <s-section heading="Your store, one team">
       <p>Connected merchant: <strong>{shop}</strong></p>
@@ -141,7 +151,7 @@ export default function StoreManager(){
               <input type="hidden" name="intent" value="publish"/>
               <label style={{marginRight:8}}><input type="checkbox" name="verified" required/> I verified claims, sources and brand fit</label>
               <button type="submit" disabled={busy||article?.status!=="ready"||!usableReviewIds.has(task.targetId)}>Approve & Publish</button>
-              {!usableReviewIds.has(task.targetId) && <p>Record a usable editorial review in the <Link to="/app">Blog Agent</Link> first.</p>}
+              {!usableReviewIds.has(task.targetId) && <p>Record or renew a usable editorial review of the current article in the <Link to="/app">Blog Agent</Link> first.</p>}
             </Form>:<>
               <Form method="post">
                 <input type="hidden" name="id" value={task.id}/>

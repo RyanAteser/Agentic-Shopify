@@ -51,9 +51,9 @@ export function scheduledClaimFromJob(job: {
   const next = new Date(String(v.nextRunAt));
   if ((previous !== null && !Number.isFinite(previous.getTime())) ||
       !Number.isFinite(next.getTime()) ||
-      !Number.isSafeInteger(v.previousCursor) || (v.previousCursor as number) < 0 ||
-      !Number.isInteger(v.cadenceDays) || (v.cadenceDays as number) < 1 ||
-      (v.cadenceDays as number) > 30 ||
+      typeof v.previousCursor !== "number" || !Number.isSafeInteger(v.previousCursor) || v.previousCursor < 0 ||
+      typeof v.cadenceDays !== "number" || !Number.isInteger(v.cadenceDays) || v.cadenceDays < 1 ||
+      v.cadenceDays > 30 ||
       typeof v.blogId !== "string" || !v.blogId ||
       typeof v.seedTopics !== "string") {
     throw new Error("Corrupt scheduled outbox snapshot");

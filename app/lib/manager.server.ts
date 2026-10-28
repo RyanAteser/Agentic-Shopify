@@ -1,5 +1,6 @@
 import db from "../db.server";
 import { auditProductSeo, effectiveSeoTitle, isOnlineStoreSeoCandidate, type SeoProduct } from "./seo";
+import { parseShopifyProductSample } from "./shopify-product-sample";
 import { buildBlogTasks, buildRankTasks, buildSeoTasks, rankingDropHasRecovered, type SuggestedTask } from "./manager";
 
 export async function readMerchantProductSample(admin:{graphql:Function}):Promise<{products:SeoProduct[];warning:string}> {
@@ -10,12 +11,7 @@ export async function readMerchantProductSample(admin:{graphql:Function}):Promis
       }
     }`);
     const json:any=await res.json();
-    if(json.errors?.length)throw new Error("Shopify product API returned errors");
-    return {products:(json.data?.products?.nodes||[]).map((p:any)=>({
-      id:String(p.id||""),title:String(p.title||""),description:String(p.description||""),
-      url:typeof p.onlineStoreUrl==="string"?p.onlineStoreUrl:null,
-      seo:p.seo?{title:p.seo.title??null,description:p.seo.description??null}:null,
-    })).filter(isOnlineStoreSeoCandidate),warning:""};
+    return {products:parseShopifyProductSample(json).filter(isOnlineStoreSeoCandidate),warning:""};
   }catch(e){return {products:[],warning:"Catalog unavailable; product recommendations may be incomplete."};}
 }
 

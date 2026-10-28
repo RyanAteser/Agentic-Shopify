@@ -142,3 +142,21 @@ test("weak edits require corrections and invalid or oversized edits never mutate
     assert.equal((await recordEditorialReview(shop,draftId,"usable",3)).ok,false);
   });
 });
+
+test("merchant can repair a needs_review draft without another paid generation",async()=>{
+  await withDraft(async(shop,draftId)=>{
+    await db.articleDraft.update({where:{id:draftId},data:{
+      title:"Unfinished",summary:"Too brief",body:"<p>Incomplete draft.</p>",
+      status:"needs_review",seoScore:20
+    }});
+    const version=editorialEditDigest(await snapshot(draftId));
+    const result=await edit(shop,draftId,version);
+    assert.equal(result.ok,true);
+    const saved=await snapshot(draftId);
+    assert.equal(saved.status,"ready");
+    assert.ok(saved.seoScore>=70);
+    assert.equal(saved.shopifyArticleId,null);
+    assert.equal(await db.articleDraft.count({where:{shop}}),1);
+    assert.equal(await db.contentJob.count({where:{shop}}),1);
+  });
+});

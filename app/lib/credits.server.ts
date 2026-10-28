@@ -12,7 +12,7 @@ export async function createCreditedJob(shop:string,topic:string){
       data:{freeDraftsUsed:{increment:1}}
     });
     if(!claim.count)throw new Error("Free generation limit reached (3 lifetime drafts). Paid plans are not yet available.");
-    return tx.contentJob.create({data:{shop,topic}});
+    return tx.contentJob.create({data:{shop,topic,outboxVersion:1}});
   });
 }
 

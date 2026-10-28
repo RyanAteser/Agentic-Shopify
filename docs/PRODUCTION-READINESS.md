@@ -452,3 +452,29 @@ and exact annotation. Do not change billing/spending limits without explicit
 approval. Once GitHub restores runner eligibility, rerun all three jobs and
 require green SQLite, PostgreSQL, and Docker checks on the latest PR head.
 GitHub reference: https://docs.github.com/en/actions/concepts/billing-and-usage
+
+## Shopify article excerpt HTML boundary (2026-10-28)
+
+The Blog Agent stores and displays `ArticleDraft.summary` as **plain text**,
+but Shopify's `ArticleCreateInput.summary` is an **HTML** field. Sending
+untrusted model-generated or imported excerpt text directly into that field
+could allow markup and attributes to be interpreted by a storefront theme.
+The shared publisher now HTML-encodes `& < > " '` **at the outgoing Shopify
+mutation boundary**. The stored merchant excerpt remains unchanged; a literal
+HTML entity remains literal instead of being decoded into markup. This affects
+both Blog Agent and Store Manager publishing because they share the publisher.
+
+Pure encoding tests cover markup, quotes, ampersands, Unicode and already
+encoded entities. A mocked Shopify mutation regression asserts the exact
+escaped summary sent to Admin GraphQL. This is defense-in-depth, **not**
+a storefront XSS penetration test or proof of Shopify/theme sanitization.
+The article body uses a separate allowlist HTML sanitizer; merchant factual
+review and an explicit publication confirmation are still mandatory.
+
+Shopify API reference:
+https://shopify.dev/docs/api/admin-graphql/2026-10/input-objects/ArticleCreateInput
+
+Production gate: run the full Node/Prisma suite and a development-store
+article preview under the selected theme. Hosted Actions may remain blocked
+before runner execution; isolated pure-function checks do not establish
+end-to-end publication safety. No live merchant article was published.

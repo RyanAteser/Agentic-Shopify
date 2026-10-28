@@ -7,7 +7,68 @@ export type BrightDataOrganicContext = {
   device: "desktop" | "mobile";
   observedAt: string;
   primaryHost: string;
+  /** Actual Google URL submitted to Bright Data, never reconstructed from defaults. */
+  requestUrl: string;
 };
+
+
+/**
+ * The parsed Bright Data response may omit general.gl. Check the original
+ * submitted search URL instead of silently attributing its rankings to a
+ * country, language, device, or search vertical the merchant did not query.
+ *
+ * This is consistency validation, not cryptographic proof of scrape origin.
+ * Until the ranking schema includes locale, only first-page English-language
+ * standard Google web searches are comparable.
+ */
+function assertRequestedGoogleSerp(context: BrightDataOrganicContext): void {
+  if (typeof context.requestUrl !== "string" || context.requestUrl.length > 2048) {
+    throw new Error("Bright Data request URL evidence required");
+  }
+  let request: URL;
+  try { request = new URL(context.requestUrl); }
+  catch { throw new Error("Invalid Bright Data request URL"); }
+  if (request.protocol !== "https:" || request.hostname !== "www.google.com" ||
+      request.port || request.username || request.password || request.hash ||
+      request.pathname !== "/search") {
+    throw new Error("Bright Data request must target standard Google web search");
+  }
+  const allowed = new Set(["q", "gl", "hl", "brd_json", "start", "brd_mobile", "pws"]);
+  for (const key of request.searchParams.keys()) {
+    if (!allowed.has(key)) throw new Error("Unsupported Bright Data search dimension: " + key);
+  }
+  const exactlyOne = (key: string): string => {
+    const values = request.searchParams.getAll(key);
+    if (values.length !== 1) throw new Error("Bright Data request requires exactly one " + key);
+    return values[0];
+  };
+  const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+  if (normalize(exactlyOne("q")) !== normalize(context.keyword)) {
+    throw new Error("Bright Data requested query mismatch");
+  }
+  if (!/^[A-Z]{2}$/.test(context.country) ||
+      exactlyOne("gl").toUpperCase() !== context.country) {
+    throw new Error("Bright Data requested country mismatch");
+  }
+  if (exactlyOne("hl").toLowerCase() !== "en") {
+    throw new Error("Unsupported Bright Data search language");
+  }
+  if (exactlyOne("brd_json") !== "1") {
+    throw new Error("Bright Data parsed JSON mode required");
+  }
+  if (request.searchParams.has("start") && exactlyOne("start") !== "0") {
+    throw new Error("Bright Data request must be the first results page");
+  }
+  if (request.searchParams.has("pws") && exactlyOne("pws") !== "0") {
+    throw new Error("Bright Data personalization must be disabled");
+  }
+  const mobile = request.searchParams.getAll("brd_mobile");
+  if ((context.device === "desktop" && mobile.length !== 0) ||
+      (context.device === "mobile" && (mobile.length !== 1 || mobile[0] !== "1")) ||
+      (context.device !== "desktop" && context.device !== "mobile")) {
+    throw new Error("Bright Data requested device mismatch");
+  }
+}
 
 /**
  * Adapt a Bright Data parsed Google SERP (brd_json=1) to the application's
@@ -24,6 +85,7 @@ export function normalizeBrightDataOrganicGoogle(
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("Bright Data response must be an object");
   }
+  assertRequestedGoogleSerp(context);
   const data = payload as Record<string, unknown>;
   const general = data.general;
   if (!general || typeof general !== "object" || Array.isArray(general)) {

@@ -58,7 +58,8 @@ export default function SeoDashboard(){
     <s-section heading="Product metadata audit">
       <p>Sampled <strong>{productCount}</strong> active products with an Online Store URL (up to 50 published products queried). Unpublished, unlisted and other-channel-only products are excluded. This is not a complete crawl, proof of indexing or a Google ranking score.</p>
       {catalogError && <p role="alert">Catalog unavailable: {catalogError}. Recheck read_products permission.</p>}
-      {!catalogError && !findings.length && <p>No obvious metadata issues detected in the sampled products.</p>}
+      {!catalogError && productCount===0 && <p>No eligible published Online Store products were returned, so no metadata pages were evaluated.</p>}
+      {!catalogError && productCount>0 && !findings.length && <p>No obvious metadata issues detected in the sampled products.</p>}
       {Boolean(findings.length) && <div style={{overflowX:"auto"}}>
         <table style={{borderCollapse:"collapse",width:"100%"}}>
           <thead><tr><th style={{textAlign:"left"}}>Product</th><th style={{textAlign:"left"}}>Priority</th><th style={{textAlign:"left"}}>Recommendation</th></tr></thead>

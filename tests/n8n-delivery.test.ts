@@ -73,14 +73,64 @@ test("202 acknowledgment is not completion and sends exactly one authenticated P
       assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), {
         jobId, shop, topic: "Test generation"
       });
-      res.writeHead(202);
-      res.end();
+      res.writeHead(202, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ accepted: true, jobId, shop }));
     }, async url => {
       await deliver(shop, jobId, url);
     });
     assert.equal(received, 1);
     assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: jobId } })).status, "running");
     assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 1);
+  });
+});
+
+test("2xx without a matching job-scoped 202 acknowledgment is uncertain, never refundable or replayed", async () => {
+  const modes = [
+    "default-200", "no-content-204", "empty-202", "bad-json", "wrong-job",
+    "wrong-shop", "negative-ack", "oversized", "wrong-content-type"
+  ] as const;
+  for (const mode of modes) {
+    await withJob(async (shop, jobId) => {
+      let received = 0;
+      await withHttpStub((_req, res) => {
+        received++;
+        if (mode === "default-200") { res.writeHead(200); res.end("Workflow got started"); return; }
+        if (mode === "no-content-204") { res.writeHead(204); res.end(); return; }
+        const body = mode === "empty-202" ? "" :
+          mode === "bad-json" ? "{" :
+          mode === "oversized" ? JSON.stringify({ accepted: true, jobId, shop, padding: "x".repeat(3000) }) :
+          JSON.stringify({
+            accepted: mode !== "negative-ack",
+            jobId: mode === "wrong-job" ? "another-job" : jobId,
+            shop: mode === "wrong-shop" ? "another.myshopify.com" : shop
+          });
+        res.writeHead(202, { "Content-Type": mode === "wrong-content-type" ? "text/plain" : "application/json" });
+        res.end(body);
+      }, async url => {
+        await assert.rejects(deliver(shop, jobId, url), UncertainDispatchError, mode);
+      });
+      assert.equal(received, 1, mode);
+      assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: jobId } })).status,
+        "dispatch_uncertain", mode);
+      assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed,
+        1, mode);
+      assert.equal(await failCreditedJob(shop, jobId, "incorrect acceptance"), false, mode);
+    });
+  }
+});
+
+test("callback winning before malformed 202 acknowledgment cannot be overwritten", async () => {
+  await withJob(async (shop, jobId) => {
+    await withHttpStub(async (_req, res) => {
+      await persistArticleCallback(shop, jobId, article);
+      res.writeHead(202, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ accepted: true, jobId: "other-job", shop }));
+    }, async url => {
+      await assert.rejects(deliver(shop, jobId, url), UncertainDispatchError);
+    });
+    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: jobId } })).status, "completed");
+    assert.equal(await db.articleDraft.count({ where: { jobId } }), 1);
+    assert.equal(await failCreditedJob(shop, jobId, "late refund"), false);
   });
 });
 

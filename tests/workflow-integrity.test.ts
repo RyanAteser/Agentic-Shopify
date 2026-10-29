@@ -135,3 +135,34 @@ test("writer callback destination is operator-pinned and cannot be changed by we
   assert.match(deliverySource, /redirect:\s*"error"/,
     "App-to-n8n authenticated dispatch must reject redirects");
 });
+
+test("all inactive n8n workflows pin safe execution persistence until upstream zero-output fix is verified", () => {
+  // n8n issue #38551: on affected versions, saveDataSuccessExecution=none
+  // can strand zero-output runs as 'running'. Do not inherit that setting.
+  const paths = [
+    "n8n/shopify-blog-writer.json",
+    "n8n/shopify-blog-scheduler.json",
+    "n8n/shopify-growth-gsc-sync.json",
+    "n8n/shopify-queued-recovery.json",
+    "n8n/shopify-store-manager.json"
+  ];
+  for (const path of paths) {
+    const workflow = JSON.parse(readFileSync(path, "utf8")) as Workflow & {
+      settings: {
+        saveDataSuccessExecution?: string;
+        saveDataErrorExecution?: string;
+        saveManualExecutions?: boolean;
+        saveExecutionProgress?: boolean;
+      };
+    };
+    assert.equal(workflow.active, false, path + " must remain inactive");
+    assert.equal(workflow.settings.saveDataSuccessExecution, "all",
+      path + " must not inherit the known zero-output persistence hazard");
+    assert.equal(workflow.settings.saveDataErrorExecution, "all",
+      path + " retains bounded incident-reconciliation evidence");
+    assert.equal(workflow.settings.saveManualExecutions, false,
+      path + " must not persist manual test inputs by default");
+    assert.equal(workflow.settings.saveExecutionProgress, false,
+      path + " must not persist intermediate node payloads");
+  }
+});

@@ -103,3 +103,7 @@ Regression coverage separately changes each brief field after a due candidate
 is read, checks that the stale candidate cannot reserve a credit, then verifies
 a fresh candidate can proceed. The change is not evidence of merchant growth;
 a real two-session Shopify staging race and n8n integration remain release gates.
+
+## n8n execution-history compatibility and retention (2026-10-29)
+
+All five inactive workflow exports explicitly retain successful and failed production executions, disable manual-run and per-node-progress persistence, and require instance-level pruning. This avoids inheriting an upstream n8n zero-output stuck-running bug on affected releases but increases the sensitive-data retention surface. See [N8N-EXECUTION-DATA.md](N8N-EXECUTION-DATA.md) for evidence, privacy controls, version checks and staging go/no-go criteria. No workflows were activated.

@@ -98,8 +98,8 @@ test("single SERP dip or rebound never becomes a confirmed manager alert",()=>{
   assert.match(alert.rationale,/Three same-page SERP observations/);
   assert.equal(buildRankTasks([latest,{...confirmation,position:6},baseline],now).length,0,
     "both newer observations must be at least three positions below baseline");
-  assert.equal(buildRankTasks([latest,{...confirmation,observedAt:new Date("2026-08-01")},baseline],now).length,0,
-    "an old confirmation cannot support a fresh alert");
+  assert.equal(buildRankTasks([latest,confirmation,point(4,"2026-08-01T12:00:00Z")],now).length,0,
+    "a baseline older than 28 days cannot support a fresh alert");
   assert.equal(buildRankTasks([latest,confirmation,{...baseline,targetUrl:"https://shop.example/products/other"}],now).length,0,
     "all three observations must concern the same landing page");
 });

@@ -238,3 +238,79 @@ test("writer returns a per-job callback capability, never a global callback cred
   }), /Missing or invalid app job capability/);
   assert.equal(workflow.active, false);
 });
+
+test("writer packs complete product URLs into parseable bounded JSON instead of slicing the brief", () => {
+  const workflow = load("n8n/shopify-blog-writer.json");
+  const prepare = (workflow.nodes as Array<NodeShape & { parameters: { jsCode?: string } }>)
+    .find(node => node.name === "Prepare Brief");
+  assert.ok(prepare?.parameters.jsCode);
+  const catalog = Array.from({ length: 20 }, (_, i) => ({
+    name: "Product " + i,
+    description: "D".repeat(400),
+    url: "https://merchant.example/products/" + i + "-" + "z".repeat(300)
+  }));
+  const input = {
+    jobId: "job-1", shop: "merchant.myshopify.com", topic: "Useful products",
+    callbackToken: "a".repeat(43), productCatalog: catalog,
+    brief: {
+      audience: "a".repeat(2000), brandVoice: "b".repeat(2000),
+      seedTopics: "c".repeat(2000),
+      avoidPatterns: Array.from({ length: 4 }, () => ({
+        topic: "t".repeat(1000), reason: "r".repeat(1000)
+      })),
+      priorPublishedTitles: Array.from({ length: 8 }, () => "p".repeat(500))
+    }
+  };
+  const prepared = runInNewContext("(() => {" + prepare.parameters.jsCode + "})()", {
+    $input: { first: () => ({ json: { body: input } }) }
+  }) as Array<{ json: { user: string; jobId: string; callbackToken: string } }>;
+  const prefix = "Write a useful article from this merchant brief: ";
+  assert.ok(prepared[0].json.user.startsWith(prefix));
+  const json = prepared[0].json.user.slice(prefix.length);
+  assert.ok(json.length <= 10000);
+  const context = JSON.parse(json) as {
+    audience: string; productCountAvailable: number; productSampleTruncated: boolean;
+    verifiedStoreProducts: Array<{ name: string; description: string; url: string }>;
+  };
+  assert.equal(context.audience.length, 500);
+  assert.equal(context.productCountAvailable, 20);
+  assert.equal(context.productSampleTruncated, true);
+  assert.ok(context.verifiedStoreProducts.length > 0 && context.verifiedStoreProducts.length < 20);
+  assert.ok(context.verifiedStoreProducts.every(p => catalog.some(original => original.url === p.url)),
+    "No product URL may be truncated or synthesized");
+  assert.equal(prepared[0].json.jobId, input.jobId);
+  assert.equal(prepared[0].json.callbackToken, input.callbackToken);
+});
+
+test("writer excludes over-budget product URLs and marks omitted products without fabricating catalog completeness", () => {
+  const workflow = load("n8n/shopify-blog-writer.json");
+  const prepare = (workflow.nodes as Array<NodeShape & { parameters: { jsCode?: string } }>)
+    .find(node => node.name === "Prepare Brief");
+  assert.ok(prepare?.parameters.jsCode);
+  const good = "https://merchant.example/products/mug";
+  const input = {
+    jobId: "job-2", shop: "merchant.myshopify.com", topic: "Mug guide",
+    callbackToken: "b".repeat(43),
+    productCatalog: [
+      { name: "Mug", description: "A reusable cup", url: good },
+      { name: "Too long", description: "Unusable", url: good + "x".repeat(400) }
+    ],
+    brief: {}
+  };
+  const result = runInNewContext("(() => {" + prepare.parameters.jsCode + "})()", {
+    $input: { first: () => ({ json: { body: input } }) }
+  }) as Array<{ json: { user: string } }>;
+  const context = JSON.parse(result[0].json.user.split("brief: ")[1]);
+  assert.equal(context.productCountAvailable, 2);
+  assert.equal(context.productSampleTruncated, true);
+  assert.deepEqual(context.verifiedStoreProducts, [
+    { name: "Mug", description: "A reusable cup", url: good }
+  ]);
+  const empty = runInNewContext("(() => {" + prepare.parameters.jsCode + "})()", {
+    $input: { first: () => ({ json: { body: { ...input, productCatalog: [] } } }) }
+  }) as Array<{ json: { user: string } }>;
+  const emptyContext = JSON.parse(empty[0].json.user.split("brief: ")[1]);
+  assert.equal(emptyContext.productCountAvailable, 0);
+  assert.equal(emptyContext.productSampleTruncated, false);
+  assert.deepEqual(emptyContext.verifiedStoreProducts, []);
+});

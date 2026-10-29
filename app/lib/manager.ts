@@ -94,24 +94,36 @@ export function buildRankTasks(records: RankLike[], now=new Date()):SuggestedTas
   for(const [key,rows] of groups){
     const distinct=rows.sort((a,b)=>b.observedAt.getTime()-a.observedAt.getTime())
       .filter((r,i,arr)=>i===0||r.observedAt.getTime()!==arr[i-1].observedAt.getTime());
-    const latest=distinct[0],previous=distinct[1];
-    if(!latest||!previous||latest.position===null||previous.position===null||
-       !sameRankTarget(latest.targetUrl,previous.targetUrl)) continue;
-    if(now.getTime()-latest.observedAt.getTime()>14*86400000)continue;
-    if(latest.observedAt.getTime()-previous.observedAt.getTime()>28*86400000)continue;
-    const lost=latest.position-previous.position;
-    if(lost<3)continue;
+    // A two-snapshot rank change can be a transient SERP fluctuation. Require
+    // the TWO most recent observations to both be >=3 places worse than the
+    // preceding baseline, with the same exact landing page and market.
+    // This is a conservative triage heuristic, NOT statistical significance.
+    // Never skip an intervening recovery or URL change to cherry-pick a drop.
+    const latest=distinct[0],confirmation=distinct[1],baseline=distinct[2];
+    if(!latest||!confirmation||!baseline||
+       latest.position===null||confirmation.position===null||baseline.position===null||
+       !sameRankTarget(latest.targetUrl,confirmation.targetUrl)||
+       !sameRankTarget(confirmation.targetUrl,baseline.targetUrl))continue;
+    const age=now.getTime()-latest.observedAt.getTime();
+    if(age<0||age>14*86400000)continue;
+    if(latest.observedAt.getTime()-confirmation.observedAt.getTime()>28*86400000||
+       confirmation.observedAt.getTime()-baseline.observedAt.getTime()>28*86400000)continue;
+    const confirmedLoss=confirmation.position-baseline.position;
+    const latestLoss=latest.position-baseline.position;
+    if(confirmedLoss<3||latestLoss<3)continue;
     tasks.push({
       sourceKey:"rank:"+key+":"+latest.observedAt.toISOString(),
       agent:"seo",kind:"ranking_drop",targetId:latest.targetUrl,
-      title:"Keyword slipped: "+latest.keyword,
-      rationale:"Observed organic position moved from "+previous.position+" to "+latest.position+
-        " ("+lost+" places) on "+latest.engine+" "+latest.country+" "+latest.device+
-        ". Check recent SERP conditions; this is not evidence of lost revenue or causation.",
+      title:"Repeated rank decline: "+latest.keyword,
+      rationale:"Three same-page SERP observations: "+baseline.position+" → "+
+        confirmation.position+" → "+latest.position+" (latest "+latestLoss+
+        " places below baseline) on "+latest.engine+" "+latest.country+" "+latest.device+
+        ". Review Search Console traffic before changing content. A repeated snapshot is not proof of lost revenue or causation.",
       evidence:JSON.stringify({source:"brightdata-serp",latestAt:latest.observedAt.toISOString(),
-        previousAt:previous.observedAt.toISOString(),previousRank:previous.position,latestRank:latest.position,
-        url:latest.targetUrl}),
-      priority:Math.min(88,55+lost*3),
+        confirmationAt:confirmation.observedAt.toISOString(),
+        previousAt:baseline.observedAt.toISOString(),previousRank:baseline.position,
+        confirmationRank:confirmation.position,latestRank:latest.position,url:latest.targetUrl}),
+      priority:Math.min(88,55+Math.min(confirmedLoss,latestLoss)*3),
     });
   }
   return tasks.slice(0,30);

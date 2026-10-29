@@ -31,8 +31,9 @@ test("offline replay distinguishes two-snapshot noise from independently dated c
   assert.deepEqual(report.comparison,{
     referenceOnlyIncidentDays:2, confirmedOnlyIncidentDays:1, bothIncidentDays:0,
     referenceOnlyIncidents:1, confirmedOnlyIncidents:0, bothIncidents:1,
-    confirmedEarlierIncidents:0, confirmedLaterIncidents:1, sameDayIncidents:0,
-    medianConfirmedLagDays:1
+    referenceOnlyEpisodes:1, confirmedOnlyEpisodes:0, bothEpisodes:1,
+    confirmedEarlierEpisodes:0, confirmedLaterEpisodes:1, sameDayEpisodes:0,
+    medianConfirmedEpisodeLagDays:1
   });
   assert.equal(report.confirmedThreeDay.usefulAmongLabeledPct,null,
     "no labels cannot be reported as zero precision");
@@ -98,9 +99,9 @@ test("first-alert comparison identifies confirmed-before-reference despite zero 
   assert.equal(report.comparison.bothIncidents,1);
   assert.equal(report.comparison.referenceOnlyIncidents,0);
   assert.equal(report.comparison.confirmedOnlyIncidents,0);
-  assert.equal(report.comparison.confirmedEarlierIncidents,1);
-  assert.equal(report.comparison.confirmedLaterIncidents,0);
-  assert.equal(report.comparison.medianConfirmedLagDays,-1);
+  assert.equal(report.comparison.confirmedEarlierEpisodes,1);
+  assert.equal(report.comparison.confirmedLaterEpisodes,0);
+  assert.equal(report.comparison.medianConfirmedEpisodeLagDays,-1);
   assert.deepEqual(report,replayRankingAlerts({
     primaryHost:"shop.example",observations:[...observations].reverse()
   },now));
@@ -114,5 +115,46 @@ test("first-alert comparison abstains on lag when no incidents overlap",()=>{
   assert.equal(report.comparison.referenceOnlyIncidents,1);
   assert.equal(report.comparison.confirmedOnlyIncidents,0);
   assert.equal(report.comparison.bothIncidents,0);
-  assert.equal(report.comparison.medianConfirmedLagDays,null);
+  assert.equal(report.comparison.medianConfirmedEpisodeLagDays,null);
+});
+
+test("recurring declines after sampled recovery count as separate episodes, not one first alert",()=>{
+  const observations=[
+    point(4,"2026-10-10T12:00:00Z"),
+    point(9,"2026-10-11T12:00:00Z"),
+    point(11,"2026-10-12T12:00:00Z"),
+    point(4,"2026-10-13T12:00:00Z"), // sampled recovery to original baseline
+    point(9,"2026-10-14T12:00:00Z"),
+    point(11,"2026-10-15T12:00:00Z")
+  ];
+  const report=replayRankingAlerts({primaryHost:"shop.example",observations},now);
+  assert.equal(report.referenceTwoSnapshot.uniqueIncidents,1,
+    "stable market/page identity still counts as one long-lived incident");
+  assert.equal(report.confirmedThreeDay.uniqueIncidents,1);
+  assert.equal(report.comparison.bothIncidents,1);
+  assert.equal(report.comparison.bothEpisodes,2,
+    "two distinct declines must not collapse into the first detection");
+  assert.equal(report.comparison.referenceOnlyEpisodes,0);
+  assert.equal(report.comparison.confirmedOnlyEpisodes,0);
+  assert.equal(report.comparison.confirmedLaterEpisodes,2);
+  assert.equal(report.comparison.medianConfirmedEpisodeLagDays,1);
+  assert.deepEqual(report,replayRankingAlerts({
+    primaryHost:"shop.example",observations:[...observations].reverse()
+  },now),"episode comparison must not depend on export order");
+});
+
+test("a changed landing page or unknown rank fences off old episode evidence",()=>{
+  const observations=[
+    point(4,"2026-10-10T12:00:00Z"),
+    point(9,"2026-10-11T12:00:00Z"),
+    point(11,"2026-10-12T12:00:00Z"),
+    point(null as unknown as number,"2026-10-13T12:00:00Z",{targetUrl:""}),
+    point(4,"2026-10-14T12:00:00Z"),
+    point(9,"2026-10-15T12:00:00Z"),
+    point(11,"2026-10-16T12:00:00Z")
+  ];
+  const report=replayRankingAlerts({primaryHost:"shop.example",observations},now);
+  assert.equal(report.comparison.bothEpisodes,2,
+    "a missing rank is not evidence that two declines form one continuous episode");
+  assert.equal(report.comparison.medianConfirmedEpisodeLagDays,1);
 });

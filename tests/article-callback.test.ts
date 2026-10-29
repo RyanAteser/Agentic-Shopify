@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
 import { persistArticleCallback, ArticleCallbackRejectedError } from "../app/lib/article-callback.server";
+import { createCreditedJob } from "../app/lib/credits.server";
+import { claimQueuedDispatch } from "../app/lib/dispatch-claim.server";
 
 const article = {
   title: "How to choose the right product for your needs",
@@ -92,5 +94,34 @@ test("oversized model callback persists an editable needs-review draft, not a re
     await db.articleDraft.deleteMany({where:{shop}});
     await db.contentJob.deleteMany({where:{shop}});
     await db.storeConfig.deleteMany({where:{shop}});
+  }
+});
+
+test("queued jobs reject premature callbacks without losing credit or blocking legitimate completion", async () => {
+  const shop = "preclaim-callback-" + randomUUID() + ".myshopify.com";
+  await db.storeConfig.create({ data: { shop } });
+  try {
+    const job = await createCreditedJob(shop, "Care guide");
+    assert.equal(job.status, "queued");
+    assert.equal(job.outboxVersion, 1);
+    await assert.rejects(persistArticleCallback(shop, job.id, article), isRejected(409));
+    assert.equal(await db.articleDraft.count({ where: { jobId: job.id } }), 0);
+    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: job.id } })).status, "queued");
+    assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 1,
+      "a premature callback cannot spend or refund another generation credit");
+
+    // A genuine dispatch claim precedes the n8n POST. The same callback is
+    // now valid, and subsequent delivery is idempotent.
+    await claimQueuedDispatch(shop, job.id);
+    const saved = await persistArticleCallback(shop, job.id, article);
+    assert.deepEqual(await persistArticleCallback(shop, job.id, article), saved);
+    assert.equal(await db.articleDraft.count({ where: { jobId: job.id } }), 1);
+    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: job.id } })).status, "completed");
+    assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 1);
+  } finally {
+    await db.editorialReview.deleteMany({ where: { shop } });
+    await db.articleDraft.deleteMany({ where: { shop } });
+    await db.contentJob.deleteMany({ where: { shop } });
+    await db.storeConfig.deleteMany({ where: { shop } });
   }
 });

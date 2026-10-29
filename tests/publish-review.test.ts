@@ -359,3 +359,43 @@ test("previously stored oversized reviewed draft cannot trigger Shopify articleC
     assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"ready");
   });
 });
+
+test("legacy unsafe HTML cannot reach Shopify even after a usable review", async () => {
+  const bodies = [
+    '<p><a href="http://unsafe.example/path">Unsafe destination</a></p>',
+    '<p><a href="/&#10;/attacker.example/collect">Disguised destination</a></p>',
+    '<script>alert(1)</script><p>Unreviewed script markup</p>',
+    '<p><a href="https://example.org" rel="opener">Unsupported rel</a></p>',
+  ];
+  for (const body of bodies) {
+    await withDraft(async (shop, draftId) => {
+      // Simulate a historical/imported row that bypassed today's sanitizer.
+      await db.articleDraft.update({
+        where: {id: draftId}, data: {body, seoScore: 90, status: "ready"}
+      });
+      assert.equal((await recordEditorialReview(shop, draftId, "usable", 3)).ok, true);
+      const admin = fakeAdmin();
+      const blocked = await publishFromCurrentForm(shop, draftId, admin);
+      assert.equal(blocked.ok, false);
+      assert.match(blocked.message, /outside the current safety policy/i);
+      assert.equal(admin.calls, 0, "no irreversible Shopify mutation");
+      assert.equal(
+        (await db.articleDraft.findUniqueOrThrow({where: {id: draftId}})).status,
+        "ready", "draft remains available for correction and renewed review"
+      );
+    });
+  }
+});
+
+test("already sanitized reviewed HTML still reaches the explicit Shopify publish gate", async () => {
+  await withDraft(async (shop, draftId) => {
+    const body = '<p><a href="/products/boots" rel="sponsored">Product</a></p>';
+    await db.articleDraft.update({
+      where: {id: draftId}, data: {body, seoScore: 90, status: "ready"}
+    });
+    assert.equal((await recordEditorialReview(shop, draftId, "usable", 3)).ok, true);
+    const admin = fakeAdmin();
+    assert.equal((await publishFromCurrentForm(shop, draftId, admin)).ok, true);
+    assert.equal(admin.calls, 1);
+  });
+});

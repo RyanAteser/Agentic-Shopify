@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
-import { buildBlogTasks, buildRankTasks, buildSeoTasks, rankingDropHasRecovered } from "../app/lib/manager";
+import { buildBlogTasks, buildRankTasks, buildSeoTasks, rankIncidentKey, rankingDropHasRecovered } from "../app/lib/manager";
 import { readMerchantProductSample, syncManagerTasks, logStoreAction } from "../app/lib/manager.server";
 import { eraseMerchantData } from "../app/lib/merchant-redaction.server";
 import { publishFromCurrentForm } from "./helpers/publish";
@@ -325,7 +325,7 @@ test("ranking recovery requires a newer fresh observation of the same page and m
   assert.equal(rankingDropHasRecovered(alert.sourceKey,alert.evidence,[recovered],new Date("2026-11-20T12:00:00Z")),false);
   assert.equal(rankingDropHasRecovered(alert.sourceKey,alert.evidence,[recovered],new Date("2026-10-25T12:00:00Z")),false);
   assert.equal(rankingDropHasRecovered(alert.sourceKey,"{}",[recovered],now),false);
-  assert.equal(rankingDropHasRecovered(alert.sourceKey.replace("boots","sneakers"),alert.evidence,[recovered],now),false);
+  assert.equal(rankingDropHasRecovered(rankIncidentKey("sneakers|US|desktop|google",url),alert.evidence,[recovered],now),false);
 });
 
 test("manager retires recovered SERP alerts but preserves accepted decisions and new drops",async()=>{
@@ -367,8 +367,11 @@ test("manager retires recovered SERP alerts but preserves accepted decisions and
     await syncManagerTasks(shop,[],new Date("2026-10-29T12:00:00Z"));
     const latest=await db.storeRecommendation.findMany({where:{shop,kind:"ranking_drop"}});
     assert.equal(latest.filter(a=>a.status==="pending").length,1,
-      "a later distinct ranking drop creates a fresh alert without rewriting historical evidence");
-    assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:boots.id}})).status,"superseded");
+      "a later independently confirmed decline reopens the same incident");
+    assert.equal(latest.length,2,"recovery and recurrence must not grow the task count");
+    const reopened=await db.storeRecommendation.findUniqueOrThrow({where:{id:boots.id}});
+    assert.equal(reopened.status,"pending");
+    assert.equal(JSON.parse(reopened.evidence).latestAt,"2026-10-28T12:00:00.000Z");
   }finally {
     await db.storeActivity.deleteMany({where:{shop}});
     await db.storeRecommendation.deleteMany({where:{shop}});
@@ -377,6 +380,70 @@ test("manager retires recovered SERP alerts but preserves accepted decisions and
   }
 });
 
+
+test("repeated same-page rank declines have stable incident identity and preserve the first baseline",async()=>{
+  const shop="rank-incident-"+randomUUID()+".myshopify.com";
+  const now=new Date("2026-10-28T18:00:00Z");
+  const rank=(position:number,date:string,keyword="boots",url="https://shop.example/products/boots")=>({
+    shop,keyword,position,engine:"google",country:"US",device:"desktop",
+    targetUrl:url,observedAt:new Date(date)
+  });
+  await db.storeConfig.create({data:{shop}});
+  try {
+    const first=[
+      rank(4,"2026-10-20T12:00:00Z"),
+      rank(9,"2026-10-21T12:00:00Z"),
+      rank(12,"2026-10-22T12:00:00Z")
+    ];
+    await db.seoRankObservation.createMany({data:first});
+    await syncManagerTasks(shop,[],now);
+    const original=await db.storeRecommendation.findFirstOrThrow({
+      where:{shop,kind:"ranking_drop"}
+    });
+    assert.match(original.sourceKey,/^rank-incident:v2:[a-f0-9]{64}$/);
+    assert.equal(JSON.parse(original.evidence).previousRank,4);
+    await db.seoRankObservation.createMany({data:[
+      rank(15,"2026-10-23T12:00:00Z"),
+      rank(18,"2026-10-24T12:00:00Z"),
+      rank(21,"2026-10-25T12:00:00Z")
+    ]});
+    await syncManagerTasks(shop,[],now);
+    const after=await db.storeRecommendation.findMany({where:{shop,kind:"ranking_drop"}});
+    assert.equal(after.length,1,"worsening each day must not flood the merchant inbox");
+    assert.equal(after[0].id,original.id);
+    assert.equal(after[0].evidence,original.evidence,
+      "freeze the first observed baseline and rationale until recovery");
+    // A merchant dismissal must not be undone by another scrape.
+    await db.storeRecommendation.update({where:{id:original.id},data:{status:"dismissed"}});
+    await db.seoRankObservation.create({data:rank(24,"2026-10-26T12:00:00Z")});
+    await syncManagerTasks(shop,[],now);
+    const dismissed=await db.storeRecommendation.findMany({where:{shop,kind:"ranking_drop"}});
+    assert.equal(dismissed.length,1);
+    assert.equal(dismissed[0].status,"dismissed");
+    // Different search context or actual landing page must not collide.
+    const url="https://shop.example/products/boots?variant=blue";
+    assert.notEqual(rankIncidentKey("boots|US|desktop|google",url),original.sourceKey);
+    assert.notEqual(rankIncidentKey("boots|CA|desktop|google",first[0].targetUrl),original.sourceKey);
+    assert.equal(rankIncidentKey("boots|US|desktop|google",first[0].targetUrl+"#details"),original.sourceKey);
+  }finally {
+    await db.storeRecommendation.deleteMany({where:{shop}});
+    await db.seoRankObservation.deleteMany({where:{shop}});
+    await db.storeConfig.deleteMany({where:{shop}});
+  }
+});
+
+test("historical timestamp-keyed ranking alerts still support evidence-based recovery",()=>{
+  const now=new Date("2026-10-28T12:00:00Z");
+  const url="https://shop.example/products/boots";
+  const market="boots|US|desktop|google";
+  const latestAt="2026-10-25T12:00:00.000Z";
+  const oldKey="rank:"+market+":"+latestAt;
+  const evidence=JSON.stringify({source:"brightdata-serp",latestAt,url,previousRank:4});
+  const recovered={keyword:"boots",country:"US",device:"desktop",engine:"google",
+    position:5,targetUrl:url,observedAt:new Date("2026-10-26T12:00:00Z")};
+  assert.equal(rankingDropHasRecovered(oldKey,evidence,[recovered],now),true);
+  assert.equal(rankingDropHasRecovered(oldKey.replace("US","CA"),evidence,[recovered],now),false);
+});
 
 test("manager warns instead of claiming a malformed Shopify catalog is empty",async()=>{
   const malformed = [

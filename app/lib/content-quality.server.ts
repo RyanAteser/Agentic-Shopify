@@ -1,6 +1,13 @@
 import sanitizeHtml from "sanitize-html";
 import { isIP } from "node:net";
 
+/** Conservative application-side HTML budget, measured in UTF-8 bytes, not JS characters. */
+export const MAX_ARTICLE_HTML_BYTES = 60_000;
+
+export function isArticleHtmlWithinBudget(html: string): boolean {
+  return Buffer.byteLength(html, "utf8") <= MAX_ARTICLE_HTML_BYTES;
+}
+
 export type ArticlePayload = {
   title: string;
   summary: string;
@@ -127,6 +134,12 @@ export function evaluateArticle(input: unknown) {
   // Never reward an arbitrary word count or number of links. Neither verifies
   // originality, helpfulness, citations or the accuracy of product claims.
   if (!substantiveBody || !title || !summary) score = Math.min(score, 40);
+  // A model callback must not mark oversized content ready for Shopify publication.
+  // Keep the complete draft editable instead of silently truncating its claims.
+  if (!isArticleHtmlWithinBudget(body)) {
+    score = Math.min(score, 40);
+    warnings.push("Article HTML exceeds the 60 KB UTF-8 safety budget. Shorten it and obtain a new editorial review before publishing.");
+  }
   if (/lorem ipsum|\[insert|as an ai language model/i.test(plain)) {
     score = Math.min(score, 40);
     warnings.push("Placeholder or unedited model text detected.");

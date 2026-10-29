@@ -102,15 +102,26 @@ export function assessGscRankEvidence(raw:unknown,now=new Date()) {
   const after=rows.filter(row=>row.date>day&&row.date<=end);
   const baseline=summarize(before),followup=summarize(after);
   const complete=before.length===7&&after.length===7;
+  // Screening thresholds, NOT statistical significance. A handful of clicks
+  // can produce dramatic percentages with little merchant consequence.
+  // Preserve raw counts so reviewers can still inspect sparse cohorts.
+  const sufficientVolume=complete&&baseline.clicks>=10&&
+    baseline.impressions>=100&&followup.impressions>=100;
+  const evidenceStatus=!complete?"incomplete_dates":
+    !sufficientVolume?"low_volume":"descriptive_only";
   const pct=(a:number,b:number)=>b>0?(a-b)/b*100:null;
   return {
     incidentPacificDate:day,completeDateCoverage:complete,
     missingBaselineDates:7-before.length,missingFollowupDates:7-after.length,
+    evidenceStatus,sufficientVolume,
+    // Raw changes are still descriptive, not attributed to the ranking event.
+    absoluteClicksChange:complete?followup.clicks-baseline.clicks:null,
+    absoluteImpressionsChange:complete?followup.impressions-baseline.impressions:null,
     baseline,followup,
-    clicksChangePct:complete?pct(followup.clicks,baseline.clicks):null,
-    impressionsChangePct:complete?pct(followup.impressions,baseline.impressions):null,
+    clicksChangePct:sufficientVolume?pct(followup.clicks,baseline.clicks):null,
+    impressionsChangePct:sufficientVolume?pct(followup.impressions,baseline.impressions):null,
     avgPositionChange:complete&&baseline.avgPosition!==null&&followup.avgPosition!==null
       ?followup.avgPosition-baseline.avgPosition:null,
-    caveat:"Retrospective, descriptive GSC comparison only. The incident day is excluded. Missing query-level rows are unknown, not zero; privacy filtering, top-row limits, seasonality, query demand, and canonical URL differences can bias comparisons. Complete dates do not prove complete query coverage. GSC Pacific dates and impression-weighted positions are not point-in-time UTC SERP ranks. No causal attribution, verified ranking incident, revenue or SEO lift is inferred."
+    caveat:"Retrospective, descriptive GSC comparison only. The incident day is excluded. Missing query-level rows are unknown, not zero; privacy filtering, top-row limits, seasonality, query demand, and canonical URL differences can bias comparisons. Complete dates do not prove complete query coverage. Percentage changes are withheld when baseline clicks are below 10 or either window has fewer than 100 impressions; these are conservative screening thresholds, not significance tests. GSC Pacific dates and impression-weighted positions are not point-in-time UTC SERP ranks. No causal attribution, verified ranking incident, revenue or SEO lift is inferred."
   };
 }

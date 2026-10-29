@@ -40,9 +40,10 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
   const secret = process.env.N8N_OUTBOUND_KEY;
   if (!url || !secret) throw new Error("n8n integration is not configured");
   validateN8nWebhookUrl(url);
-  // Claim BEFORE product context, prompt history or network I/O. Concurrent
-  // requests for the same job must not send duplicate paid n8n work.
-  await claimQueuedDispatch(shop, jobId);
+  // Complete fallible DB reads and Shopify product discovery before
+  // claiming the job. A failure here has not sent any paid n8n request, so
+  // callers can safely fail/refund rather than strand a running job.
+  // Concurrent workers may preflight, but only one can claim and POST.
   const recentRejected = await db.articleDraft.findMany({
     where: { shop, status: "rejected", reviewNotes: { not: "" } },
     take: 4, orderBy: { updatedAt: "desc" }, select: { topic: true, reviewNotes: true },
@@ -63,6 +64,15 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
     },
     productCatalog: await publishedProducts(shop),
   };
+  // Serialize with merchant settings changes after the preflight. A stale
+  // snapshot must not send an obsolete audience, author or destination.
+  await claimQueuedDispatch(shop, jobId, {
+    blogId: config.blogId,
+    audience: config.audience,
+    brandVoice: config.brandVoice,
+    seedTopics: config.seedTopics,
+    authorName: config.authorName,
+  });
   await deliverClaimedN8nJob({ shop, jobId, url, secret, body });
 }
 

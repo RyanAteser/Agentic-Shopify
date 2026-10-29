@@ -345,3 +345,17 @@ test("stale publish page cannot reuse approval after blog or author change",asyn
     });
   }
 });
+
+test("previously stored oversized reviewed draft cannot trigger Shopify articleCreate", async () => {
+  await withDraft(async (shop, draftId) => {
+    const body = "<p>" + "é".repeat(31_000) + "</p>";
+    await db.articleDraft.update({where:{id:draftId},data:{body,seoScore:90,status:"ready"}});
+    assert.equal((await recordEditorialReview(shop,draftId,"usable",3)).ok,true);
+    const admin = fakeAdmin();
+    const blocked = await publishFromCurrentForm(shop,draftId,admin);
+    assert.equal(blocked.ok,false);
+    assert.match(blocked.message,/60 KB UTF-8 safety budget/);
+    assert.equal(admin.calls,0);
+    assert.equal((await db.articleDraft.findUniqueOrThrow({where:{id:draftId}})).status,"ready");
+  });
+});

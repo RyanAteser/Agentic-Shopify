@@ -74,7 +74,7 @@ export function evaluateArticle(input: unknown) {
         // Browsers strip ASCII tabs/newlines when resolving URLs. A raw
         // "/\\n/attacker.example" can become an external //attacker.example
         // navigation even though it begins with a single slash.
-        if (href.includes(String.fromCharCode(92)) || /[\\x00-\\x1f\\x7f]/.test(href)) {
+        if (href.includes(String.fromCharCode(92)) || /[\x00-\x1f\x7f]/.test(href)) {
           strippedLinks++;
           return { tagName, attribs: withoutLink };
         }

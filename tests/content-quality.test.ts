@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { evaluateArticle } from "../app/lib/content-quality.server";
+import { evaluateArticle, isArticleHtmlWithinBudget } from "../app/lib/content-quality.server";
 
 const longBody = '<h2>How to choose</h2><p>' + "Useful practical advice ".repeat(155) +
   '</p><h2>Common pitfalls</h2><p>' + "Check the details carefully ".repeat(95) + '</p>';
@@ -131,4 +131,20 @@ test("unsupported rel values and qualifications on unsafe destinations are remov
   assert.doesNotMatch(result.article.body, /canonical|opener|href="http:|rel="sponsored"[^>]*>Insecure/);
   assert.match(result.article.body, /<a>Insecure<\/a>/);
   assert.match(result.warnings.join(" "), /unsupported link rel token/);
+});
+
+test("HTML publication budget uses UTF-8 bytes, including multibyte characters", () => {
+  assert.equal(isArticleHtmlWithinBudget("a".repeat(60_000)), true);
+  assert.equal(isArticleHtmlWithinBudget("a".repeat(60_001)), false);
+  assert.equal(isArticleHtmlWithinBudget("é".repeat(30_000)), true);
+  assert.equal(isArticleHtmlWithinBudget("é".repeat(30_001)), false);
+});
+
+test("oversized AI HTML remains intact for correction but cannot become ready", () => {
+  const body = "<h2>Choosing a product</h2><p>" + "é".repeat(31_000) + "</p>";
+  const result = evaluateArticle({...base, body});
+  assert.ok(Buffer.byteLength(result.article.body, "utf8") > 60_000);
+  assert.ok(result.article.body.includes("é".repeat(100)), "never silently truncate claims");
+  assert.ok(result.score < 70);
+  assert.match(result.warnings.join(" "), /60 KB UTF-8 safety budget/);
 });

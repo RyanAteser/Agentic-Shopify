@@ -106,3 +106,29 @@ test("ordinary HTTPS references are preserved but never scored as verified citat
   assert.match(linked.article.body, /href="https:\/\/research.example\/study"/);
   assert.match(linked.warnings.join(" "), /sponsored or affiliate disclosure/);
 });
+
+test("merchant-supplied sponsored, ugc and nofollow qualifications survive sanitization", () => {
+  const result = evaluateArticle({
+    ...base,
+    body: shortBody +
+      '<p><a href="https://affiliate.example/item" rel="Sponsored nofollow sponsored">Affiliate</a></p>' +
+      '<p><a href="/pages/community" rel="ugc,nofollow">Community</a></p>',
+  });
+  assert.match(result.article.body, /href="https:\/\/affiliate.example\/item" rel="sponsored nofollow"/);
+  assert.match(result.article.body, /href="\/pages\/community" rel="ugc nofollow"/);
+  assert.ok(result.score >= 70);
+});
+
+test("unsupported rel values and qualifications on unsafe destinations are removed", () => {
+  const result = evaluateArticle({
+    ...base,
+    body: shortBody +
+      '<p><a href="https://merchant.example/page" rel="sponsored canonical opener">Review</a></p>' +
+      '<p><a href="http://unsafe.example" rel="sponsored">Insecure</a></p>' +
+      '<p><a href="https://merchant.example/huge" rel="' + "sponsored ".repeat(40) + '">Huge</a></p>',
+  });
+  assert.match(result.article.body, /href="https:\/\/merchant.example\/page" rel="sponsored"/);
+  assert.doesNotMatch(result.article.body, /canonical|opener|href="http:|rel="sponsored"[^>]*>Insecure/);
+  assert.match(result.article.body, /<a>Insecure<\/a>/);
+  assert.match(result.warnings.join(" "), /unsupported link rel token/);
+});

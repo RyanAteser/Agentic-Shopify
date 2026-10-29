@@ -119,7 +119,7 @@ test("writer callback destination is operator-pinned and cannot be changed by we
   assert.equal("callbackUrl" in prepared[0].json, false);
   const reviewed = runInNewContext("(() => {" + find("Parse Reviewed Article").parameters.jsCode + "})()", {
     $: () => ({ first: () => prepared[0] }),
-    $input: { first: () => ({ json: { choices: [{ message: {
+    $input: { first: () => ({ json: { choices: [{ finish_reason: "stop", message: {
       content: JSON.stringify({ title: "Boot guide", summary: "A guide", body: "<p>Useful</p>" })
     } }] } }) }
   }) as Array<{ json: Record<string, unknown> }>;
@@ -164,5 +164,46 @@ test("all inactive n8n workflows pin safe execution persistence until upstream z
       path + " must not persist manual test inputs by default");
     assert.equal(workflow.settings.saveExecutionProgress, false,
       path + " must not persist intermediate node payloads");
+  }
+});
+
+test("writer caps both paid model stages and refuses incomplete model responses", () => {
+  const workflow = load("n8n/shopify-blog-writer.json");
+  const nodes = workflow.nodes as Array<NodeShape & { parameters: { jsonBody?: string; jsCode?: string } }>;
+  const find = (name: string) => {
+    const node = nodes.find(n => n.name === name);
+    assert.ok(node, "Missing workflow node: " + name);
+    return node;
+  };
+  for (const name of ["Draft Article", "Editorial Revision"]) {
+    const expression = find(name).parameters.jsonBody;
+    assert.ok(expression?.startsWith("={{ ") && expression.endsWith(" }}"));
+    const payload = JSON.parse(runInNewContext(expression.slice(3, -3), {
+      $json: { system: "System", user: "User", first: { title: "Example", body: "<p>Test</p>" } }
+    }) as string);
+    assert.equal(payload.model, "gpt-4.1-mini");
+    assert.equal(payload.max_completion_tokens, 3000, name + " must have a hard output cap");
+    assert.equal(payload.n ?? 1, 1, "Do not pay for multiple choices");
+  }
+  const article = {
+    title: "A useful article", summary: "An informative summary",
+    body: "<p>Carefully verified text.</p>", keyword: "article", tags: []
+  };
+  for (const [name, context] of [
+    ["Parse Draft", { $: () => ({ first: () => ({ json: { jobId: "j", shop: "s" } }) }) }],
+    ["Parse Reviewed Article", { $: () => ({ first: () => ({ json: { jobId: "j", shop: "s" } }) }) }]
+  ] as const) {
+    const code = find(name).parameters.jsCode;
+    assert.ok(code);
+    const execute = (finish_reason: string | undefined) => runInNewContext(
+      "(() => {" + code + "})()",
+      { ...context, $input: { first: () => ({ json: {
+        choices: [{ finish_reason, message: { content: JSON.stringify(article) } }]
+      } }) } }
+    ) as Array<{ json: Record<string, unknown> }>;
+    assert.equal(execute("stop").length, 1, name);
+    for (const reason of ["length", "content_filter", "tool_calls", undefined]) {
+      assert.throws(() => execute(reason), /did not finish normally/, name + ": " + reason);
+    }
   }
 });

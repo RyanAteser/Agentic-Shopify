@@ -69,6 +69,8 @@ export function assessGscRankEvidence(raw:unknown,now=new Date()) {
     observed.getTime()>now.getTime())
     throw new Error("Invalid or future incident timestamp");
   const day=pacificDay(observed),start=shift(day,-7),end=shift(day,7);
+  if(end>shift(pacificDay(now),-3))
+    throw new Error("GSC followup window is too recent to evaluate as finalized");
   if(request.startDate!==start||request.endDate!==end||
     !Array.isArray(request.dimensions)||request.dimensions.length!==1||
     request.dimensions[0]!=="date"||request.type!=="web"||

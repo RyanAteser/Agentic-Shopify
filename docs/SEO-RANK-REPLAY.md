@@ -131,3 +131,7 @@ https://developers.google.com/search/blog/2022/10/performance-data-deep-dive
 
 Google's official guidance: https://developers.google.com/search/docs/monitor-debug/debugging-search-traffic-drops
 Google Search Analytics API: https://developers.google.com/webmaster-tools/v1/searchanalytics/query
+
+## Retrospective Google Search Console corroboration
+
+A separate **offline-only** evaluator now validates exact, consented Google Search Console query/page/country/device evidence for one Google SERP incident and compares the seven Pacific reporting days before versus after it. It rejects cross-store properties and broad or mismatched cohorts, and abstains when daily query rows are missing rather than fabricating zero traffic. This is descriptive, retrospective evidence, **not** a real merchant result or causal confirmation of a ranking alert. See [GSC-RANK-EVIDENCE.md](./GSC-RANK-EVIDENCE.md) for the export contract, local CLI, privacy constraints and limitations. This does not change production alert generation.

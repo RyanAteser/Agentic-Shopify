@@ -13,6 +13,7 @@ import { logStoreAction } from "../lib/manager.server";
 import { parseReviewMinutes, recordEditorialReview } from "../lib/editorial-review.server";
 import { hasCurrentUsableReview, reviewFormDigest, publishFormDigest } from "../lib/editorial-review-integrity";
 import { editorialEditDigest, saveMerchantDraftEdit } from "../lib/editorial-edit.server";
+import { safeArticlePreviewHtml } from "../lib/content-quality.server";
 
 function value(form: FormData, key: string, max = 500) {
   return String(form.get(key) ?? "").trim().slice(0, max);
@@ -47,10 +48,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     current: !!draftMap.get(review.draftId) &&
       hasCurrentUsableReview(review, draftMap.get(review.draftId)!, config)
   }));
+  const draftPreviews = drafts.map(draft => ({draftId: draft.id, ...safeArticlePreviewHtml(draft.body)}));
   const editVersions = drafts.map(draft => ({draftId: draft.id, digest: editorialEditDigest(draft)}));
   const reviewVersions = drafts.map(draft => ({draftId: draft.id, digest: reviewFormDigest(draft, config)}));
   const publishVersions = drafts.map(draft => ({draftId: draft.id, digest: publishFormDigest(draft, config)}));
-  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates, editVersions, reviewVersions, publishVersions };
+  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates, draftPreviews, editVersions, reviewVersions, publishVersions };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -146,7 +148,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function BlogAgent() {
-  const { shop, blogs, config, drafts, jobs, reviews, editVersions, reviewVersions, publishVersions } = useLoaderData<typeof loader>();
+  const { shop, blogs, config, drafts, jobs, reviews, draftPreviews, editVersions, reviewVersions, publishVersions } = useLoaderData<typeof loader>();
+  const previewMap = new Map(draftPreviews.map(preview => [preview.draftId, preview]));
   const editVersionMap = new Map(editVersions.map(version => [version.draftId, version.digest]));
   const reviewVersionMap = new Map(reviewVersions.map(version => [version.draftId, version.digest]));
   const publishVersionMap = new Map(publishVersions.map(version => [version.draftId, version.digest]));
@@ -193,7 +196,9 @@ export default function BlogAgent() {
         <p><strong>Status:</strong> {d.status} · <strong>Draft structure (heuristic):</strong> {d.seoScore}/100 · <strong>Topic:</strong> {d.topic}</p>
         <p>{d.summary}</p>
         <details><summary>Read full draft and review notes</summary>
-          <div style={{padding:10,border:"1px solid #ddd",maxHeight:400,overflow:"auto"}} dangerouslySetInnerHTML={{__html:d.body}}/>
+          {previewMap.get(d.id)?.changed && <p role="status">Safety preview: unsupported stored HTML or links are hidden. The original draft was not changed. Inspect and correct it in the editor before review.</p>}
+          {previewMap.get(d.id)?.unavailable ? <p>Preview unavailable. Inspect the original HTML in the draft editor.</p> :
+            <div style={{padding:10,border:"1px solid #ddd",maxHeight:400,overflow:"auto"}} dangerouslySetInnerHTML={{__html:previewMap.get(d.id)?.html ?? ""}}/>}
           <pre style={{whiteSpace:"pre-wrap"}}>{d.reviewNotes}</pre>
         </details>
         {["ready", "needs_review"].includes(d.status) && <details>
@@ -232,7 +237,9 @@ export default function BlogAgent() {
           <p><strong>Publish destination:</strong> {blogs.find((b: {id:string;title:string}) => b.id === config.blogId)?.title ?? config.blogId} ({config.blogId}) · <strong>Author:</strong> {config.authorName}</p>
           <p><strong>Tags:</strong> {d.tags || "None"} · <strong>Excerpt:</strong> {d.summary}</p>
           <details><summary>Inspect exact article HTML before publishing</summary>
-            <div style={{padding:10,border:"1px solid #ddd",maxHeight:400,overflow:"auto"}} dangerouslySetInnerHTML={{__html:d.body}}/>
+            {previewMap.get(d.id)?.changed && <p role="status">This is a sanitized safety preview, not the exact saved HTML. Edit and renew approval before publishing.</p>}
+            {previewMap.get(d.id)?.unavailable ? <p>Preview unavailable. Inspect the original HTML in the draft editor.</p> :
+              <div style={{padding:10,border:"1px solid #ddd",maxHeight:400,overflow:"auto"}} dangerouslySetInnerHTML={{__html:previewMap.get(d.id)?.html ?? ""}}/>}
           </details>
           <label><input type="checkbox" name="verified" required/> I have reviewed all facts, links and brand claims</label>
           <button type="submit" disabled={busy}>Publish to Shopify</button>

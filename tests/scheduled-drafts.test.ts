@@ -41,6 +41,34 @@ test("one due claim atomically creates a job, consumes a credit and advances top
   });
 });
 
+test("stale scheduler candidate cannot consume a credit after merchant brief edits", async () => {
+  // The due timestamp, topic cursor, blog and seed list can remain unchanged
+  // when the merchant edits the audience, voice or author before reservation.
+  for (const field of ["audience", "brandVoice", "authorName"] as const) {
+    await withStore({
+      seedTopics: "", audience: "Original customers",
+      brandVoice: "Original voice", authorName: "Original author"
+    }, async shop => {
+      const stale = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
+      const newValue = field === "audience" ? "New customers" :
+        field === "brandVoice" ? "New voice" : "New author";
+      await db.storeConfig.update({
+        where: { shop }, data: { [field]: newValue }
+      });
+      assert.equal(await claimDueScheduledDraft(stale, now), null,
+        `stale ${field} snapshot must not reserve a draft`);
+      assert.equal(await db.contentJob.count({ where: { shop } }), 0);
+      assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 0);
+      const fresh = await claimDueScheduledDraft(
+        await db.storeConfig.findUniqueOrThrow({ where: { shop } }), now
+      );
+      assert.ok(fresh, "the next sweep can use the new brief");
+      if (field === "audience") assert.match(fresh.topic, /New customers/);
+      assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 1);
+    });
+  }
+});
+
 test("definitive rejection refunds and restores due slot exactly once", async () => {
   await withStore({ topicCursor: 1 }, async shop => {
     const snapshot = await db.storeConfig.findUniqueOrThrow({ where: { shop } });

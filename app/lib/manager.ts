@@ -151,7 +151,7 @@ export function buildRankTasks(records: RankLike[], now=new Date()):SuggestedTas
     // sustained same-page decline, even when the day's final scrape is low.
     // This deliberately abstains rather than cherry-picking favorable samples.
     if(recentDays.slice(0,2).some(day=>day.some(row=>
-      row.position===null || row.position-baseline.position!<3 ||
+      row.position===null || row.position - baseline.position! < 3 ||
       !sameRankTarget(row.targetUrl,baseline.targetUrl))))continue;
     tasks.push({
       sourceKey:rankIncidentKey(key,latest.targetUrl),

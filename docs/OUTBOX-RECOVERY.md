@@ -12,7 +12,7 @@ Newly created manual and scheduled jobs have `outboxVersion=1`. Scheduled jobs a
 
 The separate authenticated endpoint `POST /api/agent/recover` requires `X-Agent-Key: N8N_CALLBACK_SECRET` and a configured `N8N_BLOG_WEBHOOK_URL` and `N8N_OUTBOUND_KEY`. It returns only aggregate counters: `candidates`, `accepted`, `uncertain`, `rejected`, `raced`, `blocked`. No merchant names, product details, draft bodies, secrets, or credentials appear in its response.
 
-Each sweep selects at most **three** jobs that are still `queued`, version 1, and at least **five minutes old**. It validates scheduled claim metadata before any dispatch. The existing `claimQueuedDispatch` performs a conditional `queued -> running` transition **before** Shopify product context, prompt assembly or HTTP I/O. Two overlapping sweepers cannot both send the same job. The existing n8n transport never automatically retries ambiguous outcomes or follows redirects.
+Each sweep selects at most **three** jobs that are still `queued`, version 1, and at least **five minutes old**. It validates scheduled claim metadata before any dispatch. The worker now completes fallible Shopify product discovery, database prompt-history reads and prompt assembly **before** `claimQueuedDispatch` changes `queued -> running`. The claim then atomically checks the same merchant blog, audience, voice, topics and author used for the prepared brief, under the store-row lock. Two overlapping sweepers may perform redundant read-only preflight, but only one can claim and send the paid n8n POST. No Shopify or n8n network request occurs between a successful claim and the n8n POST. The existing n8n transport never automatically retries ambiguous outcomes or follows redirects.
 
 | Observed state / outcome | Action |
 |---|---|
@@ -107,3 +107,11 @@ a real two-session Shopify staging race and n8n integration remain release gates
 ## n8n execution-history compatibility and retention (2026-10-29)
 
 All five inactive workflow exports explicitly retain successful and failed production executions, disable manual-run and per-node-progress persistence, and require instance-level pruning. This avoids inheriting an upstream n8n zero-output stuck-running bug on affected releases but increases the sensitive-data retention surface. See [N8N-EXECUTION-DATA.md](N8N-EXECUTION-DATA.md) for evidence, privacy controls, version checks and staging go/no-go criteria. No workflows were activated.
+
+## Pre-dispatch context failure and merchant brief race (2026-10-29)
+
+A previously overlooked failure window existed **after** a job became `running` but **before** its n8n POST: reading rejection history, prior published titles, or Shopify product context could fail. The recovery worker deliberately never retries `running` jobs, so such a failure could leave a free credit reserved with no n8n execution. The merchant could also edit editorial settings while a worker prepared an older brief.
+
+The worker now prepares read-only context first, then claims the job using a compare-and-set check on the destination blog, audience, brand voice, seed topics and author. A preflight failure cannot strand a `running` job; callers can safely mark it failed/refund under their existing transaction rules. A stale brief leaves the job queued for a fresh recovery sweep, with no n8n POST or extra credit. Already-running jobs remain non-replayable. The post-claim/pre-POST crash window still exists and requires operator reconciliation; this does **not** establish exactly-once delivery.
+
+Regression coverage changes each editorial field between preflight and claim and verifies no state transition until a matching snapshot is provided. Production staging must additionally inject failures in Shopify product discovery and database history reads, test concurrent merchant settings changes, and verify no duplicate paid n8n execution. Expected impact is fewer stranded credits and off-brief drafts; no merchant-level incident reduction has been measured.

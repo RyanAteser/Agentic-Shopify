@@ -37,7 +37,10 @@ export async function persistArticleCallback(shop: string, jobId: string, rawArt
     if (!job || job.shop !== shop) {
       throw new ArticleCallbackRejectedError("Unknown job", 404);
     }
-    if (!["queued", "running", "completed", "dispatch_uncertain"].includes(job.status)) {
+    // A callback is only legitimate after the queued -> running dispatch claim.
+    // Accepting queued jobs would let a delayed/misrouted n8n execution
+    // create a draft for work that was never dispatched.
+    if (!["running", "completed", "dispatch_uncertain"].includes(job.status)) {
       throw new ArticleCallbackRejectedError("Job cannot receive articles", 409);
     }
 
@@ -64,7 +67,7 @@ export async function persistArticleCallback(shop: string, jobId: string, rawArt
       update: {} // never overwrite merchant edits or an existing draft
     });
     await tx.contentJob.updateMany({
-      where: { id: jobId, shop, status: { in: ["queued", "running", "dispatch_uncertain"] } },
+      where: { id: jobId, shop, status: { in: ["running", "dispatch_uncertain"] } },
       data: { status: "completed" }
     });
     return { draftId: draft.id, score: draft.seoScore };

@@ -1,4 +1,5 @@
 import sanitizeHtml from "sanitize-html";
+import { isIP } from "node:net";
 
 export type ArticlePayload = {
   title: string;
@@ -26,12 +27,47 @@ export function evaluateArticle(input: unknown) {
   const keyword = String(item.keyword ?? "").trim().slice(0, 120);
   const sourceBody = String(item.body ?? "");
   if (sourceBody.length > 100_000) throw new Error("Article body exceeds limit");
+  // AI-generated and merchant-edited links are never assumed trustworthy.
+  // Keep normal HTTPS and store-relative links for human verification, but
+  // remove unsafe destinations before saving or displaying the draft.
+  const httpsHosts = new Set<string>();
+  let relativeLinks = 0;
+  let strippedLinks = 0;
   const body = sanitizeHtml(sourceBody, {
     allowedTags,
     allowedAttributes: { a: ["href", "title"] },
-    allowedSchemes: ["http", "https"],
+    allowedSchemes: ["https"],
     disallowedTagsMode: "discard",
     enforceHtmlBoundary: true,
+    transformTags: {
+      a: (tagName, attributes) => {
+        const href = attributes.href;
+        if (!href) return { tagName, attribs: attributes };
+        const { href: _ignored, ...withoutHref } = attributes;
+        // Single-slash paths are allowed for merchant internal navigation.
+        // Scheme-relative // URLs and backslash URL tricks are not.
+        if (href.startsWith("/") && !href.startsWith("//") && !href.includes("\\\\")) {
+          relativeLinks++;
+          return { tagName, attribs: attributes };
+        }
+        try {
+          const url = new URL(href);
+          const host = url.hostname.toLowerCase();
+          const ipHost = host.replace(/^\\[/, "").replace(/\\]$/, "");
+          if (url.protocol === "https:" && !url.username && !url.password &&
+              !url.port && host.includes(".") && !host.endsWith(".") &&
+              host !== "localhost" && !host.endsWith(".localhost") &&
+              !host.endsWith(".local") && isIP(ipHost) === 0) {
+            httpsHosts.add(host);
+            return { tagName, attribs: attributes };
+          }
+        } catch {
+          // Malformed URL; remove the href but retain the readable anchor text.
+        }
+        strippedLinks++;
+        return { tagName, attribs: withoutHref };
+      },
+    },
   });
   const tags = Array.isArray(item.tags)
     ? item.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 8).map(tag => tag.slice(0, 40).trim())
@@ -42,6 +78,16 @@ export function evaluateArticle(input: unknown) {
   const paragraphs = (body.match(/<(?:p|li)\b/gi) ?? []).length;
   const substantiveBody = plain.length >= 120 && paragraphs > 0;
   const warnings: string[] = [];
+  if (strippedLinks) {
+    warnings.push(`Removed ${strippedLinks} unsafe or malformed link destination(s). Check the remaining link text before publication.`);
+  }
+  if (httpsHosts.size) {
+    const hosts = [...httpsHosts].slice(0, 5).join(", ");
+    warnings.push(`Verify ${httpsHosts.size} HTTPS link host(s) before publishing (${hosts}${httpsHosts.size > 5 ? ", …" : ""}). Check product/source accuracy and any sponsored or affiliate disclosure.`);
+  }
+  if (relativeLinks) {
+    warnings.push(`Verify ${relativeLinks} store-relative link(s) resolve to the intended merchant pages.`);
+  }
   let score = 0;
   if (title.length >= 25 && title.length <= 80) score += 25;
   else warnings.push("Review the title for clarity and specificity; 25–80 characters is a UI heuristic, not a Google ranking rule.");

@@ -38,6 +38,46 @@ function naiveTwoSnapshotReference(rows: RankLike[], at: Date): string | null {
   }
   return rankIncidentKey(marketKey(latest), latest.targetUrl);
 }
+/**
+ * A market/page can fall, recover and fall again within one export. Comparing
+ * the first alert across the entire export can pair unrelated declines.
+ * Partition the chronological observation stream without looking ahead:
+ * a sampled return to within two positions of the pre-drop best rank, a page
+ * change, a missing result or a >28-day gap begins a new comparison episode.
+ * These are *observational* boundaries, not verified GSC recoveries.
+ */
+function episodeOrdinals(rows: RankLike[]): Map<RankLike, number> {
+  const ordinals = new Map<RankLike, number>();
+  let ordinal = 0, anchor: number | null = null, dropped = false;
+  let previous: RankLike | undefined;
+  for (const row of rows) {
+    const incomparable = previous && (
+      row.position === null || previous.position === null ||
+      !sameRankTarget(row.targetUrl, previous.targetUrl) ||
+      row.observedAt.getTime() - previous.observedAt.getTime() > 28 * 86400000
+    );
+    if (incomparable) {
+      ordinal++;
+      anchor = row.position;
+      dropped = false;
+    } else if (!previous) {
+      anchor = row.position;
+    } else if (anchor !== null && row.position !== null) {
+      if (dropped && row.position <= anchor + 2) {
+        ordinal++;
+        anchor = row.position;
+        dropped = false;
+      } else if (!dropped) {
+        if (row.position < anchor) anchor = row.position;
+        else if (row.position >= anchor + 3) dropped = true;
+      }
+    }
+    ordinals.set(row, ordinal);
+    previous = row;
+  }
+  return ordinals;
+}
+
 function counts(days: Set<string>, labels: Map<string, boolean>): AlertCounts {
   const incidents = new Set([...days].map(value => value.slice(11)));
   let labeledUseful = 0, labeledNotUseful = 0, unlabeled = 0;
@@ -147,21 +187,32 @@ export function replayRankingAlerts(raw: unknown, now = new Date()) {
   // Markets without a new scrape on that date do not create repeated alerts.
   const days = [...new Set(observations.map(row => row.observedAt.toISOString().slice(0, 10)))].sort();
   const referenceDays = new Set<string>(), confirmedDays = new Set<string>();
+  const referenceEpisodeDays = new Set<string>(), confirmedEpisodeDays = new Set<string>();
+  const episodes = new Map<string, Map<RankLike, number>>();
+  for (const [key, rows] of groups) episodes.set(key, episodeOrdinals(rows));
   for (const day of days) {
     const end = new Date(day + "T23:59:59.999Z");
     const at = end.getTime() > now.getTime() ? now : end;
-    for (const market of groups.values()) {
+    for (const [marketKey, market] of groups) {
       const history = market.filter(row => row.observedAt.getTime() <= at.getTime());
-      if (!history.length || history[history.length - 1].observedAt.toISOString().slice(0, 10) !== day) continue;
+      const latest = history[history.length - 1];
+      if (!latest || latest.observedAt.toISOString().slice(0, 10) !== day) continue;
+      const episode = episodes.get(marketKey)!.get(latest)!;
       const reference = naiveTwoSnapshotReference(history, at);
-      if (reference) referenceDays.add(day + ":" + reference);
+      if (reference) {
+        referenceDays.add(day + ":" + reference);
+        referenceEpisodeDays.add(day + ":" + reference + ":episode:" + episode);
+      }
       for (const task of buildRankTasks(history, at)) {
         confirmedDays.add(day + ":" + task.sourceKey);
+        confirmedEpisodeDays.add(day + ":" + task.sourceKey + ":episode:" + episode);
       }
     }
   }
   const referenceOnly = [...referenceDays].filter(key => !confirmedDays.has(key)).length;
   const confirmedOnly = [...confirmedDays].filter(key => !referenceDays.has(key)).length;
+  const incidentComparison = compareFirstAlerts(referenceDays, confirmedDays);
+  const episodeComparison = compareFirstAlerts(referenceEpisodeDays, confirmedEpisodeDays);
   return {
     evaluationTime: now.toISOString(),
     observations: observations.length,
@@ -175,8 +226,17 @@ export function replayRankingAlerts(raw: unknown, now = new Date()) {
       referenceOnlyIncidentDays: referenceOnly,
       confirmedOnlyIncidentDays: confirmedOnly,
       bothIncidentDays: referenceDays.size - referenceOnly,
-      ...compareFirstAlerts(referenceDays, confirmedDays)
+      referenceOnlyIncidents: incidentComparison.referenceOnlyIncidents,
+      confirmedOnlyIncidents: incidentComparison.confirmedOnlyIncidents,
+      bothIncidents: incidentComparison.bothIncidents,
+      referenceOnlyEpisodes: episodeComparison.referenceOnlyIncidents,
+      confirmedOnlyEpisodes: episodeComparison.confirmedOnlyIncidents,
+      bothEpisodes: episodeComparison.bothIncidents,
+      confirmedEarlierEpisodes: episodeComparison.confirmedEarlierIncidents,
+      confirmedLaterEpisodes: episodeComparison.confirmedLaterIncidents,
+      sameDayEpisodes: episodeComparison.sameDayIncidents,
+      medianConfirmedEpisodeLagDays: episodeComparison.medianConfirmedLagDays
     },
-    caveat: "Reference is a naive two-snapshot comparator, not historical production. Incident overlap and first-alert UTC-day lag are descriptive, not false-positive rates, verified traffic loss, SEO lift or revenue. Merchant usefulness labels are optional, subjective and potentially selected."
+    caveat: "Reference is a naive two-snapshot comparator, not historical production. Repeated market/page declines are split into observational episodes after a sampled recovery, URL change, missing result or >28-day gap; these are not verified GSC recoveries. Episode first-alert UTC-day lag is descriptive, not false-positive rates, verified traffic loss, SEO lift or revenue. Optional usefulness labels apply to stable market/page identities, not individual recurring episodes, and may be selected."
   };
 }

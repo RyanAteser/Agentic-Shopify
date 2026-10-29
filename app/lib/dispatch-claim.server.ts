@@ -11,7 +11,22 @@ export class DispatchAlreadyClaimedError extends Error {
   }
 }
 
-export async function claimQueuedDispatch(shop: string, jobId: string): Promise<void> {
+export type DispatchConfigSnapshot = {
+  blogId: string;
+  audience: string;
+  brandVoice: string;
+  seedTopics: string;
+  authorName: string;
+};
+
+/**
+ * The caller prepares the prompt and product context BEFORE claiming the job.
+ * Compare the merchant settings under the same store lock used by settings edits,
+ * so a preflight from an old browser/worker cannot dispatch an obsolete brief.
+ */
+export async function claimQueuedDispatch(
+  shop: string, jobId: string, expectedConfig?: DispatchConfigSnapshot
+): Promise<void> {
   await db.$transaction(async tx => {
     // Serialize with merchant preference changes and privacy redaction.
     // A disable/edit that commits first cancels queued scheduled work before
@@ -27,11 +42,26 @@ export async function claimQueuedDispatch(shop: string, jobId: string): Promise<
     });
     if (!job || job.shop !== shop || job.status !== "queued")
       throw new DispatchAlreadyClaimedError();
-    if (job.scheduleClaim !== null) {
-      const config = await tx.storeConfig.findUnique({
-        where: { shop }, select: { enabled: true }
-      });
-      if (!config?.enabled) throw new DispatchAlreadyClaimedError();
+    const config = await tx.storeConfig.findUnique({
+      where: { shop },
+      select: {
+        enabled: true, blogId: true, audience: true, brandVoice: true,
+        seedTopics: true, authorName: true
+      }
+    });
+    if (!config || (job.scheduleClaim !== null && !config.enabled)) {
+      throw new DispatchAlreadyClaimedError();
+    }
+    if (expectedConfig && (
+      config.blogId !== expectedConfig.blogId ||
+      config.audience !== expectedConfig.audience ||
+      config.brandVoice !== expectedConfig.brandVoice ||
+      config.seedTopics !== expectedConfig.seedTopics ||
+      config.authorName !== expectedConfig.authorName
+    )) {
+      // Leave the credit and job queued. A recovery sweep can safely prepare
+      // a fresh brief; no n8n request has been made.
+      throw new DispatchAlreadyClaimedError();
     }
     const result = await tx.contentJob.updateMany({
       where: { id: jobId, shop, status: "queued" },

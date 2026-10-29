@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { evaluateArticle, isArticleHtmlWithinBudget } from "../app/lib/content-quality.server";
+import { evaluateArticle, isArticleHtmlPublishSafe, isArticleHtmlWithinBudget } from "../app/lib/content-quality.server";
 
 const longBody = '<h2>How to choose</h2><p>' + "Useful practical advice ".repeat(155) +
   '</p><h2>Common pitfalls</h2><p>' + "Check the details carefully ".repeat(95) + '</p>';
@@ -172,4 +172,23 @@ test("oversized AI HTML remains intact for correction but cannot become ready", 
   assert.ok(result.article.body.includes("é".repeat(100)), "never silently truncate claims");
   assert.ok(result.score < 70);
   assert.match(result.warnings.join(" "), /60 KB UTF-8 safety budget/);
+});
+
+test("legacy publication safety rejects HTML that current sanitization would change", () => {
+  for (const html of [
+    '<p><a href="http://unsafe.example">Insecure destination</a></p>',
+    '<p><a href="/\\n/attacker.example/collect">Disguised destination</a></p>'.replace("\\n", "\n"),
+    '<script>alert(1)</script><p>Content</p>',
+    '<p><a href="https://example.org" rel="opener">Unapproved link rel</a></p>',
+  ]) {
+    assert.equal(isArticleHtmlPublishSafe(html), false, html.slice(0, 70));
+  }
+  assert.equal(isArticleHtmlPublishSafe("<p>Normal reviewed text.</p>"), true);
+  const canonical = evaluateArticle({
+    ...base,
+    body: shortBody + '<p><a href="/products/boots" rel="sponsored">Product</a></p>' +
+      '<p><a href="https://research.example/study" rel="nofollow">Research</a></p>',
+  }).article.body;
+  assert.equal(isArticleHtmlPublishSafe(canonical), true);
+  assert.equal(isArticleHtmlPublishSafe("x".repeat(60_001)), false);
 });

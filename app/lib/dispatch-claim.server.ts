@@ -12,11 +12,33 @@ export class DispatchAlreadyClaimedError extends Error {
 }
 
 export async function claimQueuedDispatch(shop: string, jobId: string): Promise<void> {
-  const result = await db.contentJob.updateMany({
-    where: { id: jobId, shop, status: "queued" },
-    data: { status: "running" }
+  await db.$transaction(async tx => {
+    // Serialize with merchant preference changes and privacy redaction.
+    // A disable/edit that commits first cancels queued scheduled work before
+    // this claim can send it to n8n. Manual jobs remain independent of the
+    // scheduler's enabled flag.
+    const active = await tx.storeConfig.updateMany({
+      where: { shop }, data: { updatedAt: new Date() }
+    });
+    if (active.count !== 1) throw new DispatchAlreadyClaimedError();
+    const job = await tx.contentJob.findUnique({
+      where: { id: jobId },
+      select: { shop: true, status: true, scheduleClaim: true }
+    });
+    if (!job || job.shop !== shop || job.status !== "queued")
+      throw new DispatchAlreadyClaimedError();
+    if (job.scheduleClaim !== null) {
+      const config = await tx.storeConfig.findUnique({
+        where: { shop }, select: { enabled: true }
+      });
+      if (!config?.enabled) throw new DispatchAlreadyClaimedError();
+    }
+    const result = await tx.contentJob.updateMany({
+      where: { id: jobId, shop, status: "queued" },
+      data: { status: "running" }
+    });
+    if (result.count !== 1) throw new DispatchAlreadyClaimedError();
   });
-  if (result.count !== 1) throw new DispatchAlreadyClaimedError();
 }
 
 /** Prevent a misleading localhost prefix from authorizing plaintext exfiltration. */

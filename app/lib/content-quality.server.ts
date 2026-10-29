@@ -46,7 +46,11 @@ export function evaluateArticle(input: unknown) {
         const { href: _ignored, ...withoutHref } = attributes;
         // Single-slash paths are allowed for merchant internal navigation.
         // Scheme-relative // URLs and backslash URL tricks are not.
-        if (href.startsWith("/") && !href.startsWith("//") && !href.includes(String.fromCharCode(92))) {
+        if (href.includes(String.fromCharCode(92))) {
+          strippedLinks++;
+          return { tagName, attribs: withoutHref };
+        }
+        if (href.startsWith("/") && !href.startsWith("//")) {
           relativeLinks++;
           return { tagName, attribs: attributes };
         }

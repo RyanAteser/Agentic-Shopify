@@ -29,7 +29,10 @@ test("offline replay distinguishes two-snapshot noise from independently dated c
   assert.equal(report.confirmedThreeDay.incidentDays,1);
   assert.equal(report.confirmedThreeDay.uniqueIncidents,1);
   assert.deepEqual(report.comparison,{
-    referenceOnlyIncidentDays:2, confirmedOnlyIncidentDays:1, bothIncidentDays:0
+    referenceOnlyIncidentDays:2, confirmedOnlyIncidentDays:1, bothIncidentDays:0,
+    referenceOnlyIncidents:1, confirmedOnlyIncidents:0, bothIncidents:1,
+    confirmedEarlierIncidents:0, confirmedLaterIncidents:1, sameDayIncidents:0,
+    medianConfirmedLagDays:1
   });
   assert.equal(report.confirmedThreeDay.usefulAmongLabeledPct,null,
     "no labels cannot be reported as zero precision");
@@ -80,4 +83,36 @@ test("a contradictory intraday recovery prevents a confirmed incident",()=>{
   const report=replayRankingAlerts({...fixture,observations},now);
   assert.equal(report.confirmedThreeDay.uniqueIncidents,0);
   assert.equal(report.confirmedThreeDay.usefulAmongLabeledPct,null);
+});
+
+test("first-alert comparison identifies confirmed-before-reference despite zero shared alert-days",()=>{
+  const observations=[
+    point(4,"2026-10-23T12:00:00Z"),
+    point(8,"2026-10-24T08:00:00Z"),
+    point(8,"2026-10-24T16:00:00Z"),
+    point(8,"2026-10-25T12:00:00Z"),
+    point(12,"2026-10-26T12:00:00Z")
+  ];
+  const report=replayRankingAlerts({primaryHost:"shop.example",observations},now);
+  assert.equal(report.comparison.bothIncidentDays,0);
+  assert.equal(report.comparison.bothIncidents,1);
+  assert.equal(report.comparison.referenceOnlyIncidents,0);
+  assert.equal(report.comparison.confirmedOnlyIncidents,0);
+  assert.equal(report.comparison.confirmedEarlierIncidents,1);
+  assert.equal(report.comparison.confirmedLaterIncidents,0);
+  assert.equal(report.comparison.medianConfirmedLagDays,-1);
+  assert.deepEqual(report,replayRankingAlerts({
+    primaryHost:"shop.example",observations:[...observations].reverse()
+  },now));
+});
+
+test("first-alert comparison abstains on lag when no incidents overlap",()=>{
+  const report=replayRankingAlerts({primaryHost:"shop.example",observations:[
+    point(4,"2026-10-23T12:00:00Z"),
+    point(9,"2026-10-24T12:00:00Z")
+  ]},now);
+  assert.equal(report.comparison.referenceOnlyIncidents,1);
+  assert.equal(report.comparison.confirmedOnlyIncidents,0);
+  assert.equal(report.comparison.bothIncidents,0);
+  assert.equal(report.comparison.medianConfirmedLagDays,null);
 });

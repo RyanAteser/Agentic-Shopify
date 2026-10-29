@@ -33,26 +33,44 @@ export function evaluateArticle(input: unknown) {
   const httpsHosts = new Set<string>();
   let relativeLinks = 0;
   let strippedLinks = 0;
+  let unsupportedRel = 0;
+  const allowedRel = new Set(["sponsored", "nofollow", "ugc"]);
   const body = sanitizeHtml(sourceBody, {
     allowedTags,
-    allowedAttributes: { a: ["href", "title"] },
+    allowedAttributes: { a: ["href", "title", "rel"] },
     allowedSchemes: ["https"],
     disallowedTagsMode: "discard",
     enforceHtmlBoundary: true,
     transformTags: {
       a: (tagName, attributes) => {
         const href = attributes.href;
-        if (!href) return { tagName, attribs: attributes };
-        const { href: _ignored, ...withoutHref } = attributes;
+        // Preserve merchant-supplied Google link qualifications without inferring sponsorship.
+        const { rel, ...withoutRel } = attributes;
+        let qualifiedRel = "";
+        if (rel) {
+          if (rel.length > 200) {
+            unsupportedRel++;
+          } else {
+            const tokens = rel.toLowerCase().split(/[\s,]+/).filter(Boolean);
+            const safe = [...new Set(tokens.filter(token => allowedRel.has(token)))];
+            if (tokens.some(token => !allowedRel.has(token))) unsupportedRel++;
+            qualifiedRel = safe.join(" ");
+          }
+        }
+        const safeAttributes = qualifiedRel
+          ? { ...withoutRel, rel: qualifiedRel } : withoutRel;
+        if (!href) return { tagName, attribs: withoutRel };
+        const { href: _ignored, ...withoutHref } = safeAttributes;
+        const { rel: _ignoredRel, ...withoutLink } = withoutHref;
         // Single-slash paths are allowed for merchant internal navigation.
         // Scheme-relative // URLs and backslash URL tricks are not.
         if (href.includes(String.fromCharCode(92))) {
           strippedLinks++;
-          return { tagName, attribs: withoutHref };
+          return { tagName, attribs: withoutLink };
         }
         if (href.startsWith("/") && !href.startsWith("//")) {
           relativeLinks++;
-          return { tagName, attribs: attributes };
+          return { tagName, attribs: safeAttributes };
         }
         try {
           const url = new URL(href);
@@ -63,13 +81,13 @@ export function evaluateArticle(input: unknown) {
               host !== "localhost" && !host.endsWith(".localhost") &&
               !host.endsWith(".local") && isIP(ipHost) === 0) {
             httpsHosts.add(host);
-            return { tagName, attribs: attributes };
+            return { tagName, attribs: safeAttributes };
           }
         } catch {
           // Malformed URL; remove the href but retain the readable anchor text.
         }
         strippedLinks++;
-        return { tagName, attribs: withoutHref };
+        return { tagName, attribs: withoutLink };
       },
     },
   });
@@ -84,6 +102,9 @@ export function evaluateArticle(input: unknown) {
   const warnings: string[] = [];
   if (strippedLinks) {
     warnings.push(`Removed ${strippedLinks} unsafe or malformed link destination(s). Check the remaining link text before publication.`);
+  }
+  if (unsupportedRel) {
+    warnings.push(`Removed unsupported link rel token(s) from ${unsupportedRel} link(s). Review sponsorship and affiliate qualifications before publishing.`);
   }
   if (httpsHosts.size) {
     const hosts = [...httpsHosts].slice(0, 5).join(", ");

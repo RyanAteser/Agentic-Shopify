@@ -48,3 +48,18 @@ Release gates remain in [PRODUCTION-READINESS.md](./PRODUCTION-READINESS.md). Th
 ## Sparse-traffic screening (Oct 28, 2026)
 
 The initial offline evaluator exposed percentage changes whenever all reporting dates were present. A seven-click baseline followed by zero clicks can read as a 100% decline while involving only seven observed clicks. The revised output keeps raw counts and absolute deltas but abstains from percentage comparisons for sparse cohorts. The 10-click/100-impression thresholds are predeclared heuristics for avoiding misleading headline percentages, not a calibrated merchant impact threshold. The evaluator does **not** issue a merchant alert or assign statistical confidence. A future consented pilot should measure how often these abstentions occur, review whether genuinely important low-volume declines are missed, and calibrate the thresholds on held-out merchant outcomes. See Google's [Search Analytics API limitations](https://developers.google.com/webmaster-tools/v1/searchanalytics) and [traffic drop debugging guidance](https://developers.google.com/search/docs/monitor-debug/debugging-search-traffic-drops).
+
+## Optional pre-incident trend check (Oct 29, 2026)
+
+A seven-day click decline after a scraped rank incident is weak corroboration when the same query/page was **already declining before the incident**. To expose this confounder without adding live access or changing existing exports, the offline evaluator also accepts an **exact 22-day** GSC export:
+
+- Set `startDate` to **14 Pacific dates before** the incident, and keep `endDate` at **7 dates after** it. Keep the same exact query/page/country/device filters, `dataState: "final"`, `dimensions: ["date"]`, `responseAggregationType: "byPage"`, and `startRow: 0`.
+- Set `rowLimit` to **at least 22** (1000 recommended). The incident day is excluded from comparisons.
+- The new `pretrend` section compares days -14 through -8 (prior baseline) with days -7 through -1 (immediate baseline). The original `baseline` versus `followup` comparison is unchanged (days -7 through -1 versus +1 through +7).
+- `pretrend.status` is `not_requested` for existing 15-day exports, `incomplete_dates` when a prior date is absent, `low_volume` for insufficient prior/baseline volume, or `descriptive_only` when both complete windows meet screening thresholds. It never calls an observed pretrend statistically significant.
+- Missing prior days never become zero. They suppress pretrend deltas, but do not suppress an otherwise complete original before/after comparison. Both the original and pretrend percentages remain descriptive, not causal.
+- A continuing decline before and after the incident is a reason to investigate search demand, seasonality, page changes and other causes. A flat prior baseline does **not** prove the rank incident caused the subsequent decline. The post-incident seven-day window is also shifted by one weekday relative to the immediate baseline because the incident day is excluded.
+
+This extends the **diagnostic context**, not merchant outcomes. The first real-data experiment should preregister both 15-day and 22-day comparisons and report how often the pretrend changes reviewers' conclusions, including sparse and privacy-filtered cohorts. Do not select the export length after viewing the incident's results.
+
+Primary references: [Google Search Analytics query API](https://developers.google.com/webmaster-tools/v1/searchanalytics/query) and [Google's traffic-drop diagnostics](https://developers.google.com/search/docs/monitor-debug/debugging-search-traffic-drops).

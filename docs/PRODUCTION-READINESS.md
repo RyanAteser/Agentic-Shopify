@@ -55,8 +55,9 @@ The existing stored human-review digest prevents publishing content without a **
 
 ## SERP alert precision gate (2026-10-28)
 
-Store Manager now requires two consecutive same-page rank declines relative
-to a preceding baseline before creating a ranking-drop recommendation.
+Store Manager now requires two subsequent same-page snapshots that are
+both at least three positions worse than a preceding baseline before creating
+a ranking-drop recommendation. They need not worsen monotonically.
 The three-point rule is conservative and read-only, with no Shopify edits or
 additional Bright Data requests. It cannot establish actual traffic loss.
 See [SEO-AGENTS.md](./SEO-AGENTS.md) for exact eligibility, false-positive

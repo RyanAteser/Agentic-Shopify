@@ -164,3 +164,23 @@ test("PostgreSQL merchant disable and scheduled dispatch race cannot send cancel
     await eraseMerchantData(shop);
   }
 });
+
+
+test("disabling scheduling does not refund work already claimed for dispatch", async () => {
+  const shop = newShop(), sessionId = "session-" + randomUUID();
+  await db.session.create({ data: { id: sessionId, shop, state: "", accessToken: "test-only" } });
+  try {
+    assert.equal(await saveMerchantConfig(shop, sessionId, preferences), true);
+    const scheduled = await claimDueScheduledDraft(
+      await db.storeConfig.findUniqueOrThrow({ where: { shop } }), new Date("2026-11-01T00:00:00Z")
+    );
+    assert.ok(scheduled);
+    await claimQueuedDispatch(shop, scheduled.jobId);
+    assert.equal(await saveMerchantConfig(shop, sessionId, { ...preferences, enabled: false }), true);
+    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: scheduled.jobId } })).status, "running");
+    assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 1,
+      "claimed work may already have reached n8n and cannot be refunded automatically");
+  } finally {
+    await eraseMerchantData(shop);
+  }
+});

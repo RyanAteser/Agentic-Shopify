@@ -1,5 +1,6 @@
 import db from "../db.server";
 import { FREE_LIFETIME_GENERATIONS } from "./pricing";
+import { safeGenerationFailureReason } from "./generation-failure-reason";
 
 /**
  * The scheduler's read is only a candidate snapshot. Claim the due slot,
@@ -169,7 +170,7 @@ export async function failScheduledDraft(
     if (active.count !== 1) return false;
     const failed = await tx.contentJob.updateMany({
       where: { id: claim.jobId, shop: claim.shop, status: { in: ["queued", "running"] } },
-      data: { status: "failed", error: String(error).slice(0, 400) }
+      data: { status: "failed", error: safeGenerationFailureReason(error) }
     });
     if (failed.count !== 1) return false;
     await tx.storeConfig.update({

@@ -98,21 +98,21 @@ test("link safety strips unsafe destinations without deleting article text", () 
 
 test("URL control characters cannot disguise an external navigation as a store-relative link", () => {
   // WHATWG URL parsing strips newlines/tabs before interpreting leading slashes.
-  assert.equal(new URL("/\\n/attacker.example", "https://storefront.invalid").hostname,
+  assert.equal(new URL("/\n/attacker.example", "https://storefront.invalid").hostname,
     "attacker.example");
   const links = [
-    "/\\n/attacker.example/collect",
-    "/\\t/attacker.example/collect",
-    "/\\r/attacker.example/collect",
-    "https://legitimate.example/\\npath",
+    "/\n/attacker.example/collect",
+    "/\t/attacker.example/collect",
+    "/\r/attacker.example/collect",
+    "https://legitimate.example/\npath",
   ];
   const html = shortBody + links.map((href, i) =>
     '<p><a href="' + href + '">Untrusted link ' + i + '</a></p>').join("") +
     '<p><a href="/&#10;/attacker.example/collect">Entity encoded newline</a></p>' +
     '<p><a href="/products/boots?variant=1">Legitimate storefront link</a></p>';
   const result = evaluateArticle({ ...base, body: html });
-  assert.doesNotMatch(result.article.body, /href="https:\/\/attacker\\.example/);
-  assert.match(result.article.body, /href="\/products\/boots\\?variant=1"/);
+  assert.doesNotMatch(result.article.body, /href="https:\/\/attacker\.example/);
+  assert.match(result.article.body, /href="\/products\/boots\?variant=1"/);
   assert.match(result.warnings.join(" "), /Removed 5 unsafe or malformed link destination/);
   for (let i = 0; i < 4; i++) {
     assert.ok(result.article.body.includes("Untrusted link " + i));

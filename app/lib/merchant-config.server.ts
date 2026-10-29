@@ -86,7 +86,12 @@ export async function saveMerchantConfig(
       if (canceled.count > 0) {
         await tx.storeConfig.update({
           where: { shop },
-          data: { freeDraftsUsed: { decrement: canceled.count } },
+          data: {
+            freeDraftsUsed: { decrement: canceled.count },
+            // Replace the canceled due slot on the NEXT scheduled sweep,
+            // not from this settings request. Never skip a whole cadence.
+            ...(preferences.enabled ? { nextRunAt: new Date() } : {}),
+          },
         });
       }
     }

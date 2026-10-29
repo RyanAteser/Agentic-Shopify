@@ -177,7 +177,8 @@ test("writer caps both paid model stages and refuses incomplete model responses"
   };
   for (const name of ["Draft Article", "Editorial Revision"]) {
     const expression = find(name).parameters.jsonBody;
-    assert.ok(expression?.startsWith("={{ ") && expression.endsWith(" }}"));
+    if (typeof expression !== "string") throw new Error("Missing JSON body expression: " + name);
+    assert.ok(expression.startsWith("={{ ") && expression.endsWith(" }}"));
     const payload = JSON.parse(runInNewContext(expression.slice(3, -3), {
       $json: { system: "System", user: "User", first: { title: "Example", body: "<p>Test</p>" } }
     }) as string);

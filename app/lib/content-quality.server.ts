@@ -46,14 +46,14 @@ export function evaluateArticle(input: unknown) {
         const { href: _ignored, ...withoutHref } = attributes;
         // Single-slash paths are allowed for merchant internal navigation.
         // Scheme-relative // URLs and backslash URL tricks are not.
-        if (href.startsWith("/") && !href.startsWith("//") && !href.includes("\\\\")) {
+        if (href.startsWith("/") && !href.startsWith("//") && !href.includes(String.fromCharCode(92))) {
           relativeLinks++;
           return { tagName, attribs: attributes };
         }
         try {
           const url = new URL(href);
           const host = url.hostname.toLowerCase();
-          const ipHost = host.replace(/^\\[/, "").replace(/\\]$/, "");
+          const ipHost = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
           if (url.protocol === "https:" && !url.username && !url.password &&
               !url.port && host.includes(".") && !host.endsWith(".") &&
               host !== "localhost" && !host.endsWith(".localhost") &&

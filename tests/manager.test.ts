@@ -40,6 +40,7 @@ test("manager ranks factual SEO findings, editorial drafts and comparable rank d
  assert.equal(drafts[1].kind,"blog_review");
  const ranked=buildRankTasks([
    {keyword:"boots",position:11,observedAt:new Date("2026-10-24"),country:"US",device:"desktop",engine:"google",targetUrl:"https://store.example/boots"},
+   {keyword:"boots",position:9,observedAt:new Date("2026-10-22"),country:"US",device:"desktop",engine:"google",targetUrl:"https://store.example/boots"},
    {keyword:"boots",position:4,observedAt:new Date("2026-10-20"),country:"US",device:"desktop",engine:"google",targetUrl:"https://store.example/boots"},
    {keyword:"boots",position:1,observedAt:new Date("2026-10-24"),country:"CA",device:"desktop",engine:"google",targetUrl:"https://store.example/boots"},
  ]);
@@ -48,7 +49,7 @@ test("manager ranks factual SEO findings, editorial drafts and comparable rank d
    {keyword:"old keyword",position:12,observedAt:new Date("2026-07-01"),country:"US",device:"desktop",engine:"google",targetUrl:"https://store.example/a"},
    {keyword:"old keyword",position:2,observedAt:new Date("2026-06-30"),country:"US",device:"desktop",engine:"google",targetUrl:"https://store.example/a"},
  ],new Date("2026-10-24")).length,0);
- assert.match(ranked[0].rationale,/from 4 to 11/);
+ assert.match(ranked[0].rationale,/4 → 9 → 11/);
  assert.equal(buildRankTasks([{keyword:"test",position:null,observedAt:new Date(),country:"US",device:"mobile",engine:"google",targetUrl:""}]).length,0);
 });
 
@@ -56,19 +57,51 @@ test("rank changes never compare different pages or unknown result URLs",()=>{
  const base={keyword:"boots",country:"US",device:"desktop",engine:"google"};
  const now=new Date("2026-10-26T12:00:00Z");
  const latest={...base,position:15,observedAt:new Date("2026-10-25T12:00:00Z"),targetUrl:"https://shop.example/products/boots"};
- const previous={...base,position:3,observedAt:new Date("2026-10-24T12:00:00Z"),targetUrl:"https://shop.example/collections/boots"};
- assert.equal(buildRankTasks([latest,previous],now).length,0,
+ const previous={...base,position:7,observedAt:new Date("2026-10-24T12:00:00Z"),targetUrl:"https://shop.example/collections/boots"};
+ const baseline={...base,position:3,observedAt:new Date("2026-10-23T12:00:00Z"),targetUrl:"https://shop.example/products/boots"};
+ assert.equal(buildRankTasks([latest,previous,baseline],now).length,0,
    "a different ranking landing page must not trigger a page-level drop");
- assert.equal(buildRankTasks([{...latest,targetUrl:""},previous],now).length,0,
+ assert.equal(buildRankTasks([{...latest,targetUrl:""},previous,baseline],now).length,0,
    "missing target URL cannot establish a comparable page");
- assert.equal(buildRankTasks([latest,{...previous,targetUrl:"https://shop.example/products/boots#details"}],now).length,1,
+ assert.equal(buildRankTasks([latest,{...previous,targetUrl:"https://shop.example/products/boots#details"},baseline],now).length,1,
    "fragments do not change the underlying page");
- assert.equal(buildRankTasks([latest,{...previous,targetUrl:"https://shop.example/products/boots?variant=2"}],now).length,0,
+ assert.equal(buildRankTasks([latest,{...previous,targetUrl:"https://shop.example/products/boots?variant=2"},baseline],now).length,0,
    "a different query string may identify a different page");
  const middle={...base,position:5,observedAt:new Date("2026-10-24T18:00:00Z"),targetUrl:"https://shop.example/collections/boots"};
  const older={...base,position:3,observedAt:new Date("2026-10-23T12:00:00Z"),targetUrl:"https://shop.example/products/boots"};
  assert.equal(buildRankTasks([latest,middle,older],now).length,0,
    "do not skip an intervening page change to cherry-pick a matching older snapshot");
+});
+
+test("single SERP dip or rebound never becomes a confirmed manager alert",()=>{
+  const now=new Date("2026-10-28T12:00:00Z");
+  const base={keyword:"boots",country:"US",device:"desktop",engine:"google",
+    targetUrl:"https://shop.example/products/boots"};
+  const point=(position:number,date:string)=>({...base,position,observedAt:new Date(date)});
+  const baseline=point(4,"2026-10-23T12:00:00Z");
+  const dip=point(12,"2026-10-24T12:00:00Z");
+  const rebound=point(5,"2026-10-25T12:00:00Z");
+  assert.equal(buildRankTasks([dip,baseline],now).length,0,
+    "two points alone cannot establish a persistent decline");
+  assert.equal(buildRankTasks([rebound,dip,baseline],now).length,0,
+    "a one-off drop followed by recovery is not sustained");
+  assert.equal(buildRankTasks([point(12,"2026-10-26T12:00:00Z"),rebound,dip,baseline],now).length,0,
+    "do not cherry-pick an older baseline through an intervening rebound");
+  const confirmation=point(9,"2026-10-25T12:00:00Z");
+  const latest=point(11,"2026-10-26T12:00:00Z");
+  const [alert]=buildRankTasks([latest,confirmation,baseline],now);
+  assert.ok(alert);
+  const evidence=JSON.parse(alert.evidence);
+  assert.equal(evidence.previousRank,4);
+  assert.equal(evidence.confirmationRank,9);
+  assert.equal(evidence.latestRank,11);
+  assert.match(alert.rationale,/Three same-page SERP observations/);
+  assert.equal(buildRankTasks([latest,{...confirmation,position:6},baseline],now).length,0,
+    "both newer observations must be at least three positions below baseline");
+  assert.equal(buildRankTasks([latest,{...confirmation,observedAt:new Date("2026-08-01")},baseline],now).length,0,
+    "an old confirmation cannot support a fresh alert");
+  assert.equal(buildRankTasks([latest,confirmation,{...baseline,targetUrl:"https://shop.example/products/other"}],now).length,0,
+    "all three observations must concern the same landing page");
 });
 
 test("merchant tasks deduplicate, preserve dismissals and never bleed into another shop",async()=>{
@@ -274,9 +307,10 @@ test("ranking recovery requires a newer fresh observation of the same page and m
   const now=new Date("2026-10-28T12:00:00Z");
   const base={keyword:"boots",country:"US",device:"desktop",engine:"google"};
   const url="https://shop.example/products/boots";
-  const previous={...base,position:4,observedAt:new Date("2026-10-24T12:00:00Z"),targetUrl:url};
+  const previous={...base,position:4,observedAt:new Date("2026-10-23T12:00:00Z"),targetUrl:url};
+  const confirmation={...base,position:9,observedAt:new Date("2026-10-24T12:00:00Z"),targetUrl:url};
   const drop={...base,position:12,observedAt:new Date("2026-10-25T12:00:00Z"),targetUrl:url};
-  const [alert]=buildRankTasks([drop,previous],now);
+  const [alert]=buildRankTasks([drop,confirmation,previous],now);
   assert.ok(alert);
   const recovered={...base,position:5,observedAt:new Date("2026-10-26T12:00:00Z"),targetUrl:url+"#size"};
   assert.equal(rankingDropHasRecovered(alert.sourceKey,alert.evidence,[drop,previous,recovered],now),true);
@@ -304,9 +338,11 @@ test("manager retires recovered SERP alerts but preserves accepted decisions and
   });
   try {
     await db.seoRankObservation.createMany({data:[
-      rank("boots",4,"2026-10-24T12:00:00Z"),
+      rank("boots",4,"2026-10-23T12:00:00Z"),
+      rank("boots",9,"2026-10-24T12:00:00Z"),
       rank("boots",12,"2026-10-25T12:00:00Z"),
-      rank("sneakers",3,"2026-10-24T12:00:00Z"),
+      rank("sneakers",3,"2026-10-23T12:00:00Z"),
+      rank("sneakers",7,"2026-10-24T12:00:00Z"),
       rank("sneakers",10,"2026-10-25T12:00:00Z")
     ]});
     await syncManagerTasks(shop,[],new Date("2026-10-28T12:00:00Z"));
@@ -325,6 +361,10 @@ test("manager retires recovered SERP alerts but preserves accepted decisions and
     assert.equal((await db.storeRecommendation.findUniqueOrThrow({where:{id:sneakers.id}})).status,"approved");
     await db.seoRankObservation.create({data:rank("boots",15,"2026-10-27T12:00:00Z")});
     await syncManagerTasks(shop,[],new Date("2026-10-28T12:00:00Z"));
+    assert.equal((await db.storeRecommendation.count({where:{shop,kind:"ranking_drop",status:"pending"}})),0,
+      "one post-recovery rank dip is not a confirmed repeat decline");
+    await db.seoRankObservation.create({data:rank("boots",16,"2026-10-28T12:00:00Z")});
+    await syncManagerTasks(shop,[],new Date("2026-10-29T12:00:00Z"));
     const latest=await db.storeRecommendation.findMany({where:{shop,kind:"ranking_drop"}});
     assert.equal(latest.filter(a=>a.status==="pending").length,1,
       "a later distinct ranking drop creates a fresh alert without rewriting historical evidence");

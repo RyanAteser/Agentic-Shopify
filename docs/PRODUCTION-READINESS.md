@@ -53,6 +53,16 @@ The existing stored human-review digest prevents publishing content without a **
 
 **Verification status:** code committed; require passing SQLite/PostgreSQL CI, production build and Docker smoke on this final head. This is not merchant authentication, proof of reading, live Shopify behavior or exactly-once delivery. No permissions, publishing automation, billing or live merchant data are changed.
 
+## SERP alert precision gate (2026-10-28)
+
+Store Manager now requires two consecutive same-page rank declines relative
+to a preceding baseline before creating a ranking-drop recommendation.
+The three-point rule is conservative and read-only, with no Shopify edits or
+additional Bright Data requests. It cannot establish actual traffic loss.
+See [SEO-AGENTS.md](./SEO-AGENTS.md) for exact eligibility, false-positive
+limitations and the consented merchant pilot. CI and real Bright Data
+payload validation are still required; no observed merchant outcome is claimed.
+
 ## Hard go/no-go gates
 
 | Gate | Current status | Completion proof required |

@@ -179,3 +179,49 @@ test("recovery respects the three-job batch bound and leaves remaining work queu
     assert.equal(await db.contentJob.count({ where: { shop, status: "queued" } }), 2);
   });
 });
+
+
+test("recovery fairly selects one oldest queued job per merchant, not three from one backlog", async () => {
+  const shops = Array.from({ length: 4 }, () =>
+    "fair-outbox-" + randomUUID() + ".myshopify.com"
+  );
+  await db.storeConfig.createMany({ data: shops.map(shop => ({ shop })) });
+  try {
+    // A's five old jobs would occupy the entire original global top-three.
+    // B, C and D must get a bounded opportunity even while A has a backlog.
+    for (let i = 0; i < 5; i++) {
+      await db.contentJob.create({ data: {
+        shop: shops[0], topic: "A " + i, outboxVersion: 1,
+        createdAt: new Date("2026-10-28T19:30:00.000Z")
+      } });
+    }
+    for (let i = 1; i < shops.length; i++) {
+      await db.contentJob.create({ data: {
+        shop: shops[i], topic: "Other merchant", outboxVersion: 1,
+        createdAt: new Date("2026-10-28T19:3" + i + ":00.000Z")
+      } });
+    }
+    const first: string[] = [];
+    const dispatch = async (id: string, shop: string) => {
+      await claimQueuedDispatch(shop, id);
+      first.push(shop);
+    };
+    const result = await recoverQueuedJobs(now, dispatch);
+    assert.equal(result.candidates, 3);
+    assert.equal(result.accepted, 3);
+    assert.deepEqual(new Set(first), new Set(shops.slice(0, 3)));
+    assert.equal(await db.contentJob.count({ where: { shop: shops[0], status: "queued" } }), 4);
+
+    const second: string[] = [];
+    const again = await recoverQueuedJobs(now, async (id, shop) => {
+      await claimQueuedDispatch(shop, id);
+      second.push(shop);
+    });
+    assert.equal(again.candidates, 2);
+    assert.deepEqual(new Set(second), new Set([shops[0], shops[3]]));
+    assert.equal(await db.contentJob.count({ where: { shop: shops[3], status: "queued" } }), 0);
+  } finally {
+    await db.contentJob.deleteMany({ where: { shop: { in: shops } } });
+    await db.storeConfig.deleteMany({ where: { shop: { in: shops } } });
+  }
+});

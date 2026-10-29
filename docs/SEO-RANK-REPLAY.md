@@ -123,9 +123,9 @@ and an unknown result or changed page only establishes lost comparability.
 Do not use episode counts as conversion outcomes or infer causal SEO impact.
 A future merchant study needs independently adjudicated **episode-level**
 labels, dated GSC evidence, and a frozen holdout period. Google Search
-Console's API is sampled/limited for query-level reporting, anonymizes some
-queries, and uses Pacific reporting dates; it cannot be directly equated to
-UTC SERP snapshots. See:
+Console's API is row-limited and privacy-filters some query-level data;
+it also uses Pacific reporting dates, so its aggregate positions cannot be
+directly equated to UTC point-in-time SERP snapshots. See:
 https://developers.google.com/webmaster-tools/v1/searchanalytics/query
 https://developers.google.com/search/blog/2022/10/performance-data-deep-dive
 

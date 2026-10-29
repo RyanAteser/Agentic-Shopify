@@ -63,7 +63,7 @@ export function assessGscRankEvidence(raw:unknown,now=new Date()) {
     !incident.targetUrl.startsWith(request.siteUrl))
     throw new Error("Ranking target is outside the exact storefront property");
   const observed=new Date(incident.observedAt);
-  if(typeof incident.observedAt!=="string"||!Number.isFinite(observed.getTime())||
+  if(typeof incident.observedAt!=="string"||\n    !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(incident.observedAt)||\n    !Number.isFinite(observed.getTime())||
     observed.getTime()>now.getTime())
     throw new Error("Invalid or future incident timestamp");
   const day=pacificDay(observed),start=shift(day,-7),end=shift(day,7);
@@ -73,7 +73,7 @@ export function assessGscRankEvidence(raw:unknown,now=new Date()) {
     request.dataState!=="final"||
     !["auto","byPage"].includes(request.aggregationType)||
     (request.startRow!==undefined&&request.startRow!==0)||
-    (request.rowLimit!==undefined&&(!Number.isInteger(request.rowLimit)||request.rowLimit<15)))
+    (request.rowLimit!==undefined&&(!Number.isInteger(request.rowLimit)||request.rowLimit<15||request.rowLimit>25000)))
     throw new Error("Expected finalized, date-only GSC data for the fixed 15-day window");
   const groups=request.dimensionFilterGroups;
   if(!Array.isArray(groups)||groups.length!==1||groups[0]?.groupType!=="and"||

@@ -71,13 +71,25 @@ export function evaluateArticle(input: unknown) {
         const { rel: _ignoredRel, ...withoutLink } = withoutHref;
         // Single-slash paths are allowed for merchant internal navigation.
         // Scheme-relative // URLs and backslash URL tricks are not.
-        if (href.includes(String.fromCharCode(92))) {
+        // Browsers strip ASCII tabs/newlines when resolving URLs. A raw
+        // "/\\n/attacker.example" can become an external //attacker.example
+        // navigation even though it begins with a single slash.
+        if (href.includes(String.fromCharCode(92)) || /[\\x00-\\x1f\\x7f]/.test(href)) {
           strippedLinks++;
           return { tagName, attribs: withoutLink };
         }
         if (href.startsWith("/") && !href.startsWith("//")) {
-          relativeLinks++;
-          return { tagName, attribs: safeAttributes };
+          // Verify browser URL resolution, not only the raw prefix. Never
+          // need the merchant's real domain or fetch a destination.
+          try {
+            const origin = "https://storefront.invalid";
+            if (new URL(href, origin).origin === origin) {
+              relativeLinks++;
+              return { tagName, attribs: safeAttributes };
+            }
+          } catch {
+            // Keep anchor text, remove malformed destinations below.
+          }
         }
         try {
           const url = new URL(href);

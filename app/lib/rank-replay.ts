@@ -55,6 +55,51 @@ function counts(days: Set<string>, labels: Map<string, boolean>): AlertCounts {
   };
 }
 
+/**
+ * Compare first alert dates by stable incident identity, not exact alert-day.
+ * Two rules can detect the same problem on different dates; treating that as
+ * two disjoint alerts overstates disagreement and hides detection delay.
+ */
+function firstIncidentDays(days: Set<string>): Map<string, string> {
+  const first = new Map<string, string>();
+  for (const value of days) {
+    const day = value.slice(0, 10);
+    const incident = value.slice(11);
+    const previous = first.get(incident);
+    if (!previous || day < previous) first.set(incident, day);
+  }
+  return first;
+}
+function compareFirstAlerts(referenceDays: Set<string>, confirmedDays: Set<string>) {
+  const reference = firstIncidentDays(referenceDays);
+  const confirmed = firstIncidentDays(confirmedDays);
+  const lags: number[] = [];
+  let confirmedEarlier = 0, confirmedLater = 0, sameDay = 0;
+  for (const [incident, confirmedDate] of confirmed) {
+    const referenceDate = reference.get(incident);
+    if (!referenceDate) continue;
+    const lag = (Date.parse(confirmedDate + "T00:00:00Z") -
+      Date.parse(referenceDate + "T00:00:00Z")) / 86400000;
+    lags.push(lag);
+    if (lag < 0) confirmedEarlier++;
+    else if (lag > 0) confirmedLater++;
+    else sameDay++;
+  }
+  lags.sort((a, b) => a - b);
+  const middle = Math.floor(lags.length / 2);
+  return {
+    referenceOnlyIncidents: reference.size - lags.length,
+    confirmedOnlyIncidents: confirmed.size - lags.length,
+    bothIncidents: lags.length,
+    confirmedEarlierIncidents: confirmedEarlier,
+    confirmedLaterIncidents: confirmedLater,
+    sameDayIncidents: sameDay,
+    medianConfirmedLagDays: lags.length
+      ? lags.length % 2 ? lags[middle] : (lags[middle - 1] + lags[middle]) / 2
+      : null
+  };
+}
+
 export function replayRankingAlerts(raw: unknown, now = new Date()) {
   if (!Number.isFinite(now.getTime()) || !raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error("Replay requires an object and a valid evaluation time");
@@ -129,8 +174,9 @@ export function replayRankingAlerts(raw: unknown, now = new Date()) {
     comparison: {
       referenceOnlyIncidentDays: referenceOnly,
       confirmedOnlyIncidentDays: confirmedOnly,
-      bothIncidentDays: referenceDays.size - referenceOnly
+      bothIncidentDays: referenceDays.size - referenceOnly,
+      ...compareFirstAlerts(referenceDays, confirmedDays)
     },
-    caveat: "Reference is a naive two-snapshot comparator, not historical production. Alert counts are not false positives, GSC traffic loss, SEO lift or revenue. Merchant usefulness labels are optional, subjective and potentially selected."
+    caveat: "Reference is a naive two-snapshot comparator, not historical production. Incident overlap and first-alert UTC-day lag are descriptive, not false-positive rates, verified traffic loss, SEO lift or revenue. Merchant usefulness labels are optional, subjective and potentially selected."
   };
 }

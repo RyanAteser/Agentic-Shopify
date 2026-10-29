@@ -151,3 +151,70 @@ test("incomplete dates take precedence over sparse-volume warnings",()=>{
   assert.equal(report.absoluteClicksChange,null);
   assert.equal(report.absoluteImpressionsChange,null);
 });
+
+test("extended export exposes an already-declining baseline without changing the incident comparison",()=>{
+  const input=evidence();
+  input.request.startDate="2026-09-26";
+  const prior=Array.from({length:7},(_,i)=>({
+    keys:[new Date(Date.UTC(2026,8,26+i)).toISOString().slice(0,10)],
+    clicks:15,impressions:100,ctr:0.15,position:3
+  }));
+  input.response.rows=[...prior,...input.response.rows];
+  const report=assessGscRankEvidence(input,now);
+  assert.equal(report.baseline.clicks,70);
+  assert.equal(report.followup.clicks,35);
+  assert.equal(report.absoluteClicksChange,-35);
+  assert.equal(report.pretrend.status,"descriptive_only");
+  assert.equal(report.pretrend.priorBaseline?.clicks,105);
+  assert.equal(report.pretrend.absoluteClicksChange,-35);
+  assert.ok(Math.abs(report.pretrend.clicksChangePct!+33.333333333333336)<0.001);
+  assert.equal(report.pretrend.completeDateCoverage,true);
+});
+
+test("missing earlier dates abstain on pretrend but preserve the original complete comparison",()=>{
+  const input=evidence();
+  input.request.startDate="2026-09-26";
+  input.response.rows.unshift({
+    keys:["2026-09-26"],clicks:15,impressions:100,ctr:0.15,position:3
+  });
+  const report=assessGscRankEvidence(input,now);
+  assert.equal(report.evidenceStatus,"descriptive_only");
+  assert.equal(report.pretrend.status,"incomplete_dates");
+  assert.equal(report.pretrend.missingPriorDates,6);
+  assert.equal(report.pretrend.clicksChangePct,null);
+  assert.equal(report.pretrend.absoluteClicksChange,null);
+});
+
+test("extended exports require enough row capacity and never cherry-pick arbitrary dates",()=>{
+  const input=evidence();
+  input.request.startDate="2026-09-26";
+  input.request.rowLimit=15;
+  assert.throws(()=>assessGscRankEvidence(input,now),/fixed 15-day/);
+  input.request.rowLimit=22;
+  assert.doesNotThrow(()=>assessGscRankEvidence(input,now));
+  input.request.startDate="2026-09-25";
+  assert.throws(()=>assessGscRankEvidence(input,now),/fixed 15-day/);
+});
+
+test("extended sparse pretrend withholds percentages while retaining complete absolute counts",()=>{
+  const input=evidence();
+  input.request.startDate="2026-09-26";
+  const prior=Array.from({length:7},(_,i)=>({
+    keys:[new Date(Date.UTC(2026,8,26+i)).toISOString().slice(0,10)],
+    clicks:1,impressions:100,ctr:0.01,position:3
+  }));
+  input.response.rows=[...prior,...input.response.rows];
+  const report=assessGscRankEvidence(input,now);
+  assert.equal(report.pretrend.status,"low_volume");
+  assert.equal(report.pretrend.absoluteClicksChange,63);
+  assert.equal(report.pretrend.clicksChangePct,null);
+  assert.equal(report.clicksChangePct,-50);
+});
+
+test("legacy 15-day exports explicitly mark pretrend as unavailable",()=>{
+  const report=assessGscRankEvidence(evidence(),now);
+  assert.equal(report.pretrend.status,"not_requested");
+  assert.equal(report.pretrend.priorBaseline,null);
+  assert.equal(report.pretrend.missingPriorDates,null);
+  assert.equal(report.pretrend.absoluteClicksChange,null);
+});

@@ -73,3 +73,24 @@ test("a late n8n callback cannot resurrect data after store redaction", async ()
     await db.storeConfig.deleteMany({ where: { shop } });
   }
 });
+
+test("oversized model callback persists an editable needs-review draft, not a ready article", async () => {
+  const shop = "large-callback-" + randomUUID() + ".myshopify.com";
+  await db.storeConfig.create({data:{shop}});
+  try {
+    const job = await db.contentJob.create({data:{shop, topic:"Large draft", status:"running"}});
+    const oversized = {...article, body: article.body + "<p>" + "é".repeat(31_000) + "</p>"};
+    const saved = await persistArticleCallback(shop, job.id, oversized);
+    const draft = await db.articleDraft.findUniqueOrThrow({where:{id:saved.draftId}});
+    assert.equal(draft.status, "needs_review");
+    assert.ok(draft.seoScore < 70);
+    assert.match(draft.reviewNotes, /60 KB UTF-8 safety budget/);
+    assert.ok(Buffer.byteLength(draft.body, "utf8") > 60_000);
+    assert.equal((await db.contentJob.findUniqueOrThrow({where:{id:job.id}})).status, "completed");
+  } finally {
+    await db.editorialReview.deleteMany({where:{shop}});
+    await db.articleDraft.deleteMany({where:{shop}});
+    await db.contentJob.deleteMany({where:{shop}});
+    await db.storeConfig.deleteMany({where:{shop}});
+  }
+});

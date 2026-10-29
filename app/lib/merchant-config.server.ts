@@ -54,11 +54,42 @@ export async function saveMerchantConfig(
     const nextRunAt = !preferences.enabled
       ? null
       : previous?.enabled ? previous.nextRunAt ?? new Date() : new Date();
+    // A scheduled draft reserved before a merchant changes the automation
+    // must not be dispatched later with an obsolete topic, blog or brief.
+    // The upsert locks StoreConfig first; claimQueuedDispatch uses the same
+    // store -> job lock order. Only still-queued scheduled jobs are canceled.
+    const scheduledInputsChanged = previous !== null && (
+      previous.enabled !== preferences.enabled ||
+      previous.blogId !== preferences.blogId ||
+      previous.authorName !== preferences.authorName ||
+      previous.audience !== preferences.audience ||
+      previous.brandVoice !== preferences.brandVoice ||
+      previous.seedTopics !== preferences.seedTopics ||
+      previous.cadenceDays !== preferences.cadenceDays
+    );
     await tx.storeConfig.upsert({
       where: { shop },
       create: { shop, ...preferences, nextRunAt },
       update: { ...preferences, nextRunAt },
     });
+    if (scheduledInputsChanged) {
+      const canceled = await tx.contentJob.updateMany({
+        where: {
+          shop, status: "queued", outboxVersion: 1,
+          scheduleClaim: { not: null },
+        },
+        data: {
+          status: "failed",
+          error: "Scheduled draft canceled: merchant changed automation settings before dispatch",
+        },
+      });
+      if (canceled.count > 0) {
+        await tx.storeConfig.update({
+          where: { shop },
+          data: { freeDraftsUsed: { decrement: canceled.count } },
+        });
+      }
+    }
     return true;
   });
 }

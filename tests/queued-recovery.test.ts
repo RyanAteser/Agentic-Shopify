@@ -164,19 +164,23 @@ test("corrupt scheduled metadata blocks dispatch and preserves evidence for an o
   });
 });
 
-test("recovery respects the three-job batch bound and leaves remaining work queued", async () => {
+test("single merchant gets one recovery slot per sweep and its backlog drains safely", async () => {
   await withStore(async shop => {
     for (let i = 0; i < 5; i++) {
       await db.contentJob.create({ data: {
         shop, topic: "Batch " + i, outboxVersion: 1, createdAt: old
       } });
     }
-    const result = await recoverQueuedJobs(now, async (id, tenant) => {
+    const dispatch = async (id: string, tenant: string) => {
       await claimQueuedDispatch(tenant, id);
-    });
-    assert.equal(result.candidates, 3);
-    assert.equal(result.accepted, 3);
-    assert.equal(await db.contentJob.count({ where: { shop, status: "queued" } }), 2);
+    };
+    for (let remaining = 4; remaining >= 0; remaining--) {
+      const result = await recoverQueuedJobs(now, dispatch);
+      assert.equal(result.candidates, 1);
+      assert.equal(result.accepted, 1);
+      assert.equal(await db.contentJob.count({ where: { shop, status: "queued" } }), remaining);
+    }
+    assert.equal((await recoverQueuedJobs(now, dispatch)).candidates, 0);
   });
 });
 

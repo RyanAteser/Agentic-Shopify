@@ -51,3 +51,30 @@ PostgreSQL migration `20261028190000_queued_dispatch_outbox` adds nullable `sche
 **Sources:** [Prisma v6 transaction and OCC guidance](https://www.prisma.io/docs/orm/v6/prisma-client/queries/transactions); [n8n execution history and manual retries](https://docs.n8n.io/workflows/executions/all-executions/); [n8n commercial licensing](https://support.n8n.io/article/can-i-use-your-license-for-my-use-case).
 
 **Impact hypothesis:** fewer credited jobs stranded by a crash-before-claim, less merchant waiting and fewer support tickets. No merchant traffic, sales, retention, organic ranking, editing-time or incident reduction has been measured. This is reliability infrastructure, not a demonstrated growth feature.
+
+
+## Merchant automation changes fence queued scheduled drafts (2026-10-29)
+
+A merchant can disable scheduling or change the destination blog, cadence, topics,
+audience, brand voice or author after a due slot has been reserved but before the
+outbox worker dispatches it. Previously, the queued job could later run using
+the new configuration with its old topic, even after scheduling was disabled.
+
+The merchant settings transaction now marks **only version-1, still-queued
+scheduled jobs** failed with a cancellation explanation and refunds their
+reserved free-generation credits exactly once. Manual generation requests are
+not canceled when scheduling is disabled. Saving identical settings leaves
+queued work intact. The dispatch claim takes a store-row lock before the
+job-row transition, matching the merchant-settings lock order; a settings
+change that commits first prevents the old scheduled job from being sent.
+A claim that wins first is already `running` and cannot safely be canceled
+or refunded: n8n may already receive the request. A disabled store also
+cannot claim a leftover queued scheduled job. This is a **pre-dispatch
+cancellation fence**, not a guarantee that disabling scheduling stops work
+already in flight.
+
+Regression tests cover disable/refund, idempotent repeated saves, preserving
+manual queued jobs, content-brief changes, and a PostgreSQL claim-vs-disable
+race. The result is a trust/reliability hypothesis, not measured merchant
+retention or avoided AI spending. Do not activate scheduling or recovery
+until real Shopify/n8n staging and commercial licensing gates pass.

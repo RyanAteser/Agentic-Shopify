@@ -201,8 +201,10 @@ correlated scrapes, regional SERP volatility, device differences, personalizatio
 Google updates or a biased keyword set can still mislead. The confirmation
 rule trades slower detection and fewer opportunities for potentially fewer
 transient false alarms. Existing pending historical alerts are not erased or
-retroactively reclassified. They still use the existing, conservative
-same-market recovery mechanism.
+retroactively reclassified. Store Manager visibly labels legacy alerts without
+three-observation evidence as **unconfirmed**; they still use the existing,
+conservative same-market recovery mechanism. This is a display warning, not
+proof that the historical signal was false.
 
 Google explicitly cautions that small ranking fluctuations can occur without
 requiring changes and recommends reviewing Search Console traffic before

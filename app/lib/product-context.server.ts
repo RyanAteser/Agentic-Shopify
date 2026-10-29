@@ -44,7 +44,8 @@ export function parseVerifiedPublishedProducts(shop: string, raw: unknown): Veri
     if (product.onlineStoreUrl === null) continue;
     if (typeof product.title !== "string" || !product.title.trim() ||
         typeof product.description !== "string" ||
-        typeof product.onlineStoreUrl !== "string") {
+        typeof product.onlineStoreUrl !== "string" ||
+        product.onlineStoreUrl.length > 350) {
       throw new ProductContextUnavailableError();
     }
     let url: URL;
@@ -61,7 +62,7 @@ export function parseVerifiedPublishedProducts(shop: string, raw: unknown): Veri
     result.push({
       name: product.title.slice(0, 120),
       description: product.description.slice(0, 400),
-      url: product.onlineStoreUrl.slice(0, 350),
+      url: product.onlineStoreUrl,
     });
   }
   return result;

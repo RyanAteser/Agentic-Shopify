@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { SeoFinding } from "./seo";
 
 /** Pure evidence-backed task builder. No model-generated figures or external mutations. */
@@ -27,6 +28,22 @@ export function sameRankTarget(a:string,b:string):boolean {
 
 
 /**
+ * One actionable incident per keyword, search market and actual landing page,
+ * not one new inbox task per scrape timestamp. Ignore fragments consistently
+ * with sameRankTarget; preserve query strings (different indexed URLs).
+ * The digest is an identity key, not evidence that the SERP is trustworthy.
+ */
+export function rankIncidentKey(market:string,targetUrl:string):string {
+  const url=new URL(targetUrl);
+  if(url.protocol!=="https:"||!url.hostname||url.username||url.password) {
+    throw new Error("Invalid rank incident URL");
+  }
+  url.hash="";
+  return "rank-incident:v2:"+createHash("sha256")
+    .update(JSON.stringify([market,url.href])).digest("hex");
+}
+
+/**
  * Retire a pending SERP-drop alert only after a newer, same-market snapshot
  * shows the SAME page back within two positions of its pre-drop baseline.
  * This is evidence that the original sampled drop no longer holds, not proof
@@ -47,9 +64,20 @@ export function rankingDropHasRecovered(
      (prior.previousRank as number)<1||(prior.previousRank as number)>200)return false;
   const alertAt=new Date(prior.latestAt);
   if(!Number.isFinite(alertAt.getTime())||alertAt.toISOString()!==prior.latestAt)return false;
-  const suffix=":"+prior.latestAt;
-  if(!sourceKey.startsWith("rank:")||!sourceKey.endsWith(suffix))return false;
-  const market=sourceKey.slice(5,-suffix.length);
+  let market:string;
+  if(sourceKey.startsWith("rank-incident:v2:")) {
+    if(typeof prior.market!=="string")return false;
+    try {
+      if(rankIncidentKey(prior.market,prior.url)!==sourceKey)return false;
+    }catch{return false;}
+    market=prior.market;
+  }else{
+    // Historical timestamp-keyed alerts remain recoverable without rewriting
+    // their original evidence or overriding prior merchant decisions.
+    const suffix=":"+prior.latestAt;
+    if(!sourceKey.startsWith("rank:")||!sourceKey.endsWith(suffix))return false;
+    market=sourceKey.slice(5,-suffix.length);
+  }
   let newest:RankLike|undefined;
   for(const row of observations){
     if([row.keyword,row.country,row.device,row.engine].join("|")!==market)continue;
@@ -112,14 +140,14 @@ export function buildRankTasks(records: RankLike[], now=new Date()):SuggestedTas
     const latestLoss=latest.position-baseline.position;
     if(confirmedLoss<3||latestLoss<3)continue;
     tasks.push({
-      sourceKey:"rank:"+key+":"+latest.observedAt.toISOString(),
+      sourceKey:rankIncidentKey(key,latest.targetUrl),
       agent:"seo",kind:"ranking_drop",targetId:latest.targetUrl,
       title:"Repeated rank decline: "+latest.keyword,
       rationale:"Three same-page SERP observations: "+baseline.position+" → "+
         confirmation.position+" → "+latest.position+" (latest "+latestLoss+
         " places below baseline) on "+latest.engine+" "+latest.country+" "+latest.device+
         ". Review Search Console traffic before changing content. A repeated snapshot is not proof of lost revenue or causation.",
-      evidence:JSON.stringify({source:"brightdata-serp",latestAt:latest.observedAt.toISOString(),
+      evidence:JSON.stringify({source:"brightdata-serp",market:key,latestAt:latest.observedAt.toISOString(),
         confirmationAt:confirmation.observedAt.toISOString(),
         previousAt:baseline.observedAt.toISOString(),previousRank:baseline.position,
         confirmationRank:confirmation.position,latestRank:latest.position,url:latest.targetUrl}),

@@ -25,6 +25,27 @@ export function isArticleHtmlPublishSafe(body: string): boolean {
   }
 }
 
+/**
+ * Display-only rendering for historical/imported drafts. Stored HTML is never
+ * assumed safe merely because newer callbacks and edits sanitize their input.
+ * Do not mutate the saved article or its human-review digest from a preview.
+ * The publish gate separately rejects noncanonical legacy HTML.
+ */
+export function safeArticlePreviewHtml(body: string): {
+  html: string; changed: boolean; unavailable: boolean;
+} {
+  try {
+    const html = evaluateArticle({
+      title: "", summary: "", keyword: "", tags: [], body
+    }).article.body;
+    return { html, changed: html !== body, unavailable: false };
+  } catch {
+    // Fail closed for malformed or oversized legacy content. The merchant can
+    // still inspect the original markup in the text editor, not an HTML sink.
+    return { html: "", changed: true, unavailable: true };
+  }
+}
+
 export type ArticlePayload = {
   title: string;
   summary: string;

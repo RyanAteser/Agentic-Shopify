@@ -17,6 +17,8 @@ export type DueDraftSnapshot = {
   cadenceDays: number;
   seedTopics: string;
   audience: string;
+  brandVoice: string;
+  authorName: string;
 };
 
 export type ScheduledDraftClaim = {
@@ -114,6 +116,12 @@ export async function claimDueScheduledDraft(
         nextRunAt: config.nextRunAt,
         topicCursor: config.topicCursor, cadenceDays: config.cadenceDays,
         seedTopics: config.seedTopics,
+        // A merchant can edit the brief after the scheduler reads a candidate.
+        // Match all prompt inputs, not just the topic list, before reserving
+        // a credit. Otherwise an old audience fallback topic can be queued.
+        audience: config.audience,
+        brandVoice: config.brandVoice,
+        authorName: config.authorName,
         freeDraftsUsed: { lt: FREE_LIFETIME_GENERATIONS },
         AND: [{ OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }] }],
       },

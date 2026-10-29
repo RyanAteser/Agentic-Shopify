@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import db from "../db.server";
-import { evaluateArticle } from "./content-quality.server";
+import { evaluateArticle, isArticleHtmlWithinBudget } from "./content-quality.server";
 
 export type EditableDraftFields = {
   title: string; summary: string; body: string; tags: string; keyword: string;
@@ -42,7 +42,7 @@ export async function saveMerchantDraftEdit(
   // Explicit limits prevent silent truncation of a merchant's edits.
   // 60 KB is a conservative buffer under Shopify's rich-text content limit.
   if (!title || title.length > 160 || !summary || summary.length > 500 ||
-      !body.trim() || Buffer.byteLength(body, "utf8") > 60_000 || keyword.length > 120 ||
+      !body.trim() || !isArticleHtmlWithinBudget(body) || keyword.length > 120 ||
       tagsRaw.length > 320) {
     return {ok: false, message: "Title (1–160), excerpt (1–500), HTML body (1–60,000), keyword (0–120) or tags (0–320) are outside allowed limits."};
   }
@@ -51,7 +51,7 @@ export async function saveMerchantDraftEdit(
     return {ok: false, message: "Use at most eight comma-separated tags, each no longer than 40 characters."};
   }
   const checked = evaluateArticle({title, summary, body, keyword, tags});
-  if (Buffer.byteLength(checked.article.body, "utf8") > 60_000) {
+  if (!isArticleHtmlWithinBudget(checked.article.body)) {
     return {ok: false, message: "Sanitized HTML exceeds the 60 KB safety limit."};
   }
   if (checked.article.body.replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, "").trim().length < 20) {

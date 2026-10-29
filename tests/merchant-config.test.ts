@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
 import { loadMerchantConfig, saveMerchantConfig } from "../app/lib/merchant-config.server";
+import { claimDueScheduledDraft } from "../app/lib/scheduled-drafts.server";
+import { createCreditedJob } from "../app/lib/credits.server";
+import { claimQueuedDispatch, DispatchAlreadyClaimedError } from "../app/lib/dispatch-claim.server";
 import { eraseMerchantData } from "../app/lib/merchant-redaction.server";
 
 const preferences = {
@@ -80,5 +83,84 @@ test("PostgreSQL session bootstrap and settings writes cannot race past redactio
     } finally {
       await eraseMerchantData(shop);
     }
+  }
+});
+
+
+test("disabling automation cancels only queued scheduled work and refunds its credit", async () => {
+  const shop = newShop(), sessionId = "session-" + randomUUID();
+  await db.session.create({ data: { id: sessionId, shop, state: "", accessToken: "test-only" } });
+  try {
+    assert.equal(await saveMerchantConfig(shop, sessionId, preferences), true);
+    const scheduled = await claimDueScheduledDraft(
+      (await db.storeConfig.findUniqueOrThrow({ where: { shop } })), new Date("2026-11-01T00:00:00Z")
+    );
+    assert.ok(scheduled);
+    const manual = await createCreditedJob(shop, "Merchant-requested draft");
+    assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 2);
+    assert.equal(await saveMerchantConfig(shop, sessionId, { ...preferences, enabled: false }), true);
+    const canceled = await db.contentJob.findUniqueOrThrow({ where: { id: scheduled.jobId } });
+    assert.equal(canceled.status, "failed");
+    assert.match(canceled.error ?? "", /merchant changed automation settings/);
+    assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 1);
+    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: manual.id } })).status, "queued");
+    await assert.rejects(claimQueuedDispatch(shop, scheduled.jobId), DispatchAlreadyClaimedError);
+    await claimQueuedDispatch(shop, manual.id);
+    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: manual.id } })).status, "running");
+    assert.equal(await saveMerchantConfig(shop, sessionId, { ...preferences, enabled: false }), true);
+    assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 1,
+      "repeated disable cannot refund the same credit twice");
+  } finally {
+    await eraseMerchantData(shop);
+  }
+});
+
+test("material editorial changes cancel queued scheduled work; unchanged settings do not", async () => {
+  const shop = newShop(), sessionId = "session-" + randomUUID();
+  await db.session.create({ data: { id: sessionId, shop, state: "", accessToken: "test-only" } });
+  try {
+    assert.equal(await saveMerchantConfig(shop, sessionId, preferences), true);
+    const scheduled = await claimDueScheduledDraft(
+      await db.storeConfig.findUniqueOrThrow({ where: { shop } }), new Date("2026-11-01T00:00:00Z")
+    );
+    assert.ok(scheduled);
+    assert.equal(await saveMerchantConfig(shop, sessionId, preferences), true);
+    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: scheduled.jobId } })).status, "queued");
+    assert.equal(await saveMerchantConfig(shop, sessionId, {
+      ...preferences, audience: "Different target customers"
+    }), true);
+    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: scheduled.jobId } })).status, "failed");
+    assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 0);
+  } finally {
+    await eraseMerchantData(shop);
+  }
+});
+
+test("PostgreSQL merchant disable and scheduled dispatch race cannot send canceled work", {
+  skip: !process.env.DATABASE_URL
+}, async () => {
+  const shop = newShop(), sessionId = "session-" + randomUUID();
+  await db.session.create({ data: { id: sessionId, shop, state: "", accessToken: "test-only" } });
+  try {
+    assert.equal(await saveMerchantConfig(shop, sessionId, preferences), true);
+    const scheduled = await claimDueScheduledDraft(
+      await db.storeConfig.findUniqueOrThrow({ where: { shop } }), new Date("2026-11-01T00:00:00Z")
+    );
+    assert.ok(scheduled);
+    const outcomes = await Promise.allSettled([
+      saveMerchantConfig(shop, sessionId, { ...preferences, enabled: false }),
+      claimQueuedDispatch(shop, scheduled.jobId)
+    ]);
+    assert.equal(outcomes[0].status, "fulfilled");
+    if (outcomes[1].status === "rejected")
+      assert.ok(outcomes[1].reason instanceof DispatchAlreadyClaimedError);
+    const job = await db.contentJob.findUniqueOrThrow({ where: { id: scheduled.jobId } });
+    const config = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
+    assert.equal(config.enabled, false);
+    assert.ok(job.status === "failed" || job.status === "running");
+    assert.equal(config.freeDraftsUsed, job.status === "failed" ? 0 : 1);
+    await assert.rejects(claimQueuedDispatch(shop, scheduled.jobId), DispatchAlreadyClaimedError);
+  } finally {
+    await eraseMerchantData(shop);
   }
 });

@@ -4,32 +4,20 @@ import { unauthenticated } from "../shopify.server";
 import { claimQueuedDispatch, validateN8nWebhookUrl } from "./dispatch-claim.server";
 import { deliverClaimedN8nJob } from "./n8n-delivery.server";
 import { createArticleCallbackToken } from "./article-callback-auth";
+import { fetchVerifiedPublishedProducts, ProductContextUnavailableError } from "./product-context.server";
 export { UncertainDispatchError } from "./n8n-delivery.server";
 
 async function publishedProducts(shop: string) {
   try {
     const { admin } = await unauthenticated.admin(shop);
-    const response = await admin.graphql(
-      `#graphql query AgenticProductContext {
-        products(first: 20, query: "status:active published_status:published") {
-          nodes { title description onlineStoreUrl }
-        }
-      }`
-    );
-    const json: any = await response.json();
-    if (json.errors?.length) return [];
-    const products = json.data?.products?.nodes ?? [];
-    return products.filter((p: any) => p.onlineStoreUrl).map((p: any) => ({
-      name: String(p.title ?? "").slice(0, 120),
-      description: String(p.description ?? "").slice(0, 400),
-      url: String(p.onlineStoreUrl).slice(0, 350),
-    }));
-  } catch (error) {
-    console.warn("Product context unavailable; using only merchant brief", error instanceof Error ? error.message : "unknown");
-    return [];
+    // An API outage is not evidence of an empty catalog. Abort before the
+    // queued -> running claim so the reserved credit can be safely refunded.
+    return await fetchVerifiedPublishedProducts(shop, admin);
+  } catch {
+    // Do not leak Shopify response bodies or merchant context into logs.
+    throw new ProductContextUnavailableError();
   }
 }
-
 
 export async function dispatchArticleJob(jobId: string, shop: string) {
   const config = await db.storeConfig.findUniqueOrThrow({ where: { shop } });

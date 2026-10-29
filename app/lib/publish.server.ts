@@ -1,6 +1,6 @@
 import db from "../db.server";
 import { toSafeShopifySummaryHtml } from "./article-summary";
-import { isArticleHtmlWithinBudget } from "./content-quality.server";
+import { isArticleHtmlPublishSafe, isArticleHtmlWithinBudget } from "./content-quality.server";
 import { hasCurrentUsableReview, publishFormDigest } from "./editorial-review-integrity";
 
 type Admin = {graphql: (...args:any[])=>Promise<any>};
@@ -41,6 +41,9 @@ export async function publishApprovedArticle(shop:string,draftId:string,admin:Ad
     // Older stored drafts can predate the callback/editor size gate. Do not
     // perform an irreversible Shopify mutation with oversized reviewed HTML.
     if(!isArticleHtmlWithinBudget(draft.body))return {oversized:true as const};
+    // Legacy or directly imported rows may have bypassed the current sanitizer.
+    // Do not silently alter the exact body that the merchant reviewed.
+    if(!isArticleHtmlPublishSafe(draft.body))return {unsafeHtml:true as const};
     // Revalidate the browser-rendered version while holding the merchant lock.
     // A later editor may renew approval, but cannot reuse this browser's old Publish form.
     if(publishFormDigest(draft,config)!==expectedPublishDigest)return {stale:true as const};
@@ -55,6 +58,7 @@ export async function publishApprovedArticle(shop:string,draftId:string,admin:Ad
   });
   if(claimed && "stale" in claimed)return {ok:false,message:"Article or publication destination changed since this page loaded. Refresh and inspect before publishing."};
   if(claimed && "oversized" in claimed)return {ok:false,message:"Article HTML exceeds the 60 KB UTF-8 safety budget. Shorten the draft and renew its review before publishing."};
+  if(claimed && "unsafeHtml" in claimed)return {ok:false,message:"Article HTML contains markup or links outside the current safety policy. Edit and save the draft, inspect the changes, and renew its review before publishing."};
   if(!claimed)return {ok:false,message:"A connected destination blog, current usable editorial review and ready unpublished draft are required."};
   try{
     const response=await admin.graphql(

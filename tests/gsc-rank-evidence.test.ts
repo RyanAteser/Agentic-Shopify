@@ -37,6 +37,10 @@ test("compares seven Pacific days before and after, excluding the incident date"
   assert.equal(report.followup.clicks,35);
   assert.equal(report.clicksChangePct,-50);
   assert.equal(report.impressionsChangePct,0);
+  assert.equal(report.evidenceStatus,"descriptive_only");
+  assert.equal(report.sufficientVolume,true);
+  assert.equal(report.absoluteClicksChange,-35);
+  assert.equal(report.absoluteImpressionsChange,0);
   assert.equal(report.avgPositionChange,3);
   assert.equal(JSON.stringify(report).includes("shop.example"),false);
   assert.equal(JSON.stringify(report).includes("winter boots"),false);
@@ -106,4 +110,44 @@ test("abstains before the seven-day followup has finalized",()=>{
   const input=evidence();
   assert.throws(()=>assessGscRankEvidence(input,new Date("2026-10-18T12:00:00Z")),
     /too recent/);
+});
+
+
+test("sparse click baseline abstains from dramatic percentage despite complete dates",()=>{
+  const input=evidence();
+  for(const row of input.response.rows.slice(0,7)){row.clicks=1;row.ctr=0.01;}
+  for(const row of input.response.rows.slice(8)){row.clicks=0;row.ctr=0;}
+  const report=assessGscRankEvidence(input,now);
+  assert.equal(report.completeDateCoverage,true);
+  assert.equal(report.baseline.clicks,7);
+  assert.equal(report.followup.clicks,0);
+  assert.equal(report.evidenceStatus,"low_volume");
+  assert.equal(report.sufficientVolume,false);
+  assert.equal(report.absoluteClicksChange,-7);
+  assert.equal(report.clicksChangePct,null);
+  assert.equal(report.impressionsChangePct,null);
+});
+
+test("sparse impression cohorts abstain even when click counts exceed threshold",()=>{
+  const input=evidence();
+  for(const row of input.response.rows){
+    row.impressions=10;row.clicks=2;row.ctr=0.2;
+  }
+  const report=assessGscRankEvidence(input,now);
+  assert.equal(report.completeDateCoverage,true);
+  assert.equal(report.baseline.clicks,14);
+  assert.equal(report.baseline.impressions,70);
+  assert.equal(report.evidenceStatus,"low_volume");
+  assert.equal(report.clicksChangePct,null);
+  assert.equal(report.absoluteClicksChange,0);
+});
+
+test("incomplete dates take precedence over sparse-volume warnings",()=>{
+  const input=evidence();
+  input.response.rows=input.response.rows.slice(0,3);
+  const report=assessGscRankEvidence(input,now);
+  assert.equal(report.evidenceStatus,"incomplete_dates");
+  assert.equal(report.sufficientVolume,false);
+  assert.equal(report.absoluteClicksChange,null);
+  assert.equal(report.absoluteImpressionsChange,null);
 });

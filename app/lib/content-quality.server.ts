@@ -8,6 +8,23 @@ export function isArticleHtmlWithinBudget(html: string): boolean {
   return Buffer.byteLength(html, "utf8") <= MAX_ARTICLE_HTML_BYTES;
 }
 
+/**
+ * Final pre-publication guard for older stored drafts that predate today's
+ * sanitizer. Never silently rewrite a human-reviewed publication payload:
+ * changed markup or link destinations require an explicit merchant edit and
+ * renewed review. This is a syntax policy, not URL provenance verification.
+ */
+export function isArticleHtmlPublishSafe(body: string): boolean {
+  if (!isArticleHtmlWithinBudget(body)) return false;
+  try {
+    return evaluateArticle({
+      title: "", summary: "", body, keyword: "", tags: [],
+    }).article.body === body;
+  } catch {
+    return false;
+  }
+}
+
 export type ArticlePayload = {
   title: string;
   summary: string;

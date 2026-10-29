@@ -94,3 +94,10 @@ test("does not invent a percent change from a zero-click baseline",()=>{
   assert.equal(report.completeDateCoverage,true);
   assert.equal(report.clicksChangePct,null);
 });
+
+test("requires timezone-qualified timestamps and a valid GSC row limit",()=>{
+  const a=evidence();a.incident.observedAt="2026-10-10T12:00:00";
+  assert.throws(()=>assessGscRankEvidence(a,now),/timestamp/);
+  const b=evidence();b.request.rowLimit=25001;
+  assert.throws(()=>assessGscRankEvidence(b,now),/fixed 15-day/);
+});

@@ -55,7 +55,7 @@ export function parseVerifiedPublishedProducts(shop: string, raw: unknown): Veri
     }
     if (url.protocol !== "https:" || url.username || url.password ||
         url.port || !url.hostname.includes(".") ||
-        /[\\x00-\\x1f\\x7f]/.test(product.onlineStoreUrl)) {
+        /[\x00-\x1f\x7f]/.test(product.onlineStoreUrl)) {
       throw new ProductContextUnavailableError();
     }
     result.push({

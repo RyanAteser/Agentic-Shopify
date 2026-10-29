@@ -172,6 +172,7 @@ export default function BlogAgent() {
         <label>Topic ideas (comma-separated) <textarea name="seedTopics" rows={2} maxLength={1000} defaultValue={config.seedTopics}/></label>
         <label>Days between automatic drafts <input name="cadenceDays" type="number" min={1} max={30} defaultValue={config.cadenceDays}/></label>
         <label><input name="enabled" type="checkbox" defaultChecked={config.enabled}/> Automatically create drafts on schedule (never auto-publish)</label>
+        <p>Disabling scheduling or changing the blog, topics or editorial settings cancels pending scheduled drafts that have not started, returning their reserved free credits. Drafts already dispatched may still finish. Manually requested drafts are unaffected.</p>
         <button type="submit" disabled={busy}>Save preferences</button>
       </Form>
     </s-section>

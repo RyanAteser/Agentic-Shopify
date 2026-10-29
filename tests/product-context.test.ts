@@ -81,3 +81,16 @@ test("network, response parsing, HTTP and GraphQL errors abort product discovery
         !error.message.includes("merchant details"));
   }
 });
+
+test("product URLs are never silently truncated before the AI brief", () => {
+  const exact = "https://merchant.example/products/" + "x".repeat(
+    350 - "https://merchant.example/products/".length
+  );
+  assert.equal(exact.length, 350);
+  assert.deepEqual(parseVerifiedPublishedProducts(shop, response([
+    { ...product, onlineStoreUrl: exact }
+  ]))[0].url, exact);
+  assert.throws(() => parseVerifiedPublishedProducts(shop, response([
+    { ...product, onlineStoreUrl: exact + "x" }
+  ])), ProductContextUnavailableError);
+});

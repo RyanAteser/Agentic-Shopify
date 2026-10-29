@@ -65,7 +65,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({model:'gpt-4.1-mini',temperature:0.5,response_format:{type:'json_object'},messages:[{role:'system',content:$json.system},{role:'user',content:$json.user}]}) }}",
+        "jsonBody": "={{ JSON.stringify({model:'gpt-4.1-mini',temperature:0.5,max_completion_tokens:3000,response_format:{type:'json_object'},messages:[{role:'system',content:$json.system},{role:'user',content:$json.user}]}) }}",
         "options": {
           "timeout": 120000,
           "redirect": {
@@ -87,7 +87,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const ctx = $('Prepare Brief').first().json;\nconst first = JSON.parse($input.first().json.choices?.[0]?.message?.content ?? '{}');\nif (!first.title || !first.body) throw new Error('Model returned invalid article');\nreturn [{json:{...ctx,first}}];"
+        "jsCode": "const choice = $input.first().json.choices?.[0];\nif (choice?.finish_reason !== 'stop') throw new Error('Draft completion did not finish normally; operator reconciliation required');\nconst ctx = $('Prepare Brief').first().json;\nconst first = JSON.parse(choice?.message?.content ?? '{}');\nif (!first.title || !first.body) throw new Error('Model returned invalid article');\nreturn [{json:{...ctx,first}}];"
       }
     },
     {
@@ -106,7 +106,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({model:'gpt-4.1-mini',temperature:0.2,response_format:{type:'json_object'},messages:[{role:'system',content:'You are a strict ecommerce managing editor. Return valid JSON with title, summary, body, keyword, tags. Rewrite this draft to remove unverifiable claims, SEO filler, repetitive phrasing, invented links, and bad HTML. Prioritize accuracy, practical detail and the brand audience. Never add facts that you cannot verify. No scripts or tracking.'},{role:'user',content:'Original brief: '+$json.user+'\\nDraft JSON: '+JSON.stringify($json.first)}]}) }}",
+        "jsonBody": "={{ JSON.stringify({model:'gpt-4.1-mini',temperature:0.2,max_completion_tokens:3000,response_format:{type:'json_object'},messages:[{role:'system',content:'You are a strict ecommerce managing editor. Return valid JSON with title, summary, body, keyword, tags. Rewrite this draft to remove unverifiable claims, SEO filler, repetitive phrasing, invented links, and bad HTML. Prioritize accuracy, practical detail and the brand audience. Never add facts that you cannot verify. No scripts or tracking.'},{role:'user',content:'Original brief: '+$json.user+'\\nDraft JSON: '+JSON.stringify($json.first)}]}) }}",
         "options": {
           "timeout": 120000,
           "redirect": {
@@ -128,7 +128,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const ctx = $('Prepare Brief').first().json;\nconst article = JSON.parse($input.first().json.choices?.[0]?.message?.content ?? '{}');\nif (!article.title || !article.body || !article.summary) throw new Error('Editor did not return a complete article');\nreturn [{json:{jobId:ctx.jobId,shop:ctx.shop,article}}];"
+        "jsCode": "const choice = $input.first().json.choices?.[0];\nif (choice?.finish_reason !== 'stop') throw new Error('Editorial completion did not finish normally; operator reconciliation required');\nconst ctx = $('Prepare Brief').first().json;\nconst article = JSON.parse(choice?.message?.content ?? '{}');\nif (!article.title || !article.body || !article.summary) throw new Error('Editor did not return a complete article');\nreturn [{json:{jobId:ctx.jobId,shop:ctx.shop,article}}];"
       }
     },
     {

@@ -54,6 +54,31 @@ scrapes on those two days. Both can emit an alert on different dates. Report
 "reference-only", "confirmed-only" and "both" incident-days separately;
 do not call their difference a false-positive reduction.
 
+## Paired incident timing (2026-10-28)
+
+The first replay reported only **same-day overlap**. This can be misleading:
+a two-snapshot rule might flag a keyword on Tuesday and the three-day rule
+flag the **same landing-page incident** on Wednesday. That yields zero shared
+incident-days despite detecting the same incident. We now report both views:
+
+- `referenceOnlyIncidentDays`, `confirmedOnlyIncidentDays` and
+  `bothIncidentDays` compare **exact UTC date + incident identity**.
+- `referenceOnlyIncidents`, `confirmedOnlyIncidents` and
+  `bothIncidents` compare **stable market/page identity across all dates**.
+- `confirmedEarlierIncidents`, `confirmedLaterIncidents` and
+  `sameDayIncidents` compare each shared incident's **first alert UTC date**.
+  `medianConfirmedLagDays` is signed: positive means the three-day rule
+  first flagged later; negative means it flagged earlier; null means no
+  shared incidents. It is a median of UTC calendar-day differences, not
+  wall-clock alert latency or time until a merchant sees an alert.
+
+In the fictional six-observation fixture, the reference has two incident-days
+and the three-day rule one. They have **zero same-day overlap**, but share
+**one incident**, first detected **one UTC day later** by the three-day rule.
+The second reference-only incident is same-day scrape noise in the fixture,
+not a proven real-world false positive. This comparison does not model
+merchant dismissals, actual task creation or delayed scraping schedules.
+
 The output counts incident-days and deduplicated market/page incidents.
 A labeled-usefulness percentage is emitted only when at least one incident
 has a human label, with labeled and unlabeled denominators disclosed. This

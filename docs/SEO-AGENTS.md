@@ -179,6 +179,45 @@ gates. Measure false-alert rate, merchant dismissals, and minutes per useful
 SEO action in an authorized pilot.
 
 
+## Repeated SERP decline confirmation (2026-10-28)
+
+**Development-only triage change:** Store Manager previously created a high-priority
+`ranking_drop` recommendation after just **two** comparable Bright Data SERP
+snapshots separated by at least three rank positions. A one-off SERP fluctuation
+could become a merchant task, despite no supporting Search Console traffic data.
+
+The new rule requires **three consecutive distinct timestamps** for the same
+keyword, search engine, country, device and exact HTTPS landing page (URL
+fragments ignored; paths and queries preserved). Both the middle and newest
+organic rank must be at least **three places worse than the oldest baseline**.
+The latest snapshot must be no older than 14 days, and neither adjacent gap
+may exceed 28 days. We never skip a newer recovery, different URL or missing
+rank to cherry-pick older evidence. The alert stores all three timestamps and
+positions, and its rationale explicitly asks the merchant to check Search
+Console before changing content.
+
+This is a **heuristic**, not a statistically significant trend. Three
+correlated scrapes, regional SERP volatility, device differences, personalization,
+Google updates or a biased keyword set can still mislead. The confirmation
+rule trades slower detection and fewer opportunities for potentially fewer
+transient false alarms. Existing pending historical alerts are not erased or
+retroactively reclassified. They still use the existing, conservative
+same-market recovery mechanism.
+
+Google explicitly cautions that small ranking fluctuations can occur without
+requiring changes and recommends reviewing Search Console traffic before
+major interventions:
+https://developers.google.com/search/docs/monitor-debug/debugging-search-traffic-drops
+
+**Evidence:** synthetic regression tests cover a one-snapshot spike, recovery,
+three sustained observations, intervening URL changes, stale samples and
+post-recovery new alerts. These are behavioral tests, not measured alert
+precision. In an authorized pilot, compare blinded merchant usefulness of
+old two-point and new three-point candidates, false-alert rate, GSC clicks,
+dismissals and review minutes. Pre-register a minimum useful-alert precision
+before adopting any stronger claims. No live merchant ranking data or
+Shopify store was accessed or changed.
+
 ## Shopify catalog response completeness (2026-10-28)
 
 A successful HTTP/GraphQL request is not evidence that Shopify returned the

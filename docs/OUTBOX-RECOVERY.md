@@ -81,3 +81,25 @@ manual queued jobs, content-brief changes, and a PostgreSQL claim-vs-disable
 race. The result is a trust/reliability hypothesis, not measured merchant
 retention or avoided AI spending. Do not activate scheduling or recovery
 until real Shopify/n8n staging and commercial licensing gates pass.
+
+
+## Stale scheduler brief snapshot guard (2026-10-29)
+
+The due-job scheduler first reads eligible store configurations, then attempts a
+transactional claim. A merchant may edit audience, brand voice or author between
+those steps without changing the due date, seed topics, cursor, cadence or blog.
+Previously, the claim predicate did not check those three brief fields. In
+particular, when seed topics were empty, an old audience could be embedded in a
+newly reserved topic despite a merchant's intervening edit.
+
+The conditional claim now matches **audience, brand voice and author** alongside
+the existing scheduling fields. A stale candidate returns no claim, creates no
+job and consumes no credit; a later sweep can read the current brief and reserve
+a fresh job. This is a database-level compare-and-set fence, not a network
+cancellation guarantee. A job already claimed for dispatch is still subject to
+the in-flight limitation above.
+
+Regression coverage separately changes each brief field after a due candidate
+is read, checks that the stale candidate cannot reserve a credit, then verifies
+a fresh candidate can proceed. The change is not evidence of merchant growth;
+a real two-session Shopify staging race and n8n integration remain release gates.

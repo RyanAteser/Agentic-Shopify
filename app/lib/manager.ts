@@ -120,14 +120,22 @@ export function buildRankTasks(records: RankLike[], now=new Date()):SuggestedTas
   }
   const tasks:SuggestedTask[]=[];
   for(const [key,rows] of groups){
-    const distinct=rows.sort((a,b)=>b.observedAt.getTime()-a.observedAt.getTime())
-      .filter((r,i,arr)=>i===0||r.observedAt.getTime()!==arr[i-1].observedAt.getTime());
+    // Multiple scrapes within minutes are not independent confirmations.
+    // Select the most recent observation on each of the three most recent UTC
+    // calendar dates. Do not skip any intervening date or contradictory scrape.
+    // UTC is a deterministic grouping convention, not Google's GSC PT date.
+    const days=new Map<string,RankLike[]>();
+    for(const row of rows.sort((a,b)=>b.observedAt.getTime()-a.observedAt.getTime())){
+      if(!Number.isFinite(row.observedAt.getTime()))continue;
+      const day=row.observedAt.toISOString().slice(0,10);
+      if(!days.has(day))days.set(day,[]);
+      days.get(day)!.push(row);
+    }
+    const recentDays=[...days.values()].slice(0,3);
     // A two-snapshot rank change can be a transient SERP fluctuation. Require
-    // the TWO most recent observations to both be >=3 places worse than the
-    // preceding baseline, with the same exact landing page and market.
+    // two distinct later calendar days to confirm the baseline decline.
     // This is a conservative triage heuristic, NOT statistical significance.
-    // Never skip an intervening recovery or URL change to cherry-pick a drop.
-    const latest=distinct[0],confirmation=distinct[1],baseline=distinct[2];
+    const latest=recentDays[0]?.[0],confirmation=recentDays[1]?.[0],baseline=recentDays[2]?.[0];
     if(!latest||!confirmation||!baseline||
        latest.position===null||confirmation.position===null||baseline.position===null||
        !sameRankTarget(latest.targetUrl,confirmation.targetUrl)||
@@ -139,14 +147,23 @@ export function buildRankTasks(records: RankLike[], now=new Date()):SuggestedTas
     const confirmedLoss=confirmation.position-baseline.position;
     const latestLoss=latest.position-baseline.position;
     if(confirmedLoss<3||latestLoss<3)continue;
+    // An intraday rebound, missing result, or page change contradicts a
+    // sustained same-page decline, even when the day's final scrape is low.
+    // This deliberately abstains rather than cherry-picking favorable samples.
+    if(recentDays.slice(0,2).some(day=>day.some(row=>
+      row.position===null || row.position-baseline.position!<3 ||
+      !sameRankTarget(row.targetUrl,baseline.targetUrl))))continue;
     tasks.push({
       sourceKey:rankIncidentKey(key,latest.targetUrl),
       agent:"seo",kind:"ranking_drop",targetId:latest.targetUrl,
       title:"Repeated rank decline: "+latest.keyword,
-      rationale:"Three same-page SERP observations: "+baseline.position+" → "+
+      rationale:"Three distinct UTC-day same-page SERP observations: "+baseline.position+" → "+
         confirmation.position+" → "+latest.position+" (latest "+latestLoss+
         " places below baseline) on "+latest.engine+" "+latest.country+" "+latest.device+
-        ". Review Search Console traffic before changing content. A repeated snapshot is not proof of lost revenue or causation.",
+        (latest.engine==="google"
+          ? ". Check Google Search Console clicks and impressions before changing content."
+          : ". Google Search Console cannot verify Bing traffic; inspect Bing Webmaster Tools before changing content.")+
+        " Sampled positions do not establish lost revenue or causation.",
       evidence:JSON.stringify({source:"brightdata-serp",market:key,latestAt:latest.observedAt.toISOString(),
         confirmationAt:confirmation.observedAt.toISOString(),
         previousAt:baseline.observedAt.toISOString(),previousRank:baseline.position,

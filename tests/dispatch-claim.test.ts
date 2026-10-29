@@ -71,3 +71,35 @@ test("stalled job notices are advisory and never mislabel completed jobs", () =>
   assert.equal(generationJobNotice("failed", stale, now), null);
   assert.equal(generationJobNotice("running", new Date("invalid"), now), null);
 });
+
+test("stale preflight cannot claim a queued job after any editorial setting changes", async () => {
+  const shop = "brief-claim-" + randomUUID() + ".myshopify.com";
+  const expected = {
+    blogId: "gid://shopify/Blog/1",
+    audience: "Beginners",
+    brandVoice: "Plain language",
+    seedTopics: "Sizing advice",
+    authorName: "Editorial Team",
+  };
+  await db.storeConfig.create({ data: { shop, ...expected } });
+  try {
+    const job = await db.contentJob.create({ data: {
+      shop, topic: "Sizing advice", outboxVersion: 1
+    } });
+    for (const field of Object.keys(expected) as Array<keyof typeof expected>) {
+      await db.storeConfig.update({ where: { shop }, data: { [field]: "changed-" + field } });
+      await assert.rejects(claimQueuedDispatch(shop, job.id, expected), DispatchAlreadyClaimedError);
+      assert.equal(
+        (await db.contentJob.findUniqueOrThrow({ where: { id: job.id } })).status,
+        "queued", "no irreversible dispatch claim on a stale merchant brief"
+      );
+      await db.storeConfig.update({ where: { shop }, data: { [field]: expected[field] } });
+    }
+    await claimQueuedDispatch(shop, job.id, expected);
+    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: job.id } })).status, "running");
+    await assert.rejects(claimQueuedDispatch(shop, job.id, expected), DispatchAlreadyClaimedError);
+  } finally {
+    await db.contentJob.deleteMany({ where: { shop } });
+    await db.storeConfig.deleteMany({ where: { shop } });
+  }
+});

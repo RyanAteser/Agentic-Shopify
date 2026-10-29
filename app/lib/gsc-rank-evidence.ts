@@ -68,7 +68,12 @@ export function assessGscRankEvidence(raw:unknown,now=new Date()) {
     !Number.isFinite(observed.getTime())||
     observed.getTime()>now.getTime())
     throw new Error("Invalid or future incident timestamp");
-  const day=pacificDay(observed),start=shift(day,-7),end=shift(day,7);
+  const day=pacificDay(observed),baselineStart=shift(day,-7),priorStart=shift(day,-14),end=shift(day,7);
+  // Preserve the original 15-day export while supporting a 22-day pretrend
+  // sensitivity check. Do not accept arbitrary windows selected after seeing
+  // results, and never use the incident date in either comparison.
+  const extended=request.startDate===priorStart;
+  const start=extended?priorStart:baselineStart;
   if(end>shift(pacificDay(now),-3))
     throw new Error("GSC followup window is too recent to evaluate as finalized");
   if(request.startDate!==start||request.endDate!==end||
@@ -77,8 +82,8 @@ export function assessGscRankEvidence(raw:unknown,now=new Date()) {
     request.dataState!=="final"||
     !["auto","byPage"].includes(request.aggregationType)||
     (request.startRow!==undefined&&request.startRow!==0)||
-    (request.rowLimit!==undefined&&(!Number.isInteger(request.rowLimit)||request.rowLimit<15||request.rowLimit>25000)))
-    throw new Error("Expected finalized, date-only GSC data for the fixed 15-day window");
+    (request.rowLimit!==undefined&&(!Number.isInteger(request.rowLimit)||request.rowLimit<(extended?22:15)||request.rowLimit>25000)))
+    throw new Error("Expected finalized, date-only GSC data for the fixed 15-day or 22-day window");
   const groups=request.dimensionFilterGroups;
   if(!Array.isArray(groups)||groups.length!==1||groups[0]?.groupType!=="and"||
     !Array.isArray(groups[0].filters)||groups[0].filters.length!==4)
@@ -97,10 +102,11 @@ export function assessGscRankEvidence(raw:unknown,now=new Date()) {
   if(response.responseAggregationType!=="byPage")
     throw new Error("Page-filtered evidence must use GSC byPage aggregation");
   const rows=parseSearchConsoleRows(response.rows===undefined?[]:response.rows,start,end);
-  if(rows.length>15)throw new Error("Too many GSC reporting dates");
-  const before=rows.filter(row=>row.date>=start&&row.date<day);
+  if(rows.length>(extended?22:15))throw new Error("Too many GSC reporting dates");
+  const prior=extended?rows.filter(row=>row.date>=priorStart&&row.date<baselineStart):[];
+  const before=rows.filter(row=>row.date>=baselineStart&&row.date<day);
   const after=rows.filter(row=>row.date>day&&row.date<=end);
-  const baseline=summarize(before),followup=summarize(after);
+  const priorBaseline=summarize(prior),baseline=summarize(before),followup=summarize(after);
   const complete=before.length===7&&after.length===7;
   // Screening thresholds, NOT statistical significance. A handful of clicks
   // can produce dramatic percentages with little merchant consequence.
@@ -110,6 +116,11 @@ export function assessGscRankEvidence(raw:unknown,now=new Date()) {
   const evidenceStatus=!complete?"incomplete_dates":
     !sufficientVolume?"low_volume":"descriptive_only";
   const pct=(a:number,b:number)=>b>0?(a-b)/b*100:null;
+  const priorComplete=extended&&prior.length===7&&before.length===7;
+  const priorVolume=priorComplete&&priorBaseline.clicks>=10&&
+    priorBaseline.impressions>=100&&baseline.impressions>=100;
+  const pretrendStatus=!extended?"not_requested":
+    !priorComplete?"incomplete_dates":!priorVolume?"low_volume":"descriptive_only";
   return {
     incidentPacificDate:day,completeDateCoverage:complete,
     missingBaselineDates:7-before.length,missingFollowupDates:7-after.length,
@@ -118,10 +129,22 @@ export function assessGscRankEvidence(raw:unknown,now=new Date()) {
     absoluteClicksChange:complete?followup.clicks-baseline.clicks:null,
     absoluteImpressionsChange:complete?followup.impressions-baseline.impressions:null,
     baseline,followup,
+    // The earlier seven days reveal whether the baseline was already moving.
+    // This is a sensitivity check, not a counterfactual or causal estimate.
+    pretrend:{
+      status:pretrendStatus,
+      completeDateCoverage:priorComplete,
+      missingPriorDates:extended?7-prior.length:null,
+      priorBaseline:extended?priorBaseline:null,
+      absoluteClicksChange:priorComplete?baseline.clicks-priorBaseline.clicks:null,
+      absoluteImpressionsChange:priorComplete?baseline.impressions-priorBaseline.impressions:null,
+      clicksChangePct:priorVolume?pct(baseline.clicks,priorBaseline.clicks):null,
+      impressionsChangePct:priorVolume?pct(baseline.impressions,priorBaseline.impressions):null
+    },
     clicksChangePct:sufficientVolume?pct(followup.clicks,baseline.clicks):null,
     impressionsChangePct:sufficientVolume?pct(followup.impressions,baseline.impressions):null,
     avgPositionChange:complete&&baseline.avgPosition!==null&&followup.avgPosition!==null
       ?followup.avgPosition-baseline.avgPosition:null,
-    caveat:"Retrospective, descriptive GSC comparison only. The incident day is excluded. Missing query-level rows are unknown, not zero; privacy filtering, top-row limits, seasonality, query demand, and canonical URL differences can bias comparisons. Complete dates do not prove complete query coverage. Percentage changes are withheld when baseline clicks are below 10 or either window has fewer than 100 impressions; these are conservative screening thresholds, not significance tests. GSC Pacific dates and impression-weighted positions are not point-in-time UTC SERP ranks. No causal attribution, verified ranking incident, revenue or SEO lift is inferred."
+    caveat:"Retrospective, descriptive GSC comparison only. The incident day is excluded. Missing query-level rows are unknown, not zero; privacy filtering, top-row limits, seasonality, query demand, and canonical URL differences can bias comparisons. Complete dates do not prove complete query coverage. Percentage changes are withheld when baseline clicks are below 10 or either window has fewer than 100 impressions; these are conservative screening thresholds, not significance tests. GSC Pacific dates and impression-weighted positions are not point-in-time UTC SERP ranks. Optional 22-day exports expose the seven-day pre-incident trend; an already-declining baseline makes a post-incident drop especially hard to attribute. No causal attribution, verified ranking incident, revenue or SEO lift is inferred."
   };
 }

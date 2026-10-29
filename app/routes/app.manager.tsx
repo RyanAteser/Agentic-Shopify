@@ -135,6 +135,8 @@ export default function StoreManager(){
             <small>{task.agent.toUpperCase()} · Priority {task.priority}/100 · {task.status}</small>
           </div>
           <p>{task.rationale}</p>
+          {task.kind==="ranking_drop" && typeof evidence.confirmationAt!=="string" &&
+            <p role="status">Legacy two-snapshot rank alert: not confirmed by the newer three-observation rule. Verify current Search Console performance before acting. This historical recommendation is preserved, not retroactively validated.</p>}
           <details>
             <summary>Inspect evidence and context</summary>
             <p><small>Source: {evidence.source||"internal"}</small></p>

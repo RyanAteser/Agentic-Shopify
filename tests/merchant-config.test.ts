@@ -130,7 +130,14 @@ test("material editorial changes cancel queued scheduled work; unchanged setting
       ...preferences, audience: "Different target customers"
     }), true);
     assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: scheduled.jobId } })).status, "failed");
-    assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 0);
+    const config = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
+    assert.equal(config.freeDraftsUsed, 0);
+    assert.equal(config.enabled, true);
+    assert.ok(config.nextRunAt && config.nextRunAt.getTime() <= Date.now(),
+      "a canceled queued draft must not consume an entire future cadence");
+    const replacement = await claimDueScheduledDraft(config, new Date());
+    assert.ok(replacement, "next scheduler sweep can reserve a new draft under updated preferences");
+    assert.notEqual(replacement.jobId, scheduled.jobId);
   } finally {
     await eraseMerchantData(shop);
   }

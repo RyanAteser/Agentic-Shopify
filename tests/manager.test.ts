@@ -402,12 +402,16 @@ test("repeated same-page rank declines have stable incident identity and preserv
     });
     assert.match(original.sourceKey,/^rank-incident:v2:[a-f0-9]{64}$/);
     assert.equal(JSON.parse(original.evidence).previousRank,4);
-    await db.seoRankObservation.createMany({data:[
-      rank(15,"2026-10-23T12:00:00Z"),
-      rank(18,"2026-10-24T12:00:00Z"),
-      rank(21,"2026-10-25T12:00:00Z")
-    ]});
-    await syncManagerTasks(shop,[],now);
+    for(const [position,date] of [
+      [15,"2026-10-23T12:00:00Z"],
+      [18,"2026-10-24T12:00:00Z"],
+      [21,"2026-10-25T12:00:00Z"]
+    ] as const){
+      await db.seoRankObservation.create({data:rank(position,date)});
+      await syncManagerTasks(shop,[],now);
+      assert.equal(await db.storeRecommendation.count({where:{shop,kind:"ranking_drop"}}),1,
+        "each additional confirmed worsening must reuse the original incident");
+    }
     const after=await db.storeRecommendation.findMany({where:{shop,kind:"ranking_drop"}});
     assert.equal(after.length,1,"worsening each day must not flood the merchant inbox");
     assert.equal(after[0].id,original.id);

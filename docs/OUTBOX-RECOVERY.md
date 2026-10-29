@@ -158,3 +158,12 @@ can support operator investigation, but do not themselves establish exactly-once
 cross-system delivery. Staging must verify that callbacks from a real n8n
 execution are accepted after claim and that out-of-order/duplicate callbacks
 cannot create phantom drafts.
+
+
+## Per-job article callback capability (2026-10-29)
+
+The shared n8n bridge secret previously authorized all article-completion callbacks. A misconfigured writer or a leaked shared credential could submit a guessed or disclosed job ID for another merchant once that job had been claimed. The writer now receives only a deterministic HMAC-SHA256 capability bound to the exact `shop` and `jobId`. The app-only `ARTICLE_CALLBACK_SIGNING_KEY` is separate from `N8N_CALLBACK_SECRET`, and the callback route **never** accepts the global bridge credential as a fallback. The n8n writer propagates the capability as an HTTP header without exposing the signing key or passing the capability into the model prompts. Existing queued jobs can be prepared with the new capability on dispatch; already-running jobs on an old workflow require operator reconciliation rather than an insecure compatibility bypass.
+
+This is job-scoped authorization, **not** proof that the model ran, that the n8n execution completed, or that a captured token cannot be replayed. Existing completed callbacks are idempotent. The capability can appear in n8n saved execution data, so operator access, retention and pruning are mandatory. Rotating the signing key invalidates outstanding callbacks; reconcile in-flight jobs first. The workflow remains inactive pending staging tests of real n8n expression headers, exact callback responses, wrong-shop/job rejection, retry behavior and secret rotation. No merchant traffic or avoided incident count was measured.
+
+Security context: [Shopify authenticate every request](https://shopify.dev/docs/apps/build/security/app-server/authenticate-every-request), [n8n security audit](https://docs.n8n.io/hosting/securing/security-audit/).

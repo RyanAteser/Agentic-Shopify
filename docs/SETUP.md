@@ -14,12 +14,13 @@ On the **app server**, configure:
 - `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_APP_URL`, `SCOPES=write_content` (usually configured by Shopify CLI).
 - `N8N_BLOG_WEBHOOK_URL`: the writer workflow's **production** webhook URL, once active.
 - `N8N_OUTBOUND_KEY`: secret held by the app and the writer Webhook node's **Header Auth** credential with name `X-Agent-Key`.
-- `N8N_CALLBACK_SECRET`: independent secret held by the app; add to the n8n outbound callback and scheduler **HTTP Header Auth** credentials as `X-Agent-Key`.
+- `N8N_CALLBACK_SECRET`: independent bridge secret held by the app; use for the scheduler, recovery, manager and GSC sync **HTTP Header Auth** credentials as `X-Agent-Key`. It is **not accepted** by the article-completion endpoint.
+- `ARTICLE_CALLBACK_SIGNING_KEY`: an independent, app-only 32-byte random key in canonical base64 (for example, generated with `openssl rand -base64 32`). **Never add this key to n8n**. The app derives a different HMAC capability for each shop/job and sends only that job-specific capability to the writer.
 
 In **n8n**, import both `n8n/*.json` workflows and connect credentials:
 - Writer > Receive Draft Request: Webhook Header Auth, header `X-Agent-Key` = app `N8N_OUTBOUND_KEY`.
 - Draft Article and Editorial Revision: HTTP Request Header Auth: `Authorization: Bearer YOUR_OPENAI_API_KEY`. Keep key in n8n credentials.
-- Return Secure Draft: HTTP Request Header Auth: `X-Agent-Key` = app `N8N_CALLBACK_SECRET`.
+- Return Secure Draft: **no shared HTTP Header Auth credential**. The workflow template sets `X-Agent-Key` from the app-supplied job capability (`$json.callbackToken`) as an expression header. Keep the destination URL pinned and redirects disabled. Do not send the capability in the article JSON body, AI prompt or logs.
 - **Before activating the writer workflow**, replace its fixed `https://YOUR-PUBLISHED-SHOPIFY-APP.example/api/agent/complete` callback URL with the exact trusted HTTPS app origin and path. Never change it to an expression or take it from incoming webhook JSON. Keep HTTP redirects disabled for credential-bearing writer requests; a 3xx response must fail rather than forward a secret to a new destination.
 - Scheduled Dispatcher > Request Due Drafts: same callback-secret HTTP Header Auth credential.
 - Replace the placeholder URL in Scheduled Dispatcher > Request Due Drafts with your real `https://YOUR_APP_HOST/api/agent/due`.
@@ -53,7 +54,7 @@ The ranking workflow shown in the merchant-provided n8n screenshot can send norm
 - Shopify OAuth/session storage stays in the app backend. n8n has neither Shopify API token nor publishing action.
 - App-to-n8n webhook dispatch also rejects HTTP redirects so its outbound credential cannot follow a 3xx response to another host. Redirect failures enter the existing uncertain-dispatch reconciliation path rather than blindly refunding credits.
 - The writer callback URL is operator-configured in the n8n workflow, not provided by the app's job payload or the model. This removes a dynamic-URL SSRF/credential-forwarding path. It does **not** replace network egress policy, n8n instance access controls, or a live test of redirect handling. See [OWASP SSRF prevention](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html) and [n8n HTTP Request redirects](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/).
-- Each saved draft and job is scoped by the Shopify shop domain; callback checks the job/shop pair and requires a secret. Callback duplicates return the same draft rather than creating duplicates.
+- Each saved draft and job is scoped by the Shopify shop domain. The callback now requires an app-signed **shop-and-job-specific capability**, not the global n8n bridge secret. Callback duplicates return the same draft rather than creating duplicates. A capability is still a bearer credential: restrict n8n execution-history access and prune retained payloads.
 - The quality score is a simple structural checklist, **not** a factual verification, ranking predictor or Google score.
 - Merchant-approved publishing calls the 2026-10 Shopify Admin GraphQL `articleCreate` mutation. On uncertain outcomes, status changes to `needs_reconciliation`; inspect the Shopify admin before retrying.
 - Store-specific feedback is reused in subsequent prompts. There is **no fabricated traffic data** or SEO lift promise.

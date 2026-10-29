@@ -109,6 +109,7 @@ test("writer callback destination is operator-pinned and cannot be changed by we
   }
   const untrusted = {
     jobId: "job-1", shop: "demo.myshopify.com", topic: "boots",
+    callbackToken: "a".repeat(43),
     callbackUrl: "https://attacker.example/collect-credentials", brief: {}
   };
   const prepared = runInNewContext("(() => {" + find("Prepare Brief").parameters.jsCode + "})()", {
@@ -116,6 +117,7 @@ test("writer callback destination is operator-pinned and cannot be changed by we
   }) as Array<{ json: Record<string, unknown> }>;
   assert.equal(prepared[0].json.jobId, untrusted.jobId);
   assert.equal(prepared[0].json.shop, untrusted.shop);
+  assert.equal(prepared[0].json.callbackToken, untrusted.callbackToken);
   assert.equal("callbackUrl" in prepared[0].json, false);
   const reviewed = runInNewContext("(() => {" + find("Parse Reviewed Article").parameters.jsCode + "})()", {
     $: () => ({ first: () => prepared[0] }),
@@ -125,6 +127,7 @@ test("writer callback destination is operator-pinned and cannot be changed by we
   }) as Array<{ json: Record<string, unknown> }>;
   assert.equal(reviewed[0].json.jobId, untrusted.jobId);
   assert.equal(reviewed[0].json.shop, untrusted.shop);
+  assert.equal(reviewed[0].json.callbackToken, untrusted.callbackToken);
   assert.equal("callbackUrl" in reviewed[0].json, false);
   const dispatchSource = readFileSync("app/lib/agent.server.ts", "utf8");
   assert.doesNotMatch(dispatchSource, /callbackUrl/,
@@ -207,4 +210,31 @@ test("writer caps both paid model stages and refuses incomplete model responses"
       assert.throws(() => execute(reason), /did not finish normally/, name + ": " + reason);
     }
   }
+});
+
+test("writer returns a per-job callback capability, never a global callback credential", () => {
+  const workflow = load("n8n/shopify-blog-writer.json");
+  const nodes = workflow.nodes as Array<NodeShape & { parameters: Record<string, any> }>;
+  const callback = nodes.find(n => n.name === "Return Secure Draft");
+  assert.ok(callback);
+  assert.equal(callback.parameters.authentication, "none");
+  assert.equal(callback.parameters.sendHeaders, true);
+  assert.equal(callback.parameters.genericAuthType, undefined);
+  const headers = callback.parameters.headerParameters?.parameters;
+  assert.equal(headers?.length, 1);
+  assert.equal(headers[0].name, "X-Agent-Key");
+  assert.equal(headers[0].value, "={{ $json.callbackToken }}");
+  assert.equal(runInNewContext(headers[0].value.slice(3, -3), {
+    $json: { callbackToken: "job-specific-capability" }
+  }), "job-specific-capability");
+  assert.doesNotMatch(callback.parameters.jsonBody, /callbackToken/,
+    "The token must travel in an HTTP header, not the JSON article payload");
+  const prepare = nodes.find(n => n.name === "Prepare Brief");
+  assert.ok(prepare);
+  assert.throws(() => runInNewContext("(() => {" + prepare.parameters.jsCode + "})()", {
+    $input: { first: () => ({ json: { body: {
+      jobId: "j", shop: "s", topic: "t"
+    } } }) }
+  }), /Missing or invalid app job capability/);
+  assert.equal(workflow.active, false);
 });

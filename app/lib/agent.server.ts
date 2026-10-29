@@ -3,6 +3,7 @@ import * as crypto from "node:crypto";
 import { unauthenticated } from "../shopify.server";
 import { claimQueuedDispatch, validateN8nWebhookUrl } from "./dispatch-claim.server";
 import { deliverClaimedN8nJob } from "./n8n-delivery.server";
+import { createArticleCallbackToken } from "./article-callback-auth";
 export { UncertainDispatchError } from "./n8n-delivery.server";
 
 async function publishedProducts(shop: string) {
@@ -52,8 +53,11 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
     where: { shop, status: "published" },
     take: 8, orderBy: { updatedAt: "desc" }, select: { title: true },
   });
+  // Mint a one-job callback capability BEFORE claiming or sending paid work.
+  // A missing signing key is a definitive local preflight failure.
+  const callbackToken = createArticleCallbackToken(shop, jobId);
   const body = {
-    jobId, shop, topic: job.topic,
+    jobId, shop, callbackToken, topic: job.topic,
     brief: {
       audience: config.audience,
       brandVoice: config.brandVoice,

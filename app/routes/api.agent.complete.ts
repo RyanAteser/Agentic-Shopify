@@ -1,10 +1,9 @@
 import type { ActionFunctionArgs } from "react-router";
-import { authorizedBridge } from "../lib/agent.server";
+import { authorizedArticleCallback } from "../lib/article-callback-auth";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "../lib/request-body.server";
 import { ArticleCallbackRejectedError, persistArticleCallback } from "../lib/article-callback.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  if (!authorizedBridge(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
   let payload: unknown;
   try {
@@ -26,6 +25,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({ error: "Invalid job identifiers" }, { status: 400 });
   }
 
+  // The global n8n bridge secret is deliberately NOT valid for article writes.
+  // Authenticate the tenant/job pair before any database mutation.
+  if (!authorizedArticleCallback(data.shop, data.jobId, request.headers.get("X-Agent-Key"))) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const draft = await persistArticleCallback(data.shop, data.jobId, data.article);
     return Response.json({ ok: true, draftId: draft.draftId, score: draft.score });

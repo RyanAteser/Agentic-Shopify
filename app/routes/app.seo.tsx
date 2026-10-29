@@ -70,7 +70,7 @@ export default function SeoDashboard(){
       </div>}
     </s-section>
     <s-section heading="Keyword rankings · Bright Data SERP">
-      <p>Recorded observations: {rankingCount}. Results are tied to keyword, country, search engine and device. Previous rank and change are shown only when consecutive snapshots refer to the same HTTPS result URL; a change of ranking page is not treated as a page-level ranking loss. A SERP observation is not equivalent to Search Console average position.</p>
+      <p>Recorded observations: {rankingCount}. Results are tied to keyword, country, search engine and device. Previous rank and change are shown only when consecutive snapshots refer to the same HTTPS result URL; a change of ranking page is not treated as a page-level ranking loss. A SERP observation is not equivalent to Search Console average position. Store Manager requires three consecutive same-page observations before recommending investigation of a repeated rank decline; this is a heuristic, not proof of lost traffic.</p>
       {!rankingRows.length && <p>No ranking observations imported yet. Your existing n8n Bright Data workflow can POST verified observations to the private ingestion endpoint described in docs/SEO-AGENTS.md.</p>}
       {Boolean(rankingRows.length) && <div style={{overflowX:"auto"}}>
         <table style={{borderCollapse:"collapse",width:"100%"}}>

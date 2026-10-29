@@ -11,7 +11,7 @@ The AI writer is instructed not to invent product URLs, but prompts do not prove
 `evaluateArticle` now applies the same link policy to AI callbacks and merchant-edited drafts:
 
 - Retain absolute **HTTPS** links only when they have a normal domain hostname, no embedded URL credentials, no non-default port, no IP-literal destination and no local-only host suffix. This is a syntactic safeguard, **not** proof that the destination is safe or accurate.
-- Retain single-slash relative links (for example `/products/boots`) so merchants can link to their own storefront. Reject scheme-relative `//host/path`, backslash-obfuscated and malformed destinations.
+- Retain single-slash relative links (for example `/products/boots`) only when WHATWG URL resolution against a fixed dummy storefront origin stays on that origin. Reject scheme-relative `//host/path`, backslash-obfuscated, ASCII control-character and malformed destinations. Browser URL parsers remove tabs and newlines: a deceptive `/\\n/attacker.example` link can resolve to an external host despite its raw single-slash prefix. The sanitizer removes that click target without fetching URLs.
 - Remove unsafe `href` attributes while retaining readable anchor text. The existing HTML sanitizer still strips scripts, event handlers and unsupported tags.
 - Add actionable review notes for the number of removed links, distinct HTTPS hostnames (up to five shown), and relative links. Never log complete URLs or query parameters, which may contain private tokens.
 - Preserve the existing structural score and manual editorial review/publish authorization. Link counts are **not** a ranking signal and do not earn quality points.

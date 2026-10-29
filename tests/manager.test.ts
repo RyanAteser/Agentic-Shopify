@@ -95,13 +95,50 @@ test("single SERP dip or rebound never becomes a confirmed manager alert",()=>{
   assert.equal(evidence.previousRank,4);
   assert.equal(evidence.confirmationRank,9);
   assert.equal(evidence.latestRank,11);
-  assert.match(alert.rationale,/Three same-page SERP observations/);
+  assert.match(alert.rationale,/Three distinct UTC-day same-page SERP observations/);
   assert.equal(buildRankTasks([latest,{...confirmation,position:6},baseline],now).length,0,
     "both newer observations must be at least three positions below baseline");
   assert.equal(buildRankTasks([latest,confirmation,point(4,"2026-08-01T12:00:00Z")],now).length,0,
     "a baseline older than 28 days cannot support a fresh alert");
   assert.equal(buildRankTasks([latest,confirmation,{...baseline,targetUrl:"https://shop.example/products/other"}],now).length,0,
     "all three observations must concern the same landing page");
+});
+
+test("rank alerts require independent days, not three rapid repeated scrapes",()=>{
+  const now=new Date("2026-10-28T12:00:00Z");
+  const base={keyword:"boots",country:"US",device:"desktop",engine:"google",
+    targetUrl:"https://shop.example/products/boots"};
+  const row=(position:number,at:string,targetUrl=base.targetUrl)=>({
+    ...base,position,observedAt:new Date(at),targetUrl
+  });
+  const sameDay=[row(4,"2026-10-26T08:00:00Z"),row(9,"2026-10-26T09:00:00Z"),
+    row(12,"2026-10-26T10:00:00Z")];
+  assert.equal(buildRankTasks(sameDay,now).length,0,
+    "three scrapes within two hours are not three days of independent evidence");
+
+  const baseline=row(4,"2026-10-23T12:00:00Z");
+  const confirmation=row(9,"2026-10-24T12:00:00Z");
+  const latest=row(12,"2026-10-25T12:00:00Z");
+  assert.equal(buildRankTasks([baseline,confirmation,latest],now).length,1);
+
+  // Multiple daily samples are fine when every intervening scrape agrees.
+  assert.equal(buildRankTasks([baseline,confirmation,
+    row(10,"2026-10-24T18:00:00Z"),latest,
+    row(13,"2026-10-25T18:00:00Z")],now).length,1);
+
+  // Do not cherry-pick a later decline through an intraday recovery.
+  assert.equal(buildRankTasks([baseline,confirmation,latest,
+    row(5,"2026-10-25T15:00:00Z"),row(12,"2026-10-25T18:00:00Z")],now).length,0);
+  assert.equal(buildRankTasks([baseline,confirmation,latest,
+    row(11,"2026-10-24T18:00:00Z","https://shop.example/products/other")],now).length,0);
+  assert.equal(buildRankTasks([baseline,confirmation,latest,
+    {...row(11,"2026-10-24T18:00:00Z"),position:null,targetUrl:""}],now).length,0);
+
+  const bing=[baseline,confirmation,latest].map(r=>({...r,engine:"bing"}));
+  const [bingAlert]=buildRankTasks(bing,now);
+  assert.ok(bingAlert);
+  assert.match(bingAlert.rationale,/Bing Webmaster Tools/);
+  assert.doesNotMatch(bingAlert.rationale,/Check Google Search Console clicks/);
 });
 
 test("merchant tasks deduplicate, preserve dismissals and never bleed into another shop",async()=>{

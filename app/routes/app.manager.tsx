@@ -7,6 +7,7 @@ import { readMerchantProductSample, syncManagerTasks, logStoreAction } from "../
 import { publishApprovedArticle } from "../lib/publish.server";
 import { canExecuteAction } from "../lib/action-policy";
 import { hasCurrentUsableReview, publishFormDigest } from "../lib/editorial-review-integrity";
+import { safeArticlePreviewHtml } from "../lib/content-quality.server";
 
 const statuses=["pending","approved","applied","dismissed","resolved","superseded"] as const;
 
@@ -33,6 +34,7 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
   const destination=await db.storeConfig.findUnique({
     where:{shop},select:{blogId:true,authorName:true}
   });
+  const articlePreviews=articles.map(article=>({draftId:article.id,...safeArticlePreviewHtml(article.body)}));
   const articleMap=new Map(articles.map(article=>[article.id,article]));
   const reviewStates=reviews.map(review=>{
     const article=articleMap.get(review.draftId);
@@ -42,7 +44,7 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
   const publishVersions=articles.map(article=>({draftId:article.id,
     digest:destination?publishFormDigest(article,destination):""}));
   return {shop,warning,filter,tasks,activity,counts,articles,reviews:reviewStates,
-    publishVersions,publicationDestination:destination};
+    publishVersions,articlePreviews,publicationDestination:destination};
 };
 
 export const action=async ({request}:ActionFunctionArgs)=>{
@@ -102,7 +104,8 @@ export const action=async ({request}:ActionFunctionArgs)=>{
 };
 
 export default function StoreManager(){
-  const {shop,warning,filter,tasks,activity,counts,articles,reviews,publishVersions,publicationDestination}=useLoaderData<typeof loader>();
+  const {shop,warning,filter,tasks,activity,counts,articles,reviews,publishVersions,articlePreviews,publicationDestination}=useLoaderData<typeof loader>();
+  const previewMap=new Map(articlePreviews.map(preview=>[preview.draftId,preview]));
   const outcome=useActionData<typeof action>();
   const nav=useNavigation();
   const busy=nav.state!=="idle";
@@ -145,8 +148,10 @@ export default function StoreManager(){
               <p><strong>Excerpt:</strong> {article.summary}</p>
               <p><strong>Tags:</strong> {article.tags || "None"}</p>
               <p><strong>Destination blog ID:</strong> {publicationDestination?.blogId || "Not selected"} · <strong>Author:</strong> {publicationDestination?.authorName || "Not selected"}</p>
-              <div style={{maxHeight:350,overflow:"auto",padding:12,border:"1px solid #ddd"}}
-                dangerouslySetInnerHTML={{__html:article.body}}/>
+              {previewMap.get(article.id)?.changed && <p role="status">Safety preview: unsafe or unsupported stored HTML is hidden. Original draft unchanged; correct it in the Blog Agent before approval.</p>}
+              {previewMap.get(article.id)?.unavailable ? <p>Preview unavailable. Inspect the original HTML in the Blog Agent editor.</p> :
+                <div style={{maxHeight:350,overflow:"auto",padding:12,border:"1px solid #ddd"}}
+                  dangerouslySetInnerHTML={{__html:previewMap.get(article.id)?.html ?? ""}}/>}
               <p style={{whiteSpace:"pre-wrap"}}>{article.reviewNotes}</p>
             </>}
             {typeof evidence.url==="string"&&evidence.url.startsWith("https://")&&

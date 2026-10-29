@@ -66,3 +66,43 @@ test("article body size guard prevents oversized payloads", () => {
     title: "Oversize", summary: "sample", body: "x".repeat(100_001), keyword: "test",
   }));
 });
+
+test("link safety strips unsafe destinations without deleting article text", () => {
+  const links = [
+    'https://merchant.example/products/boots',
+    'http://insecure.example/path',
+    'https://user:pass@credential.example/path',
+    'https://127.0.0.1/private',
+    'https://[::1]/private',
+    'https://localhost/private',
+    'https://host.local/private',
+    'https://merchant.example:8443/private',
+    '//offsite.example/path',
+    'javascript:alert(1)',
+    'https://trusted.example\\\\@evil.example/path',
+    '/products/boots',
+  ];
+  const body = shortBody + links.map((href, i) =>
+    '<p><a href="' + href + '">Reference ' + i + '</a></p>').join("");
+  const result = evaluateArticle({ ...base, body });
+  const hrefs = [...result.article.body.matchAll(/href="([^"]+)"/g)].map(m => m[1]);
+  assert.deepEqual(hrefs, [
+    "https://merchant.example/products/boots",
+    "/products/boots",
+  ]);
+  assert.ok(result.article.body.includes("Reference 1"), "unsafe links retain visible text");
+  assert.match(result.warnings.join(" "), /Removed 10 unsafe or malformed link destination/);
+  assert.match(result.warnings.join(" "), /Verify 1 HTTPS link host/);
+  assert.match(result.warnings.join(" "), /Verify 1 store-relative link/);
+});
+
+test("ordinary HTTPS references are preserved but never scored as verified citations", () => {
+  const plain = evaluateArticle({ ...base, body: shortBody });
+  const linked = evaluateArticle({
+    ...base,
+    body: shortBody + '<p><a href="https://research.example/study">Original research</a></p>'
+  });
+  assert.equal(linked.score, plain.score);
+  assert.match(linked.article.body, /href="https:\/\/research.example\/study"/);
+  assert.match(linked.warnings.join(" "), /sponsored or affiliate disclosure/);
+});

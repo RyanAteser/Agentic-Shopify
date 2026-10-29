@@ -126,3 +126,35 @@ Regression coverage changes each editorial field between preflight and claim and
 **Regression scenario:** Five old jobs from merchant A plus one each from B, C and D. The first sweep must select A/B/C, not three A jobs. The second sweep must give D a slot while A still has a backlog. Existing tests retain the three-job limit and concurrent claim protections. Tests use local databases and injected dispatch callbacks; they do not call n8n or Shopify.
 
 **Limitations:** This is oldest-merchant-first fairness, not strict round-robin or a per-merchant throughput SLA. A merchant with the oldest backlog can still receive one slot every sweep. Grouping and per-shop reads add database work; benchmark with realistic multi-tenant backlogs before production. Concurrent sweepers may choose the same shop, but the job-level compare-and-set prevents duplicate dispatch of the same job. No observed merchant wait-time reduction or retention gain is claimed.
+
+
+## Pre-claim callback fence (2026-10-29)
+
+The authenticated n8n article-completion endpoint previously accepted a callback
+for a job that was still `queued`. That violates the durable outbox invariant:
+our application must transition `queued -> running` **before** its one n8n POST.
+A delayed or misrouted execution holding the shared callback credential could
+otherwise create a draft for work that had never been claimed for dispatch.
+This was a code-level trust-boundary defect, not evidence of exploitation.
+
+The callback now accepts only `running` or `dispatch_uncertain` jobs for first
+completion, plus `completed` for idempotent replay. `queued`, `failed` and
+unknown jobs fail closed (HTTP 409 for a known wrong-state job). Rejected
+callbacks create no article and leave the reserved credit and queued job intact,
+so an authorized recovery sweep can still claim the work. The completion
+transaction no longer lists `queued` as an eligible state transition.
+
+Regression coverage creates a real credited version-1 queued job, verifies a
+premature callback is rejected with no draft or credit change, then claims the
+job and confirms normal completion and idempotent replay. A legitimate n8n
+callback cannot precede the dispatch claim; the app claims before sending the
+webhook. **This is not callback-level proof of execution provenance:** the
+shared secret and job identifiers still need secure storage, rotation, staging
+verification, and ideally a signed per-job execution receipt. No workflow or
+store was activated and no merchant outcomes have been observed.
+
+Evidence: [n8n execution records](https://docs.n8n.io/workflows/executions/all-executions/)
+can support operator investigation, but do not themselves establish exactly-once
+cross-system delivery. Staging must verify that callbacks from a real n8n
+execution are accepted after claim and that out-of-order/duplicate callbacks
+cannot create phantom drafts.

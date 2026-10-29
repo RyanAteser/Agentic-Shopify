@@ -1,5 +1,6 @@
 import db from "../db.server";
 import { FREE_LIFETIME_GENERATIONS } from "./pricing";
+import { safeGenerationFailureReason } from "./generation-failure-reason";
 
 /**
  * One transaction: reserve a free credit and create the job, or roll both back.
@@ -32,7 +33,7 @@ export async function failCreditedJob(shop:string,id:string,error:unknown){
     if(active.count!==1)return false;
     const result=await tx.contentJob.updateMany({
       where:{id,shop,status:{in:["queued","running"]}},
-      data:{status:"failed",error:String(error).slice(0,400)}
+      data:{status:"failed",error:safeGenerationFailureReason(error)}
     });
     if(result.count){
       await tx.storeConfig.update({where:{shop},data:{freeDraftsUsed:{decrement:1}}});

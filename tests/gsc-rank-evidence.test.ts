@@ -101,3 +101,9 @@ test("requires timezone-qualified timestamps and a valid GSC row limit",()=>{
   const b=evidence();b.request.rowLimit=25001;
   assert.throws(()=>assessGscRankEvidence(b,now),/fixed 15-day/);
 });
+
+test("abstains before the seven-day followup has finalized",()=>{
+  const input=evidence();
+  assert.throws(()=>assessGscRankEvidence(input,new Date("2026-10-18T12:00:00Z")),
+    /too recent/);
+});

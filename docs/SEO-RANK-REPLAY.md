@@ -65,12 +65,20 @@ incident-days despite detecting the same incident. We now report both views:
   `bothIncidentDays` compare **exact UTC date + incident identity**.
 - `referenceOnlyIncidents`, `confirmedOnlyIncidents` and
   `bothIncidents` compare **stable market/page identity across all dates**.
-- `confirmedEarlierIncidents`, `confirmedLaterIncidents` and
-  `sameDayIncidents` compare each shared incident's **first alert UTC date**.
-  `medianConfirmedLagDays` is signed: positive means the three-day rule
-  first flagged later; negative means it flagged earlier; null means no
-  shared incidents. It is a median of UTC calendar-day differences, not
-  wall-clock alert latency or time until a merchant sees an alert.
+- `referenceOnlyEpisodes`, `confirmedOnlyEpisodes` and `bothEpisodes`
+  distinguish recurring sampled declines on the same market/page. An episode
+  ends when an observed rank returns to within two positions of the pre-drop
+  best rank; a page change, missing result or gap exceeding 28 days also
+  starts a new comparison episode. These boundaries are based on observed
+  scrapes, **not verified traffic recoveries**. They are computed
+  chronologically, without future observations.
+- `confirmedEarlierEpisodes`, `confirmedLaterEpisodes` and
+  `sameDayEpisodes` compare the **first alert UTC date per shared episode**.
+  `medianConfirmedEpisodeLagDays` is signed: positive means the three-day
+  rule first flagged later; negative means earlier; null means no shared
+  episodes. It is not wall-clock delivery latency or merchant response time.
+  A stable market/page incident can contain multiple episodes, so using
+  only its first-ever alert would hide recurrence or pair unrelated drops.
 
 In the fictional six-observation fixture, the reference has two incident-days
 and the three-day rule one. They have **zero same-day overlap**, but share
@@ -79,10 +87,12 @@ The second reference-only incident is same-day scrape noise in the fixture,
 not a proven real-world false positive. This comparison does not model
 merchant dismissals, actual task creation or delayed scraping schedules.
 
-The output counts incident-days and deduplicated market/page incidents.
-A labeled-usefulness percentage is emitted only when at least one incident
-has a human label, with labeled and unlabeled denominators disclosed. This
-is **not population precision** when labels are selectively collected.
+The output counts incident-days, stable market/page incidents, and separately
+sampled decline episodes. A labeled-usefulness percentage is emitted only when
+at least one **stable incident identity** has a human label, with labeled and
+unlabeled denominators disclosed. A label is **not episode-specific** and must
+not be interpreted as independent confirmation of recurring declines. This is
+**not population precision** when labels are selectively collected.
 The evaluator does not reproduce Store Manager's persistent dismissal or
 supersession lifecycle, and cannot prove which incidents cost merchants time.
 
@@ -93,6 +103,31 @@ relevant Search Console decline or verified merchant action, not SERP
 movement alone. If the stricter rule misses material incidents or its
 usefulness rate fails to improve, revise or reject it. Do not change a live
 store, buy SERP requests, publish content or activate workflows for this test.
+
+
+## Repeated declines and evaluation leakage (2026-10-28)
+
+A page can fall, recover, and fall again during one 365-day export. The old
+first-alert comparison collapsed both episodes into one stable incident and
+measured only the first pair of detection dates. This undercounted repeated
+problems and could mask the delay on later recurrences. The evaluator now
+keeps stable incident totals for compatibility but computes **episode-aware**
+first-alert lag separately. For example, the fictional sequence
+4 → 9 → 11 → 4 → 9 → 11 on six distinct days contains one market/page
+identity but **two observed decline episodes**. Both algorithms flag both
+in this fixture, with the three-day rule detecting each one UTC day later.
+
+Episode boundaries are heuristics, not ground truth: sparse scrapes can miss
+recoveries, temporary rank rebounds can split a sustained traffic problem,
+and an unknown result or changed page only establishes lost comparability.
+Do not use episode counts as conversion outcomes or infer causal SEO impact.
+A future merchant study needs independently adjudicated **episode-level**
+labels, dated GSC evidence, and a frozen holdout period. Google Search
+Console's API is sampled/limited for query-level reporting, anonymizes some
+queries, and uses Pacific reporting dates; it cannot be directly equated to
+UTC SERP snapshots. See:
+https://developers.google.com/webmaster-tools/v1/searchanalytics/query
+https://developers.google.com/search/blog/2022/10/performance-data-deep-dive
 
 Google's official guidance: https://developers.google.com/search/docs/monitor-debug/debugging-search-traffic-drops
 Google Search Analytics API: https://developers.google.com/webmaster-tools/v1/searchanalytics/query

@@ -5,7 +5,7 @@ import { replayRankingAlerts } from "../app/lib/rank-replay";
 const now = new Date("2026-10-28T12:00:00Z");
 const base = {keyword:"boots", country:"US", device:"desktop", engine:"google",
   targetUrl:"https://shop.example/products/boots"};
-const point = (position:number, observedAt:string, fields:Record<string,unknown>={}) =>
+const point = (position:number|null, observedAt:string, fields:Record<string,unknown>={}) =>
   ({...base, position, observedAt, ...fields});
 const fixture = {
   primaryHost:"shop.example",
@@ -148,7 +148,7 @@ test("a changed landing page or unknown rank fences off old episode evidence",()
     point(4,"2026-10-10T12:00:00Z"),
     point(9,"2026-10-11T12:00:00Z"),
     point(11,"2026-10-12T12:00:00Z"),
-    point(null as unknown as number,"2026-10-13T12:00:00Z",{targetUrl:""}),
+    point(null,"2026-10-13T12:00:00Z",{targetUrl:""}),
     point(4,"2026-10-14T12:00:00Z"),
     point(9,"2026-10-15T12:00:00Z"),
     point(11,"2026-10-16T12:00:00Z")

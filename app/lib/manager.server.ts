@@ -45,13 +45,14 @@ export async function syncManagerTasks(shop:string, products:SeoProduct[], now=n
       // Only machine-superseded metadata findings can reopen when the same
       // product is sampled again. Never undo a merchant's manual decision.
       if (task.kind === "ranking_drop") {
-        // Repeated declines in the same market and on the same landing page
-        // refresh ONE pending incident, not a new alert for every scrape.
-        // A verified recovery machine-supersedes the incident; a later
-        // independently confirmed decline may reopen it. Never undo a
-        // merchant's approved, dismissed, applied or resolved decision.
+        // Freeze the original evidence and pre-drop baseline while pending.
+        // Updating it on every scrape would silently move the recovery
+        // threshold and erase what the merchant was originally shown.
+        // Only a verified recovery can machine-supersede this incident;
+        // a separately confirmed later decline may reopen that same row.
+        // Approved, dismissed, applied and resolved decisions are immutable.
         await tx.storeRecommendation.updateMany({
-          where:{shop,sourceKey:task.sourceKey,status:{in:["pending","superseded"]}},
+          where:{shop,sourceKey:task.sourceKey,status:"superseded"},
           data:{status:"pending",decidedAt:null,title:task.title,
             rationale:task.rationale,evidence:task.evidence,priority:task.priority}
         });

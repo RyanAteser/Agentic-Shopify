@@ -25,7 +25,7 @@ Collect only with explicit merchant permission, using the exact HTTPS URL-prefix
 
 Save one JSON object with keys primaryHost, incident, request and response. The incident contains keyword, targetUrl, country, device, engine "google" and ISO-8601 observedAt. The request object should include the exact GSC query metadata and siteUrl; the response should be the returned Search Analytics JSON. Do not include OAuth tokens or API keys.
 
-The validator rejects mismatched property, target, country, device, keyword, dates, duplicate observations, fresh data, invalid metrics, wrong aggregation, non-Google incidents and unscoped filters. It reports before/after clicks, impressions, CTR and impression-weighted average position. Percent changes are null if a reporting day is absent, and click change is null if baseline clicks are zero. A row omitted by Google is unknown, not a measured zero.
+The validator rejects mismatched property, target, country, device, keyword, dates, duplicate observations, fresh data, invalid metrics, wrong aggregation, non-Google incidents and unscoped filters. The full seven-day followup must also end at least three Pacific calendar days before evaluation, even if the export claims finalized data. It reports before/after clicks, impressions, CTR and impression-weighted average position. Percent changes are null if a reporting day is absent, and click change is null if baseline clicks are zero. A row omitted by Google is unknown, not a measured zero.
 
 ## Interpretation and experiment
 

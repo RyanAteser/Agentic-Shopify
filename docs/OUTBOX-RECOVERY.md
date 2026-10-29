@@ -64,7 +64,10 @@ The merchant settings transaction now marks **only version-1, still-queued
 scheduled jobs** failed with a cancellation explanation and refunds their
 reserved free-generation credits exactly once. Manual generation requests are
 not canceled when scheduling is disabled. Saving identical settings leaves
-queued work intact. The dispatch claim takes a store-row lock before the
+queued work intact. When scheduling stays enabled and a queued scheduled
+draft is canceled, the due date resets to the present so the **next**
+scheduler sweep can reserve a replacement with updated merchant settings;
+the settings save itself does not dispatch any work. The dispatch claim takes a store-row lock before the
 job-row transition, matching the merchant-settings lock order; a settings
 change that commits first prevents the old scheduled job from being sent.
 A claim that wins first is already `running` and cannot safely be canceled

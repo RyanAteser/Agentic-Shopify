@@ -6,8 +6,8 @@ import { failScheduledDraft, scheduledClaimFromJob } from "./scheduled-drafts.se
 
 /**
  * Recovery is safe ONLY for newly versioned jobs still in "queued" state.
- * The first dispatch step atomically transitions queued -> running BEFORE
- * product discovery or any n8n POST. Running/uncertain jobs must never replay.
+ * The dispatch step atomically transitions queued -> running AFTER read-only
+ * product discovery but BEFORE any n8n POST. Running/uncertain jobs never replay.
  * Legacy queued jobs predate this invariant and require operator inspection.
  */
 export const QUEUED_RECOVERY_MIN_AGE_MS = 5 * 60_000;
@@ -27,12 +27,30 @@ export async function recoverQueuedJobs(
 ) {
   if (!Number.isFinite(now.getTime())) throw new Error("Invalid recovery clock");
   const cutoff = new Date(now.getTime() - QUEUED_RECOVERY_MIN_AGE_MS);
-  const jobs = await db.contentJob.findMany({
-    where: { status: "queued", outboxVersion: 1, createdAt: { lte: cutoff } },
-    select: { id: true, shop: true, topic: true, scheduleClaim: true },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  // One oldest eligible job per merchant per sweep. A single merchant with a
+  // large backlog must not consume all three global dispatch opportunities.
+  // Group in SQL rather than oversampling a fixed number of oldest jobs:
+  // oversampling can still starve another merchant behind a large backlog.
+  const eligible = {
+    status: "queued", outboxVersion: 1, createdAt: { lte: cutoff }
+  };
+  const shops = await db.contentJob.groupBy({
+    by: ["shop"],
+    where: eligible,
+    _min: { createdAt: true },
+    orderBy: [{ _min: { createdAt: "asc" } }, { shop: "asc" }],
     take: QUEUED_RECOVERY_BATCH
   });
+  // A concurrent sweeper can claim between these reads. The downstream
+  // queued -> running compare-and-set remains the single-dispatch fence.
+  const candidates = await Promise.all(shops.map(({ shop }) =>
+    db.contentJob.findFirst({
+      where: { ...eligible, shop },
+      select: { id: true, shop: true, topic: true, scheduleClaim: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+    })
+  ));
+  const jobs = candidates.filter((job): job is NonNullable<typeof job> => job !== null);
   let accepted = 0, uncertain = 0, rejected = 0, raced = 0, blocked = 0;
   for (const job of jobs) {
     // Check the durable schedule metadata BEFORE dispatch. Never send a job

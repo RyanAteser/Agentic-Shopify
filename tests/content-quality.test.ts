@@ -115,8 +115,10 @@ test("URL control characters cannot disguise an external navigation as a store-r
   assert.match(result.article.body, /href="\/products\/boots\?variant=1"/);
   assert.match(result.warnings.join(" "), /Removed 5 unsafe or malformed link destination/);
   for (let i = 0; i < 4; i++) {
-    assert.ok(result.article.body.includes("Untrusted link " + i));
+    assert.match(result.article.body, new RegExp("<a>Untrusted link " + i + "</a>"),
+      "Unsafe destination must lose its href, not just generate a warning");
   }
+  assert.match(result.article.body, /<a>Entity encoded newline<\/a>/);
 });
 
 test("ordinary HTTPS references are preserved but never scored as verified citations", () => {

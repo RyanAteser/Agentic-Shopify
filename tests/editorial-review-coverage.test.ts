@@ -91,9 +91,11 @@ test("unreviewed aging counts exact 7/14 day boundaries without labeling reviewe
   ];
   assert.deepEqual(summarizeUnreviewedAge(drafts,[{draftId:"reviewed",decision:"usable"}],now),{
     aged7Days:2,aged14Days:1,oldestUnreviewedDays:14,
+    actionableUnreviewed:3,actionableAged7Days:2,actionableAged14Days:1,oldestActionableDays:14,
   });
   assert.deepEqual(summarizeUnreviewedAge(drafts,drafts.map(d=>({draftId:d.id,decision:"usable"})),now),{
     aged7Days:0,aged14Days:0,oldestUnreviewedDays:null,
+    actionableUnreviewed:0,actionableAged7Days:0,actionableAged14Days:0,oldestActionableDays:null,
   });
 });
 test("unreviewed aging fails closed on future dates, duplicates and foreign review IDs",()=>{
@@ -103,4 +105,31 @@ test("unreviewed aging fails closed on future dates, duplicates and foreign revi
   assert.throws(()=>summarizeUnreviewedAge([{...row,createdAt:new Date(now.getTime()+1)}],[],now),/creation date/);
   assert.throws(()=>summarizeUnreviewedAge([row],[{draftId:"other",decision:"usable"}],now),/Foreign/);
   assert.throws(()=>summarizeUnreviewedAge([row],[],new Date(NaN)),/reporting instant/);
+});
+
+test("published and rejected drafts missing reviews are not actionable editorial backlog",()=>{
+  const now=new Date("2026-10-30T12:00:00Z");
+  const days=(n:number)=>new Date(now.getTime()-n*86400000);
+  const drafts=[
+    {id:"published",status:"published",createdAt:days(25)},
+    {id:"rejected",status:"rejected",createdAt:days(20)},
+    {id:"reconcile",status:"needs_reconciliation",createdAt:days(18)},
+    {id:"ready",status:"ready",createdAt:days(8)},
+    {id:"needs",status:"needs_review",createdAt:days(3)},
+  ];
+  const result=summarizeUnreviewedAge(drafts,[],now);
+  assert.equal(result.aged14Days,3);
+  assert.equal(result.oldestUnreviewedDays,25);
+  assert.equal(result.actionableUnreviewed,2);
+  assert.equal(result.actionableAged7Days,1);
+  assert.equal(result.actionableAged14Days,0);
+  assert.equal(result.oldestActionableDays,8);
+});
+
+test("no actionable queue is not confused with missing historical review records",()=>{
+  const now=new Date("2026-10-30T12:00:00Z");
+  const result=summarizeUnreviewedAge([{id:"published",status:"published",createdAt:new Date("2026-10-01T12:00:00Z")}],[],now);
+  assert.equal(result.oldestActionableDays,null);
+  assert.equal(result.actionableUnreviewed,0);
+  assert.equal(result.aged14Days,1);
 });

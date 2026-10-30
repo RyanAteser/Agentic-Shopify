@@ -44,6 +44,7 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
   // Mint a one-job callback capability BEFORE claiming or sending paid work.
   // A missing signing key is a definitive local preflight failure.
   const callbackToken = createArticleCallbackToken(shop, jobId);
+  const catalogSample = await publishedProducts(shop);
   const body = {
     jobId, shop, callbackToken, topic: job.topic,
     brief: {
@@ -54,7 +55,8 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
       priorPublishedTitles: recentPublished.map(x => x.title),
       avoidPatterns: recentRejected.map(x => ({ topic: x.topic, reason: x.reviewNotes })),
     },
-    productCatalog: await publishedProducts(shop),
+    productCatalog: catalogSample.products,
+    productCatalogHasMore: catalogSample.hasMore,
   };
   // Serialize with merchant settings changes after the preflight. A stale
   // snapshot must not send an obsolete audience, author or destination.

@@ -124,3 +124,45 @@ test("incomplete pilots abstain from quality comparison and triage",()=>{
   assert.equal(r.pairedQuality.bothPass,19);
   assert.equal(r.ai.attempts,19);
 });
+
+test("review-order reversal blocks favorable triage despite pooled AI advantage",()=>{
+  const p=pilot();
+  p.pairs.forEach(x=>{
+    x.ai=outcome("usable",x.order==="ai-first"?5:25);
+    x.manual=outcome("usable",20);
+  });
+  const r=evaluatePilot(p);
+  assert.equal(r.relativeLaborPerQualityPassPct,-25);
+  assert.equal(r.orderSensitivity,"order-sensitive-or-no-gain");
+  assert.equal(r.orderStratifiedEfficiency["ai-first"].relativeLaborPerQualityPassPct,-75);
+  assert.equal(r.orderStratifiedEfficiency["manual-first"].relativeLaborPerQualityPassPct,25);
+  assert.equal(r.decisionSupport,"order-sensitive-efficiency");
+});
+
+test("both review-order strata must show lower quality-adjusted labor for candidate triage",()=>{
+  const r=evaluatePilot(pilot());
+  assert.equal(r.orderSensitivity,"consistent-ai-advantage");
+  assert.equal(r.orderStratifiedEfficiency["ai-first"].completedPairs,10);
+  assert.equal(r.orderStratifiedEfficiency["manual-first"].completedPairs,10);
+  assert.equal(r.decisionSupport,"candidate-for-independent-review");
+});
+
+test("undefined sequence efficiency abstains rather than treating zero quality passes as savings",()=>{
+  const p=pilot();
+  p.pairs.filter(x=>x.order==="manual-first").forEach(x=>{
+    x.manual=outcome("rejected",20);
+  });
+  const r=evaluatePilot(p);
+  assert.equal(r.relativeLaborPerQualityPassPct,-75);
+  assert.equal(r.orderStratifiedEfficiency["manual-first"].relativeLaborPerQualityPassPct,null);
+  assert.equal(r.orderSensitivity,"inconclusive");
+  assert.equal(r.decisionSupport,"order-strata-inconclusive");
+});
+
+test("incomplete pilot suppresses order-stratified efficiency entirely",()=>{
+  const p=pilot();p.pairs[0].ai=null;
+  const r=evaluatePilot(p);
+  assert.equal(r.orderStratifiedEfficiency,null);
+  assert.equal(r.orderSensitivity,"not-assessed");
+  assert.equal(r.decisionSupport,"insufficient-evidence");
+});

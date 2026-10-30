@@ -2,13 +2,14 @@ import type {LoaderFunctionArgs} from "react-router";
 import {redirect} from "react-router";
 import {authenticate} from "../shopify.server";
 import {randomOAuthState} from "../lib/gsc-crypto.server";
-import {beginGoogleAuthorization,googleAuthorizationUrl} from "../lib/gsc.server";
+import {beginGoogleAuthorization,databaseConsentTime,googleAuthorizationUrl} from "../lib/gsc.server";
 
 /** Must be navigated at the top-level for Google's non-iframe OAuth consent. */
 export const loader=async ({request}:LoaderFunctionArgs)=>{
-  // Capture intent before the asynchronous Shopify authentication round trip.
-  // Disconnect can happen while that authentication is still in flight.
-  const requestStartedAt=new Date();
+  // Capture intent on the primary DB clock BEFORE asynchronous Shopify auth.
+  // Never use the application worker clock for this revocation boundary.
+  // A DB failure fails closed, before any OAuth state is created.
+  const requestStartedAt=await databaseConsentTime();
   const {session}=await authenticate.admin(request);
   // Check configuration before creating a state or writing merchant records.
   const {raw,hash}=randomOAuthState();

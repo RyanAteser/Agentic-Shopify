@@ -88,14 +88,14 @@ export function validateN8nWebhookUrl(value: string): void {
 
 
 /**
- * Only explicit permanent request rejections are safe to refund. HTTP 408,
- * 409, 425, 429, redirects and 5xx are not proof that n8n did not start a
- * workflow, especially when a proxy is between the app and n8n.
- * Never automatically retry an uncertain generation request.
+ * After an authenticated POST is attempted, an HTTP status alone cannot prove
+ * that n8n never began work. A proxy or a workflow may return even a 4xx
+ * after accepting the request. Require correlated 202 acknowledgment for
+ * acceptance; all other HTTP outcomes need operator reconciliation.
+ * Pre-POST validation failures remain separately refundable by callers.
  */
-export function classifyN8nDispatchStatus(status: number): "accepted" | "rejected" | "uncertain" {
+export function classifyN8nDispatchStatus(status: number): "accepted" | "uncertain" {
   if (Number.isInteger(status) && status >= 200 && status < 300) return "accepted";
-  if ([400, 401, 403, 404, 405, 410, 413, 415, 422].includes(status)) return "rejected";
   return "uncertain";
 }
 

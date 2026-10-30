@@ -58,7 +58,7 @@ export function summarizeDraftLinks(body: string, maxLinks = 20) {
         }
       }
       const normalized = (text: string) =>
-        text.replace(/\\s+/g, " ").trim().toLowerCase().replace(/[.!?]+$/, "").trim();
+        text.replace(/\s+/g, " ").trim().toLowerCase().replace(/[.!?]+$/, "").trim();
       // Google can fall back to a title attribute when link text is absent.
       // This intentionally flags only obvious cases; no linguistic inference.
       const label = normalized(frame.text) || normalized(frame.attribs.title ?? "");

@@ -74,8 +74,10 @@ export type ReviewAggregateRow = {
 };
 export function summarizeEditorialReviews(rows: ReviewAggregateRow[]) {
   let usable = 0, rejected = 0, minutesSamples = 0, minutesTotal = 0;
+  const seen=new Set<string>();
   for (const row of rows) {
     if (!["usable", "rejected"].includes(row.decision) ||
+        seen.has(row.decision) ||
         !Number.isSafeInteger(row.count) || row.count < 0 ||
         !Number.isSafeInteger(row.minutesSamples) || row.minutesSamples < 0 ||
         row.minutesSamples > row.count ||
@@ -83,15 +85,33 @@ export function summarizeEditorialReviews(rows: ReviewAggregateRow[]) {
         (row.minutesSamples === 0 && row.minutesTotal !== 0)) {
       throw new Error("Invalid editorial review aggregate");
     }
+    seen.add(row.decision);
     if (row.decision === "usable") usable += row.count;
     else rejected += row.count;
     minutesSamples += row.minutesSamples;
     minutesTotal += row.minutesTotal;
+    if (![usable,rejected,minutesSamples,minutesTotal].every(Number.isSafeInteger)) {
+      throw new Error("Editorial review aggregate exceeds safe integer range");
+    }
   }
   const reviewed = usable + rejected;
+  if (!Number.isSafeInteger(reviewed)) {
+    throw new Error("Editorial review aggregate exceeds safe integer range");
+  }
+  const minutesMissing=reviewed-minutesSamples;
+  // Reporting is voluntary. A small or poorly covered subset can make an
+  // attractive mean look representative of the entire review population.
+  const minutesCoveragePct=reviewed>=5 ? 100*minutesSamples/reviewed : null;
+  const comparableMinutes=reviewed>=5 && minutesSamples>=5 &&
+    minutesSamples/reviewed>=0.8;
   return {
-    usable, rejected, reviewed, minutesSamples,
+    usable, rejected, reviewed, minutesSamples, minutesMissing,
+    minutesCoveragePct,
     usableAmongReviewedPct: reviewed >= 5 ? usable / reviewed * 100 : null,
-    meanReportedMinutes: minutesSamples ? minutesTotal / minutesSamples : null
+    meanReportedMinutes: comparableMinutes ? minutesTotal / minutesSamples : null,
+    minutesInterpretation: reviewed<5 ? "insufficient-reviews" :
+      minutesSamples<5 ? "insufficient-time-reports" :
+      minutesSamples/reviewed<0.8 ? "low-reporting-coverage" :
+      "descriptive-self-reported"
   };
 }

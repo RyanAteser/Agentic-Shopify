@@ -9,9 +9,6 @@ import { ProductContextUnavailableError } from "./product-context.server";
  * Callers must independently prove the failure is definitive before invoking
  * their refund path. This function only minimizes stored error data.
  */
-const DEFINITIVE_N8N_REJECTION =
-  /^n8n rejected generation request \(HTTP (400|401|403|404|405|410|413|415|422)\)$/;
-
 export function safeGenerationFailureReason(error: unknown): string {
   if (error instanceof ProductContextUnavailableError) {
     return "Shopify product context unavailable; generation was not dispatched.";
@@ -22,10 +19,6 @@ export function safeGenerationFailureReason(error: unknown): string {
     }
     if (error.message === "Select a Shopify blog first") {
       return "No Shopify destination blog selected.";
-    }
-    const rejected = DEFINITIVE_N8N_REJECTION.exec(error.message);
-    if (rejected) {
-      return "n8n rejected generation request (HTTP " + rejected[1] + ").";
     }
   }
   return "Generation failed before confirmed acceptance; operator review required.";

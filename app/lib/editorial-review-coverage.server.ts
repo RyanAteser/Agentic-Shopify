@@ -74,6 +74,51 @@ export function summarizeUnreviewedAge(
     actionableUnreviewed,actionableAged7Days,actionableAged14Days,oldestActionableDays};
 }
 
+/** Elapsed time from draft creation to the *latest recorded* review decision.
+ * Review rows can be renewed after edits, so this is not first-response time.
+ * No duration is inferred from missing reviews or from the draft status.
+ */
+export function summarizeRecordedReviewElapsed(
+  drafts: Array<CohortDraft & {createdAt:Date}>,
+  reviews: Array<CohortReview & {reviewedAt:Date}>,
+  now:Date
+) {
+  const instant=now.getTime();
+  if(!Number.isFinite(instant))throw new Error("Invalid editorial reporting instant");
+  const created=new Map<string,number>();
+  for(const draft of drafts) {
+    const at=draft.createdAt.getTime();
+    if(!draft.id||created.has(draft.id)||!Number.isFinite(at)||at>instant)
+      throw new Error("Invalid editorial cohort draft timestamp or identifier");
+    created.set(draft.id,at);
+  }
+  const seen=new Set<string>();
+  const elapsed:number[]=[];
+  let invalidIntervals=0;
+  for(const review of reviews) {
+    if(!created.has(review.draftId)||seen.has(review.draftId)||
+      !["usable","rejected"].includes(review.decision))
+      throw new Error("Invalid editorial cohort review");
+    seen.add(review.draftId);
+    const at=review.reviewedAt.getTime();
+    if(!Number.isFinite(at)||at>instant||at<created.get(review.draftId)!) {
+      invalidIntervals++;
+      continue;
+    }
+    elapsed.push((at-created.get(review.draftId)!)/3600000);
+  }
+  elapsed.sort((a,b)=>a-b);
+  // Abstain if any recorded review is inconsistent, or fewer than five
+  // valid decisions exist. Never silently discard bad records to improve KPI.
+  const comparable=invalidIntervals===0&&elapsed.length>=5;
+  const median=comparable?(elapsed.length%2
+    ?elapsed[(elapsed.length-1)/2]
+    :(elapsed[elapsed.length/2-1]+elapsed[elapsed.length/2])/2):null;
+  const p90=comparable?elapsed[Math.ceil(elapsed.length*0.9)-1]:null;
+  return {reviewElapsedSamples:elapsed.length,reviewElapsedInvalid:invalidIntervals,
+    medianRecordedReviewHours:median,p90RecordedReviewHours:p90};
+}
+
 /**
  * Drafts are selected by creation date; their recorded review can have happened
  * later. This is not a review-action cohort, a current approval count or an
@@ -94,11 +139,12 @@ export async function loadDraftReviewCoverage(shop: string, since: Date, now: Da
   }
   const reviews = drafts.length ? await db.editorialReview.findMany({
     where: { shop, draftId: { in: drafts.map(draft => draft.id) } },
-    select: { draftId: true, decision: true },
+    select: { draftId: true, decision: true, reviewedAt: true },
   }) : [];
   return {
     available: true as const,
     ...summarizeDraftReviewCoverage(drafts, reviews),
     ...summarizeUnreviewedAge(drafts, reviews, now),
+    ...summarizeRecordedReviewElapsed(drafts, reviews, now),
   };
 }

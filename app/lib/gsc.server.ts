@@ -224,17 +224,21 @@ export async function disconnectGoogle(shop:string){
     }):{count:0};
     if(sessionLock.count===1){
       await tx.storeConfig.upsert({
-        where:{shop},
-        create:{shop,gscConsentRevokedAt:new Date()},
-        update:{gscConsentRevokedAt:new Date()}
+        where:{shop},create:{shop},update:{updatedAt:new Date()}
       });
     }else{
       // Legacy/test records may have no Session; revoke existing consent
       // without recreating a configuration for an uninstalled merchant.
       await tx.storeConfig.updateMany({
-        where:{shop},data:{gscConsentRevokedAt:new Date()}
+        where:{shop},data:{updatedAt:new Date()}
       });
     }
+    // Record the timestamp only AFTER acquiring the merchant row lock.
+    // Otherwise a callback holding that lock could delay the transaction
+    // while an in-flight Connect receives a falsely newer start timestamp.
+    await tx.storeConfig.updateMany({
+      where:{shop},data:{gscConsentRevokedAt:new Date()}
+    });
     await tx.googleAuthState.deleteMany({where:{shop}});
     await tx.searchConsoleConnection.deleteMany({where:{shop}});
     await tx.organicDailyMetric.deleteMany({where:{shop}});

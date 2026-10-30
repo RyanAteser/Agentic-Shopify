@@ -67,3 +67,65 @@ References:
 - E-commerce A/B testing and p-hacking (2025): https://pubsonline.informs.org/doi/abs/10.1287/isre.2024.0872
 
 - CONSORT crossover-trial reporting extension (sequence, period and carryover limitations): https://pmc.ncbi.nlm.nih.gov/articles/PMC6667942/
+
+
+## Added: offline merchant economics and labor-value sensitivity (2026-10-30)
+
+A faster AI-assisted workflow may still be **more expensive** after model usage,
+n8n/hosting allocation and rework are counted. The new read-only
+`scripts/merchant-pilot-economics.mjs` builds on the **unchanged**
+`paired-editorial-pilot-v1` dataset and requires a *separate*, strictly numeric
+ledger with **one row per recorded pair**. Do not equate labor minutes saved
+with merchant cash savings, subscription value, incremental traffic or revenue.
+
+Example anonymized **illustrative costs**, not measured invoices:
+
+```json
+{
+  "protocol": "paired-editorial-costs-v1",
+  "costBasis": "estimated",
+  "laborValueCentsPerHour": 3000,
+  "pairs": [
+    {"id":"opaque_001","aiExternalCostCents":100,"manualExternalCostCents":0}
+  ]
+}
+```
+
+The example is deliberately incomplete. Supply all recorded pair IDs and
+all relevant expenses (including rejected attempts), then run:
+
+```bash
+node scripts/merchant-pilot-economics.mjs /path/to/anonymized-pilot.json /path/to/anonymized-costs.json
+```
+
+**Cost collection protocol:** Keep consented supplier invoices or token-usage
+accounting in a secure private system, not in GitHub or the evaluator input.
+Allocate model generations, failed paid requests, n8n execution/hosting, API
+calls and other variable/fixed operating costs consistently across arms.
+Record *zero* external costs explicitly where genuinely zero. Never replace
+unknown fees with zero. Mark `costBasis: "estimated"` if any material
+component is estimated or allocation is unverified; `invoice-backed`
+is **self-attested**, not independent proof. Use opaque pair IDs only,
+never merchant identifiers, article contents, SKUs, prompts, credentials or
+provider invoice details.
+
+`laborValueCentsPerHour` is a declared scenario assumption, not a measured
+merchant wage or realized cash saving. The report computes fully burdened
+**estimated cents per quality pass** in each arm: (total labor minutes
+× value per hour / 60 + all external costs) / quality-passing outputs.
+Rejected drafts still incur cost. It also checks half and double the declared
+labor valuation. An advantage disappearing under those conditions is labeled
+`labor-value-sensitive`; estimates cannot produce an invoice-backed candidate
+label. Full cost comparisons abstain if any original preregistered pilot gate
+fails, including complete paired observations, counterbalanced order,
+blinded-quality attestation and at least 20 pairs. Costs for absent pair
+records, negative/fractional values and unknown fields fail input validation.
+
+Even `candidate-for-independent-cost-review` means **only** that supplied
+descriptive cost values pass these simple screens. It is not a production
+release recommendation, confidence interval, causal cost saving, merchant
+profit estimate, validated pricing, or licensing decision. Confirm the actual
+n8n commercial agreement, conversion/retention outcomes, operating overhead,
+merchant mix and paid-tier unit economics separately. A false-positive
+self-reported cost ledger is still possible; re-audit original invoices before
+making customer-facing claims.

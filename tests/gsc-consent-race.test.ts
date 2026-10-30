@@ -6,6 +6,9 @@ import {disconnectGoogle,storeGoogleConnection,syncOrganicMetrics,verifyGoogleSi
 import {encryptToken} from "../app/lib/gsc-crypto.server";
 
 async function connectWithPendingState(shop:string,property:string,token:string){
+  // Callback finalization now requires a still-connected merchant. Tests
+  // explicitly establish the merchant rather than creating orphaned consent.
+  await db.storeConfig.upsert({where:{shop},create:{shop},update:{}});
   const stateHash=randomUUID();
   await db.googleAuthState.create({
     data:{stateHash,shop,expiresAt:new Date(Date.now()+60_000)}
@@ -84,6 +87,7 @@ test("GSC import is cancelled by consent deletion and still works with active co
     globalThis.fetch=originalFetch;
     await db.organicDailyMetric.deleteMany({where:{shop:{in:[revokedShop,activeShop]}}});
     await db.searchConsoleConnection.deleteMany({where:{shop:{in:[revokedShop,activeShop]}}});
+    await db.storeConfig.deleteMany({where:{shop:{in:[revokedShop,activeShop]}}});
     for(const key of envKeys){
       if(previous[key]===undefined)delete process.env[key];
       else process.env[key]=previous[key];
@@ -101,6 +105,7 @@ test("pending Google OAuth cannot reconnect after disconnect, expire, replay, or
   const createState=(stateHash:string,owner=shop,expiresAt=new Date(Date.now()+60_000))=>
     db.googleAuthState.create({data:{stateHash,shop:owner,expiresAt}});
   try{
+    await db.storeConfig.create({data:{shop}});
     // The callback already read this state, then stalled during Google HTTP.
     // Merchant disconnects while no connection has yet been persisted.
     await createState(revokedHash);
@@ -140,6 +145,7 @@ test("pending Google OAuth cannot reconnect after disconnect, expire, replay, or
   }finally{
     await db.googleAuthState.deleteMany({where:{shop:{in:[shop,other]}}});
     await db.searchConsoleConnection.deleteMany({where:{shop:{in:[shop,other]}}});
+    await db.storeConfig.deleteMany({where:{shop:{in:[shop,other]}}});
     if(oldKey===undefined)delete process.env.GSC_ENCRYPTION_KEY;
     else process.env.GSC_ENCRYPTION_KEY=oldKey;
   }
@@ -273,6 +279,7 @@ test("GSC snapshots retire omitted dates without touching other shops or histori
     await db.organicDailyMetric.deleteMany({where:{shop:{in:[shop,otherShop]}}});
     await db.searchConsoleConnection.deleteMany({where:{shop}});
     await db.googleAuthState.deleteMany({where:{shop}});
+    await db.storeConfig.deleteMany({where:{shop}});
     for(const key of envKeys){
       if(previous[key]===undefined)delete process.env[key];
       else process.env[key]=previous[key];
@@ -332,6 +339,7 @@ test("Google reconnection resets old measurement history without affecting anoth
     await db.organicDailyMetric.deleteMany({where:{shop:{in:[shop,neighbor]}}});
     await db.searchConsoleConnection.deleteMany({where:{shop:{in:[shop,neighbor]}}});
     await db.googleAuthState.deleteMany({where:{shop:{in:[shop,neighbor]}}});
+    await db.storeConfig.deleteMany({where:{shop:{in:[shop,neighbor]}}});
     if(previousKey===undefined)delete process.env.GSC_ENCRYPTION_KEY;
     else process.env.GSC_ENCRYPTION_KEY=previousKey;
   }

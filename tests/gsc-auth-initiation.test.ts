@@ -74,6 +74,10 @@ test("uninstall fences delayed Google consent initiation and finalization",async
 
 test("active GSC consent finalizes once, then disconnect revokes pending states",async()=>{
   const shop=shopName(),sessionId="session-"+randomUUID();
+  const originalFetch=globalThis.fetch;
+  // Token revocation is an external best-effort call, never use a real
+  // Google account or network connection in the test suite.
+  globalThis.fetch=async()=>Response.json({});
   const previousKey=process.env.GSC_ENCRYPTION_KEY;
   process.env.GSC_ENCRYPTION_KEY=Buffer.alloc(32,59).toString("base64");
   const hash=state("legitimate-"+randomUUID());
@@ -91,6 +95,7 @@ test("active GSC consent finalizes once, then disconnect revokes pending states"
     assert.equal(await db.googleAuthState.count({where:{shop}}),0);
   }finally{
     await eraseMerchantData(shop);
+    globalThis.fetch=originalFetch;
     if(previousKey===undefined)delete process.env.GSC_ENCRYPTION_KEY;
     else process.env.GSC_ENCRYPTION_KEY=previousKey;
   }

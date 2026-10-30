@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { summarizeEditorialCohort } from "../app/lib/editorial-funnel";
+import { summarizeEditorialCohort, summarizeEditorialReviews } from "../app/lib/editorial-funnel";
 
 test("empty editorial cohort abstains instead of reporting a success rate", () => {
   const result = summarizeEditorialCohort([], []);
@@ -75,4 +75,48 @@ test("corrupt aggregate sums above safe integer range are rejected",()=>{
     {status:"completed",count:Number.MAX_SAFE_INTEGER},
     {status:"failed",count:1}
   ],[]),/safe integer range/);
+});
+
+test("voluntary time reports are suppressed when most reviews omit minutes",()=>{
+  const r=summarizeEditorialReviews([
+    {decision:"usable",count:90,minutesSamples:3,minutesTotal:12},
+    {decision:"rejected",count:10,minutesSamples:2,minutesTotal:30}
+  ]);
+  assert.equal(r.reviewed,100);
+  assert.equal(r.minutesSamples,5);
+  assert.equal(r.minutesMissing,95);
+  assert.equal(r.minutesCoveragePct,5);
+  assert.equal(r.meanReportedMinutes,null);
+  assert.equal(r.minutesInterpretation,"low-reporting-coverage");
+});
+test("adequately covered time reports remain descriptive, not savings",()=>{
+  const r=summarizeEditorialReviews([
+    {decision:"usable",count:8,minutesSamples:7,minutesTotal:70},
+    {decision:"rejected",count:2,minutesSamples:1,minutesTotal:20}
+  ]);
+  assert.equal(r.minutesCoveragePct,80);
+  assert.equal(r.meanReportedMinutes,11.25);
+  assert.equal(r.minutesInterpretation,"descriptive-self-reported");
+});
+test("tiny review samples and time samples abstain",()=>{
+  const tiny=summarizeEditorialReviews([{decision:"usable",count:4,minutesSamples:4,minutesTotal:40}]);
+  assert.equal(tiny.meanReportedMinutes,null);
+  assert.equal(tiny.minutesInterpretation,"insufficient-reviews");
+  const few=summarizeEditorialReviews([{decision:"usable",count:10,minutesSamples:4,minutesTotal:40}]);
+  assert.equal(few.meanReportedMinutes,null);
+  assert.equal(few.minutesInterpretation,"insufficient-time-reports");
+});
+test("duplicate decision groups and overflowing sums fail closed",()=>{
+  assert.throws(()=>summarizeEditorialReviews([
+    {decision:"usable",count:5,minutesSamples:5,minutesTotal:25},
+    {decision:"usable",count:5,minutesSamples:5,minutesTotal:25}
+  ]),/Invalid editorial review aggregate/);
+  assert.throws(()=>summarizeEditorialReviews([
+    {decision:"usable",count:Number.MAX_SAFE_INTEGER,minutesSamples:0,minutesTotal:0},
+    {decision:"rejected",count:1,minutesSamples:0,minutesTotal:0}
+  ]),/safe integer range/);
+  assert.throws(()=>summarizeEditorialReviews([
+    {decision:"usable",count:5,minutesSamples:5,minutesTotal:Number.MAX_SAFE_INTEGER},
+    {decision:"rejected",count:1,minutesSamples:1,minutesTotal:1}
+  ]),/safe integer range/);
 });

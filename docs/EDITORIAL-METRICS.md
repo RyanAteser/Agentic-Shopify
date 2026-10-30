@@ -124,3 +124,15 @@ https://developers.google.com/search/docs/fundamentals/creating-helpful-content
 Shopify's analytics platform may eventually support separately consented
 merchant outcome measurement, but that is not authorized or implemented here:
 https://shopify.dev/docs/apps/build/analytics
+
+## Denominator visibility and unresolved-backlog guard (2026-10-30)
+
+A merchant can have five published and five rejected drafts, alongside ninety drafts still awaiting review. The previously displayed **50% published among resolved** is mathematically correct but potentially misleading when read without its denominator. The Growth dashboard now also reports **10% resolved coverage** (10/100) and **5% published among all created drafts** (5/100). These numbers are a synthetic unit-test illustration, **not actual merchant results**.
+
+- Resolved coverage = (published + rejected) / all drafts created in the same 28-day creation cohort. It is a status snapshot, not the proportion of all jobs successfully delivered.
+- Published among all created drafts = published / all created drafts. This is an observed-to-date fraction, not a final acceptance rate: pending drafts may be published later.
+- Both additional percentages are withheld until at least five created drafts exist. The resolved-only publication percentage still requires five resolved decisions.
+- No extra API calls, scopes, content reads, personal data, store writes or billing changes. All counts are already grouped by authenticated shop.
+- Invalid aggregate totals exceeding JavaScript's safe integer range now fail closed rather than silently corrupting displayed percentages.
+
+**Impact hypothesis:** Exposing the pending denominator prevents teams from mistaking a high resolved-only share for widespread content acceptance and directs attention toward review bottlenecks. This is an observability improvement, not a demonstrated reduction in labor or increase in sales. Validate against consented merchant usability sessions and eventual draft outcomes, including the age of unresolved drafts. No evidence of improved retention, SEO, conversions or revenue has yet been collected.

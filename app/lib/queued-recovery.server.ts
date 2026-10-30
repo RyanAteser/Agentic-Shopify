@@ -84,8 +84,9 @@ export async function recoverQueuedJobs(
         uncertain++; // n8n may already be processing the job.
         continue;
       }
-      // The production dispatch function only throws a generic error before
-      // network acceptance or on a definitive permanent HTTP rejection.
+      // The production dispatch function throws a generic error only for
+      // known pre-POST failures. Every HTTP error after an attempted POST is
+      // uncertain, because a proxy/workflow may have already started work.
       // Lock merchant first, then conditionally fail/refund; a callback that
       // already completed cannot be undone.
       try {

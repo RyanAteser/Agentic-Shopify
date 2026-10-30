@@ -126,6 +126,25 @@ export function evaluatePilot(input){
       ?"inconclusive":
     Object.values(orderStratifiedEfficiency).every(x=>x.relativeLaborPerQualityPassPct<0)
       ?"consistent-ai-advantage":"order-sensitive-or-no-gain";
+  // A positive pooled result can hide a negative result for several merchants.
+  // Aggregate only: merchant labels must never appear in the report.
+  const merchantEfficiency=readyForReview&&merchantDiversity.groupsProvided
+    ?Array.from(groupCounts.keys()).map(group=>{
+      const stratum=complete.filter(p=>p.merchantGroup===group);
+      const a=summarizeArm(stratum,"ai"),m=summarizeArm(stratum,"manual");
+      return a.laborMinutesPerQualityPass===null||m.laborMinutesPerQualityPass===null
+        ?null:100*(a.laborMinutesPerQualityPass/m.laborMinutesPerQualityPass-1);
+    }):null;
+  const merchantSensitivity=merchantEfficiency===null?"not-assessed":
+    merchantEfficiency.some(x=>x===null)?"inconclusive":
+    merchantEfficiency.every(x=>x<0)?"consistent-ai-advantage":
+    "merchant-heterogeneity-or-no-gain";
+  const merchantSensitivitySummary=merchantEfficiency===null?null:{
+    evaluatedGroups:merchantEfficiency.length,
+    groupsWithAiAdvantage:merchantEfficiency.filter(x=>x!==null&&x<0).length,
+    groupsWithoutAiAdvantage:merchantEfficiency.filter(x=>x!==null&&x>=0).length,
+    groupsWithUndefinedComparison:merchantEfficiency.filter(x=>x===null).length
+  };
   // Discordant pairs matter: aggregate quality rates alone hide which topics regress.
   const qualityPass=x=>x.decision==="usable"&&x.criticalFactualErrors===0&&x.productLinkErrors===0;
   const pairedQuality={
@@ -144,6 +163,8 @@ export function evaluatePilot(input){
     orderSensitivity!=="consistent-ai-advantage"?"order-sensitive-efficiency":
     !merchantDiversity.groupsProvided?"merchant-diversity-unverified":
     !merchantDiversity.operationalScreenPassed?"merchant-concentration-risk":
+    merchantSensitivity==="inconclusive"?"merchant-efficiency-inconclusive":
+    merchantSensitivity!=="consistent-ai-advantage"?"merchant-efficiency-heterogeneity":
     "candidate-for-independent-review";
   return {
     protocol:PROTOCOL,plannedPairs:input.plannedPairs,recordedPairs:pairs.length,
@@ -153,7 +174,7 @@ export function evaluatePilot(input){
     ai,manual,pairedQuality,
     qualityPassRateDifferencePercentagePoints:readyForReview?100*(ai.qualityPassed-manual.qualityPassed)/complete.length:null,
     relativeLaborPerQualityPassPct:relativeLaborPerPassPct,
-    orderStratifiedEfficiency,orderSensitivity,
+    orderStratifiedEfficiency,orderSensitivity,merchantSensitivity,merchantSensitivitySummary,
     decisionSupport,
     limitations:[
       "Outcomes are descriptive; registration, randomization, and blinding are self-attested, not verified.",
@@ -166,6 +187,7 @@ export function evaluatePilot(input){
       "Merchant-group labels are self-reported, study-local, and are not independently verified against distinct merchants.",
       "The five-group and 25%-maximum-concentration thresholds are operational screens, not an effective sample size calculation or a cluster-robust confidence interval.",
       "Repeated drafts from one merchant can be correlated. Even a diverse pilot requires merchant-cluster-aware replication and analysis before generalization.",
+      "Per-merchant efficiency is a descriptive heterogeneity screen, not a population estimate; small groups can be unstable and all groups need valid denominators.",
       "No merchant revenue, conversions, retention, organic traffic, or causal lift is measured."
     ]
   };

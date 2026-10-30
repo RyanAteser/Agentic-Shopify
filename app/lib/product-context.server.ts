@@ -21,6 +21,9 @@ export type VerifiedStoreProduct = {
 export type VerifiedProductSample = {
   products: VerifiedStoreProduct[];
   hasMore: boolean;
+  /** All returned Shopify rows, including those without public URLs. */
+  sampledCount: number;
+  missingUrlCount: number;
 };
 
 export function parseVerifiedPublishedProducts(shop: string, raw: unknown): VerifiedProductSample {
@@ -49,16 +52,23 @@ export function parseVerifiedPublishedProducts(shop: string, raw: unknown): Veri
   }
 
   const result: VerifiedStoreProduct[] = [];
+  let missingUrlCount = 0;
   for (const node of products.nodes) {
     if (!node || typeof node !== "object" || Array.isArray(node)) {
       throw new ProductContextUnavailableError();
     }
     const product = node as Record<string, unknown>;
-    // Shopify returns null when a product has no online-store URL.
-    if (product.onlineStoreUrl === null) continue;
+    // Validate every returned row, even if Shopify omits its public URL.
     if (typeof product.title !== "string" || !product.title.trim() ||
-        typeof product.description !== "string" ||
-        typeof product.onlineStoreUrl !== "string" ||
+        typeof product.description !== "string") {
+      throw new ProductContextUnavailableError();
+    }
+    // A null storefront URL does not mean that the merchant has no product.
+    if (product.onlineStoreUrl === null) {
+      missingUrlCount++;
+      continue;
+    }
+    if (typeof product.onlineStoreUrl !== "string" ||
         product.onlineStoreUrl.length > 350) {
       throw new ProductContextUnavailableError();
     }
@@ -79,7 +89,10 @@ export function parseVerifiedPublishedProducts(shop: string, raw: unknown): Veri
       url: product.onlineStoreUrl,
     });
   }
-  return { products: result, hasMore: pageInfo.hasNextPage };
+  return {
+    products: result, hasMore: pageInfo.hasNextPage,
+    sampledCount: products.nodes.length, missingUrlCount,
+  };
 }
 
 type ReadOnlyAdmin = {

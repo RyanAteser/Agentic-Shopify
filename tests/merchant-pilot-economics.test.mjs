@@ -10,7 +10,7 @@ const pilot=()=>({
   startedAt:"2026-10-02T00:00:00Z",
   plannedPairs:20,
   pairs:Array.from({length:20},(_,i)=>({
-    id:"case_"+i,order:i%2?"ai-first":"manual-first",blindScored:true,
+    id:"case_"+i,order:i%2?"ai-first":"manual-first",blindScored:true,merchantGroup:"group_"+String(i%10).padStart(6,"0"),
     ai:arm("usable",10),manual:arm("usable",20)
   }))
 });
@@ -119,4 +119,17 @@ test("costs on rejected attempts still appear in the expense denominator",()=>{
   assert.equal(r.scenarios.declaredLaborValue.ai.externalCents,3000);
   assert.equal(r.scenarios.declaredLaborValue.ai.totalCents,13000);
   assert.equal(r.scenarios.declaredLaborValue.ai.centsPerQualityPass,13000/19);
+});
+
+test("merchant concentration blocks a cost candidate even with apparent savings",()=>{
+  const p=pilot();p.pairs.forEach(x=>{x.merchantGroup="group_000001";});
+  const r=evaluatePilotEconomics(p,ledger());
+  assert.equal(r.scenarios.declaredLaborValue.relativeAiCostPct,-40);
+  assert.equal(r.decisionSupport,"editorial-gates-not-met");
+});
+test("legacy ungrouped pilot stays descriptive but cannot recommend economic adoption",()=>{
+  const p=pilot();p.pairs.forEach(x=>{delete x.merchantGroup;});
+  const r=evaluatePilotEconomics(p,ledger());
+  assert.equal(r.scenarios.declaredLaborValue.relativeAiCostPct,-40);
+  assert.equal(r.decisionSupport,"editorial-gates-not-met");
 });

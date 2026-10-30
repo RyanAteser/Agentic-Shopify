@@ -47,6 +47,8 @@ export function summarizeUnreviewedAge(
   const reviewed=new Set(reviews.map(review=>review.draftId));
   const seen=new Set<string>();
   let aged7Days=0, aged14Days=0, oldestUnreviewedDays: number|null=null;
+  let actionableUnreviewed=0, actionableAged7Days=0, actionableAged14Days=0;
+  let oldestActionableDays: number|null=null;
   for(const draft of drafts) {
     if(!draft.id||seen.has(draft.id))throw new Error("Duplicate or missing editorial draft identifier");
     seen.add(draft.id);
@@ -57,9 +59,19 @@ export function summarizeUnreviewedAge(
     if(ageDays>=7)aged7Days++;
     if(ageDays>=14)aged14Days++;
     oldestUnreviewedDays=Math.max(oldestUnreviewedDays??0,ageDays);
+    // Only ready/needs_review represent an actionable editorial queue.
+    // Published/rejected/reconciliation records without reviews are historical
+    // evidence gaps or operational exceptions, not pending merchant decisions.
+    if(draft.status==="ready"||draft.status==="needs_review") {
+      actionableUnreviewed++;
+      if(ageDays>=7)actionableAged7Days++;
+      if(ageDays>=14)actionableAged14Days++;
+      oldestActionableDays=Math.max(oldestActionableDays??0,ageDays);
+    }
   }
   if(reviews.some(review=>!seen.has(review.draftId)))throw new Error("Foreign editorial review");
-  return {aged7Days,aged14Days,oldestUnreviewedDays};
+  return {aged7Days,aged14Days,oldestUnreviewedDays,
+    actionableUnreviewed,actionableAged7Days,actionableAged14Days,oldestActionableDays};
 }
 
 /**

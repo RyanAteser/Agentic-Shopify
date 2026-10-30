@@ -9,7 +9,7 @@ Article volume and voluntary "usable" clicks do not establish merchant value. A 
 ## Pilot protocol (before collecting outcomes)
 
 1. Pre-register the planned sample, eligibility criteria, reviewers, and definitions of critical factual errors and incorrect/broken product links. **20 pairs is an operational-review gate, not a statistical power guarantee.**
-2. For each matched merchant/topic, create manual and AI-assisted drafts. Document randomized and counterbalanced review order; avoid copying one arm's text into the other. Blind scoring where possible. The evaluator cannot independently verify randomization or blinding.
+2. For each matched merchant/topic, create manual and AI-assisted drafts. Document randomized and counterbalanced review order; avoid copying one arm's text into the other. Blind scoring where possible. Assign each merchant a **study-local random group label** (not a shop-domain hash) and reuse it across that merchant's pairs. The evaluator cannot independently verify randomization, blinding, or merchant distinctness.
 3. For **each arm**, record the merchant's usable/rejected decision, *all human labor minutes* (creation, review, corrections, including work on rejected drafts), critical factual errors and product-link errors. Model fees and machine wait time are excluded and must be accounted for separately.
 4. Include every planned pair, using null for missing arm outcomes. Never remove failed, unreviewed or difficult cases. A **quality pass** requires a human usable decision, zero critical factual errors and zero product-link errors.
 5. Run the offline evaluator on anonymized data. Relative labor comparison is suppressed until every planned pair is complete, at least 20 pairs exist, order is balanced and blinded scoring is attested for all pairs. Even then, results are descriptive and require independent review.
@@ -27,7 +27,7 @@ Illustrative structure only (one of 20 planned pairs, deliberately insufficient 
   "startedAt": "2026-10-02T00:00:00Z",
   "plannedPairs": 20,
   "pairs": [{
-    "id": "opaque_001", "order": "ai-first", "blindScored": true,
+    "id": "opaque_001", "order": "ai-first", "blindScored": true, "merchantGroup": "group_000001",
     "ai": {"decision":"usable","laborMinutes":12,"criticalFactualErrors":0,"productLinkErrors":0},
     "manual": {"decision":"rejected","laborMinutes":25,"criticalFactualErrors":1,"productLinkErrors":0}
   }]
@@ -46,9 +46,10 @@ node scripts/merchant-pilot-evaluate.mjs /path/to/anonymized-pilot.json
 - **Human labor minutes per quality pass**: all human labor minutes, including rejected attempts, / quality-passing outputs. Null when none pass. This is a descriptive throughput proxy, **not time saved**.
 - **Relative labor per quality pass**: 100 × (AI minutes per pass / manual minutes per pass − 1), shown only when operational gates pass. A negative number favors AI, but cannot establish a causal or statistically significant effect.
 - **Paired quality discordance**: both pass, AI only passes, manual only passes, neither passes. A tied aggregate pass rate can still conceal different failing topics.
+- **Merchant clustering**: Each pair may carry a study-local `merchantGroup` label, e.g. `group_000001`. A favorable candidate classification additionally requires group evidence on **every** planned pair, at least **five distinct merchants**, and no merchant accounting for more than **25%** of paired observations. These are uncalibrated operational diversity screens, **not statistical significance, estimated effective sample size, or proof of independent merchant response**. The evaluator returns only aggregate group counts and largest-group share, never the labels. Ungrouped legacy datasets remain readable, with descriptive metrics but no favorable candidate decision. Mixed grouped/ungrouped rows fail validation.
 - **Quality pass rate difference**: AI minus manual in percentage points, suppressed until the same operational gates pass.
 - **Order-stratified sensitivity**: for a fully eligible pilot, report labor per quality pass separately for AI-first and manual-first review sequences. If either stratum has no quality passes in an arm, label the result `order-strata-inconclusive`. If pooled AI labor is lower but either sequence fails to show an advantage, label it `order-sensitive-efficiency` instead of a favorable candidate. These checks are descriptive, not tests for or corrections of carryover.
-- **Conservative decision support**: `insufficient-evidence` for incomplete/unblinded/imbalanced pilots; `quality-review-required` if AI has any critical factual or product-link error or fewer quality passes than manual; `cannot-compare-efficiency` if either pooled arm has no passing output; `no-observed-efficiency-gain` if pooled AI labor per pass is not lower; `order-strata-inconclusive` or `order-sensitive-efficiency` when sequence checks fail; otherwise `candidate-for-independent-review`. **Even candidate status does not authorize publishing, launch, billing, or a claim of improvement.**
+- **Conservative decision support**: `insufficient-evidence` for incomplete/unblinded/imbalanced pilots; `quality-review-required` if AI has any critical factual or product-link error or fewer quality passes than manual; `cannot-compare-efficiency` if either pooled arm has no passing output; `no-observed-efficiency-gain` if pooled AI labor per pass is not lower; `order-strata-inconclusive` or `order-sensitive-efficiency` when sequence checks fail; otherwise `merchant-diversity-unverified` when group labels are absent, `merchant-concentration-risk` when diversity is inadequate, or `candidate-for-independent-review` when all screens pass. **Even candidate status does not authorize publishing, launch, billing, or a claim of improvement.**
 - **Incomplete pairs**: includes missing arms and unrecorded planned pairs. They are never silently counted as successes. Registration and blinding flags are self-attestations, not verification.
 
 Pre-register an actual merchant decision rule: quality pass rate no worse than manual, fewer human labor minutes per pass after all failures, and no unacceptable critical factual or product-link errors. Review uncertainty, reviewer disagreement, costs, merchant mix and subscription economics before claiming benefit. Do not publish or charge based on the offline result.
@@ -132,3 +133,11 @@ n8n commercial agreement, conversion/retention outcomes, operating overhead,
 merchant mix and paid-tier unit economics separately. A false-positive
 self-reported cost ledger is still possible; re-audit original invoices before
 making customer-facing claims.
+
+## Merchant cluster privacy and inference (2026-10-30)
+
+Study-local group labels must be unrelated to merchant domains, names or reversible identifiers. Generate random non-identifying labels; store any private mapping only with the consenting researcher, not in GitHub, and destroy it under the pilot retention policy. Never use merchant-derived hashes, emails, names or shop domains in JSON. The tool only emits aggregate cluster statistics, never raw group labels. The existence of distinct merchants is still self-attested and must be externally verified before making claims.
+
+Repeated topic pairs from the same merchant can share products, seasonality, reviewers and workflows. Treating those observations as independent creates pseudo-replication. The five-merchant and 25%-dominance thresholds are conservative *screening heuristics*, not a variance adjustment, power calculation, or representative sample guarantee. For a population-level claim, pre-register a target population and estimand (per-merchant versus per-article), recruit independent stores, and use cluster-aware inference with uncertainty intervals. A 20-pair pilot remains exploratory even if these screens pass.
+
+References: [CONSORT cluster trial extension](https://www.bmj.com/content/328/7441/702.full) and [CONSORT crossover cluster extension](https://www.bmj.com/content/388/bmj-2024-080472.full).

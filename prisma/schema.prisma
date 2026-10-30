@@ -49,6 +49,8 @@ model StoreConfig {
   lastManagerSyncAt DateTime?
   // Latest explicit Google disconnect, retained while the Shopify app remains installed.
   gscConsentRevokedAt DateTime?
+  // Monotonic consent ordering, independent of wall-clock corrections.
+  gscConsentRevokedOrder BigInt @default(0)
   nextRunAt        DateTime?
   enabled          Boolean  @default(false)
   createdAt        DateTime @default(now())
@@ -144,6 +146,13 @@ model StoreActivity {
   detail            String   @default("")
   createdAt         DateTime @default(now())
   @@index([shop, createdAt])
+}
+
+// One database-serialized counter for Google Connect/Disconnect intents.
+// No merchant identity or token is retained in this global sequence.
+model GscConsentOrderCounter {
+  id       Int    @id
+  sequence BigInt @default(0)
 }
 
 model GoogleAuthState {

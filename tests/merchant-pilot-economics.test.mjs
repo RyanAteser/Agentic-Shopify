@@ -15,7 +15,7 @@ const pilot=()=>({
   }))
 });
 const ledger=(cost=100,basis="invoice-backed")=>({
-  protocol:"paired-editorial-costs-v1",costBasis:basis,laborValueCentsPerHour:3000,
+  protocol:"paired-editorial-costs-v1",currency:"USD",costBasis:basis,laborValueCentsPerHour:3000,
   pairs:Array.from({length:20},(_,i)=>({
     id:"case_"+i,aiExternalCostCents:cost,manualExternalCostCents:0
   }))
@@ -107,6 +107,9 @@ test("strict non-negative integer costs, cost basis and rate are required",()=>{
   l.laborValueCentsPerHour=3000;
   l.costBasis="unknown";
   assert.throws(()=>evaluatePilotEconomics(p,l),/costBasis/);
+  l.costBasis="invoice-backed";
+  l.currency="EUR";
+  assert.throws(()=>evaluatePilotEconomics(p,l),/currency/);
 });
 
 test("costs on rejected attempts still appear in the expense denominator",()=>{

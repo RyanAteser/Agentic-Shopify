@@ -17,7 +17,13 @@ export type VerifiedStoreProduct = {
   url: string;
 };
 
-export function parseVerifiedPublishedProducts(shop: string, raw: unknown): VerifiedStoreProduct[] {
+/** A bounded sample, not a complete inventory. hasMore is attested by Shopify. */
+export type VerifiedProductSample = {
+  products: VerifiedStoreProduct[];
+  hasMore: boolean;
+};
+
+export function parseVerifiedPublishedProducts(shop: string, raw: unknown): VerifiedProductSample {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new ProductContextUnavailableError();
   }
@@ -31,6 +37,14 @@ export function parseVerifiedPublishedProducts(shop: string, raw: unknown): Veri
   const products = data?.products as Record<string, unknown> | undefined;
   if (actualShop?.myshopifyDomain !== shop || !Array.isArray(products?.nodes) ||
       products.nodes.length > 20) {
+    throw new ProductContextUnavailableError();
+  }
+  const pageInfo = products.pageInfo as Record<string, unknown> | undefined;
+  // Without Shopify's pagination flag, twenty returned rows could be the
+  // first twenty of thousands. Never tell the model the sample is complete.
+  if (!pageInfo || typeof pageInfo !== "object" || Array.isArray(pageInfo) ||
+      typeof pageInfo.hasNextPage !== "boolean" ||
+      (pageInfo.hasNextPage && products.nodes.length === 0)) {
     throw new ProductContextUnavailableError();
   }
 
@@ -65,7 +79,7 @@ export function parseVerifiedPublishedProducts(shop: string, raw: unknown): Veri
       url: product.onlineStoreUrl,
     });
   }
-  return result;
+  return { products: result, hasMore: pageInfo.hasNextPage };
 }
 
 type ReadOnlyAdmin = {
@@ -74,12 +88,13 @@ type ReadOnlyAdmin = {
 
 export async function fetchVerifiedPublishedProducts(
   shop: string, admin: ReadOnlyAdmin
-): Promise<VerifiedStoreProduct[]> {
+): Promise<VerifiedProductSample> {
   try {
     const response = await admin.graphql(`#graphql query AgenticProductContext {
       shop { myshopifyDomain }
       products(first: 20, query: "status:active published_status:published") {
         nodes { title description onlineStoreUrl }
+        pageInfo { hasNextPage }
       }
     }`);
     if (response.ok === false) throw new ProductContextUnavailableError();

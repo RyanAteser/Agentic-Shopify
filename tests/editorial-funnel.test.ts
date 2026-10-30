@@ -46,3 +46,33 @@ test("repeated status groups sum and invalid counts fail closed", () => {
   assert.throws(() => summarizeEditorialCohort([{status:"failed",count:-1}], []));
   assert.throws(() => summarizeEditorialCohort([], [{status:"published",count:0.5}]));
 });
+
+test("resolved-only publication rate does not hide unresolved editorial backlog",()=>{
+  const result=summarizeEditorialCohort([],[
+    {status:"published",count:5},{status:"rejected",count:5},
+    {status:"ready",count:90}
+  ]);
+  assert.equal(result.publishedAmongResolvedPct,50);
+  assert.equal(result.resolvedCoveragePct,10);
+  assert.equal(result.publishedAmongAllDraftsPct,5);
+  assert.equal(result.awaitingReview,90);
+});
+test("pending-only and tiny cohorts never imply a mature publication rate",()=>{
+  const pending=summarizeEditorialCohort([],[{status:"needs_review",count:10}]);
+  assert.equal(pending.resolvedCoveragePct,0);
+  assert.equal(pending.publishedAmongAllDraftsPct,0);
+  assert.equal(pending.publishedAmongResolvedPct,null);
+  const small=summarizeEditorialCohort([],[{status:"published",count:2}]);
+  assert.equal(small.resolvedCoveragePct,null);
+  assert.equal(small.publishedAmongAllDraftsPct,null);
+});
+test("corrupt aggregate sums above safe integer range are rejected",()=>{
+  assert.throws(()=>summarizeEditorialCohort([],[
+    {status:"published",count:Number.MAX_SAFE_INTEGER},
+    {status:"rejected",count:1}
+  ]),/safe integer range/);
+  assert.throws(()=>summarizeEditorialCohort([
+    {status:"completed",count:Number.MAX_SAFE_INTEGER},
+    {status:"failed",count:1}
+  ],[]),/safe integer range/);
+});

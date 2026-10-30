@@ -95,7 +95,7 @@ async function hasMatchingN8nAck(response: Response, shop: string, jobId: string
 
 /**
  * Send one ALREADY CLAIMED job. No automatic retry, no redirects, no
- * refund. The caller handles only definitively rejected requests.
+ * status-only refund. Callers may refund only known pre-POST failures.
  * Kept separate from Shopify product discovery for transport fault tests.
  */
 export async function deliverClaimedN8nJob(
@@ -121,10 +121,8 @@ export async function deliverClaimedN8nJob(
     return preserveUncertainOutcome(() => recordUncertain(shop, jobId,
       "n8n HTTP " + response.status + "; acceptance unknown; reconcile execution"));
   }
-  if (outcome === "rejected") {
-    // Only a caller with a definitive rejection may invoke failCreditedJob.
-    throw new Error("n8n rejected generation request (HTTP " + response.status + ")");
-  }
+  // A 4xx is not a verifiable rejection receipt. It may come from a proxy
+  // or a workflow that already started paid work, so never refund on status.
   // 2xx without a matching 202 job-specific acknowledgment is ambiguous,
   // not an accepted generation. Never refund or send the same job again.
   if (!(await hasMatchingN8nAck(response, shop, jobId))) {

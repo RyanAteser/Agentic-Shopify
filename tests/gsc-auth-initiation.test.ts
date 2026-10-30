@@ -216,3 +216,28 @@ test("PostgreSQL concurrent Connect and Disconnect leave no stale state",{
     }
   }
 });
+
+
+test("monotonic consent order is unique and ignores application wall-clock jumps",async()=>{
+  const originalNow=Date.now;
+  try{
+    const first=await nextGoogleConsentOrder();
+    Date.now=()=>originalNow()-7*24*60*60*1000;
+    const second=await nextGoogleConsentOrder();
+    Date.now=()=>originalNow()+7*24*60*60*1000;
+    const third=await nextGoogleConsentOrder();
+    assert.equal(second,first+1n);
+    assert.equal(third,second+1n);
+  }finally{
+    Date.now=originalNow;
+  }
+});
+
+test("PostgreSQL simultaneous consent intents receive distinct serialized orders",{
+  skip:!process.env.DATABASE_URL
+},async()=>{
+  const orders=await Promise.all(Array.from({length:8},()=>nextGoogleConsentOrder()));
+  assert.equal(new Set(orders).size,8);
+  const sorted=[...orders].sort((a,b)=>a<b?-1:a>b?1:0);
+  for(let i=1;i<sorted.length;i++)assert.equal(sorted[i],sorted[i-1]+1n);
+});

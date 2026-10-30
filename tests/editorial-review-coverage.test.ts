@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
 import {
-  loadDraftReviewCoverage, summarizeDraftReviewCoverage, summarizeUnreviewedAge,
+  loadDraftReviewCoverage, summarizeDraftReviewCoverage, summarizeUnreviewedAge, summarizeRecordedReviewElapsed,
 } from "../app/lib/editorial-review-coverage.server";
 
 test("coverage denominator includes unresolved and rejected drafts, not only decisions", () => {
@@ -132,4 +132,50 @@ test("no actionable queue is not confused with missing historical review records
   assert.equal(result.oldestActionableDays,null);
   assert.equal(result.actionableUnreviewed,0);
   assert.equal(result.aged14Days,1);
+});
+
+test("latest recorded review elapsed reports median and nearest-rank p90 without calling it first response",()=>{
+  const now=new Date("2026-10-30T12:00:00Z");
+  const drafts=Array.from({length:5},(_,i)=>({
+    id:"draft"+i,status:"ready",createdAt:new Date(now.getTime()-10*3600000)
+  }));
+  const reviews=drafts.map((d,i)=>({
+    draftId:d.id,decision:"usable",reviewedAt:new Date(d.createdAt.getTime()+(i+1)*3600000)
+  }));
+  const result=summarizeRecordedReviewElapsed(drafts,reviews,now);
+  assert.equal(result.reviewElapsedSamples,5);
+  assert.equal(result.medianRecordedReviewHours,3);
+  assert.equal(result.p90RecordedReviewHours,5);
+  assert.equal(result.reviewElapsedInvalid,0);
+});
+test("unreviewed drafts never count as instant decisions and small cohorts abstain",()=>{
+  const now=new Date("2026-10-30T12:00:00Z");
+  const drafts=Array.from({length:6},(_,i)=>({id:"draft"+i,status:"ready",
+    createdAt:new Date(now.getTime()-36000000)}));
+  const reviews=drafts.slice(0,4).map(d=>({draftId:d.id,decision:"usable",
+    reviewedAt:new Date(now.getTime()-3600000)}));
+  const result=summarizeRecordedReviewElapsed(drafts,reviews,now);
+  assert.equal(result.reviewElapsedSamples,4);
+  assert.equal(result.medianRecordedReviewHours,null);
+  assert.equal(result.p90RecordedReviewHours,null);
+});
+test("future and pre-creation review dates abstain instead of skewing latency",()=>{
+  const now=new Date("2026-10-30T12:00:00Z");
+  const drafts=Array.from({length:5},(_,i)=>({id:"draft"+i,status:"ready",
+    createdAt:new Date(now.getTime()-36000000)}));
+  const reviews=drafts.map(d=>({draftId:d.id,decision:"usable",
+    reviewedAt:new Date(now.getTime()-3600000)}));
+  reviews[0].reviewedAt=new Date(now.getTime()+1000);
+  const result=summarizeRecordedReviewElapsed(drafts,reviews,now);
+  assert.equal(result.reviewElapsedInvalid,1);
+  assert.equal(result.medianRecordedReviewHours,null);
+  reviews[0].reviewedAt=new Date(now.getTime()-72000000);
+  assert.equal(summarizeRecordedReviewElapsed(drafts,reviews,now).p90RecordedReviewHours,null);
+});
+test("duplicate or foreign review records are rejected",()=>{
+  const now=new Date("2026-10-30T12:00:00Z");
+  const drafts=[{id:"a",status:"ready",createdAt:new Date(now.getTime()-3600000)}];
+  const r={draftId:"a",decision:"usable",reviewedAt:now};
+  assert.throws(()=>summarizeRecordedReviewElapsed(drafts,[r,r],now),/Invalid editorial cohort review/);
+  assert.throws(()=>summarizeRecordedReviewElapsed(drafts,[{...r,draftId:"foreign"}],now),/Invalid editorial cohort review/);
 });

@@ -19,8 +19,8 @@ Each sweep selects at most **three** jobs that are still `queued`, version 1, an
 | Version 1, aged, still queued | Eligible for one atomic claim and a single n8n POST |
 | Fresh queued or version 0 legacy queued | No recovery; operator inspects legacy jobs |
 | Running, completed, failed or dispatch_uncertain | Never replay |
-| Definitive permanent n8n rejection / pre-network failure | Mark failed and refund once; scheduled jobs conditionally restore the due slot using stored snapshot |
-| Timeout, HTTP 408/409/429/5xx or lost response | Keep credit; mark uncertain when possible; inspect n8n before manual reconciliation |
+| Verified pre-POST failure | Mark failed and refund once; scheduled jobs conditionally restore the due slot using stored snapshot |
+| **Any non-2xx after attempted POST** (including 400/401/403/404/422), timeout, redirect or lost response | Keep credit; mark uncertain when possible; inspect n8n before manual reconciliation |
 | Concurrent callback or another worker wins | No refund, replay or status overwrite |
 | Corrupt schedule snapshot | No dispatch; atomically quarantine to version 0 while preserving queued status, credit and error evidence; operator investigates |
 
@@ -41,7 +41,7 @@ The blog-writer workflow now switches from a generic `onReceived` response to a 
 1. Confirm commercial rights to operate n8n for configurable merchant automations. Written clearance or an appropriate Enterprise/OEM agreement is a launch gate; do not infer rights from source availability.
 2. Import `n8n/shopify-queued-recovery.json` into an authorized n8n instance. It is **inactive by default**. Replace the placeholder app host and use a dedicated Header Auth credential in n8n's credential store; never put the key in workflow JSON.
 3. Verify Shopify development-store install, tenant redaction, n8n webhook mapping, server-side secret rotation, rate limiting, and staging migrations before enabling the workflow. The recovery workflow's suggested 10-minute interval is not a production SLA.
-4. Run failure-injection in staging: crash immediately after queued commit; two concurrent recovery sweeps; callback during sweep; lost HTTP response; definitive rejection; corrupt metadata; revoked merchant; database outage.
+4. Run failure-injection in staging: crash immediately after queued commit; two concurrent recovery sweeps; callback during sweep; lost HTTP response; 4xx after workflow acceptance; pre-POST validation failure; corrupt metadata; revoked merchant; database outage.
 5. Instrument counts of eligible queued jobs by age, successful n8n acknowledgments, callback completion latency, reconciliations, refunds, abandoned credits, useful reviewed drafts, and merchant support incidents. Track counts by tenant internally with access controls, never leak cross-merchant data. Do not call job dispatches revenue or conversion growth.
 
 ## Rollback and migration
@@ -167,3 +167,16 @@ The shared n8n bridge secret previously authorized all article-completion callba
 This is job-scoped authorization, **not** proof that the model ran, that the n8n execution completed, or that a captured token cannot be replayed. Existing completed callbacks are idempotent. The capability can appear in n8n saved execution data, so operator access, retention and pruning are mandatory. Rotating the signing key invalidates outstanding callbacks; reconcile in-flight jobs first. The workflow remains inactive pending staging tests of real n8n expression headers, exact callback responses, wrong-shop/job rejection, retry behavior and secret rotation. No merchant traffic or avoided incident count was measured.
 
 Security context: [Shopify authenticate every request](https://shopify.dev/docs/apps/build/security/app-server/authenticate-every-request), [n8n security audit](https://docs.n8n.io/hosting/securing/security-audit/).
+
+
+## No status-only credit refunds after n8n POST (2026-10-29)
+
+**Finding:** The dispatcher previously treated HTTP 400, 401, 403, 404, 405, 410, 413, 415 and 422 as *definitive* n8n rejections and automatically refunded a reserved generation credit. But an HTTP error returned after an attempted POST is not a durable, job-specific receipt proving that n8n never began the workflow. An intermediary or workflow can return an error after some work has already started. A delayed article callback could then race a refunded job, causing a false failed state, duplicate spending opportunities or merchant support disputes. This is a failure-mode analysis, not evidence of a real incident.
+
+**Change:** After an attempted POST, **all non-2xx statuses** are classified as `dispatch_uncertain`, even apparently permanent 4xx responses. As before, any 2xx response must contain the exact 202 JSON acknowledgment matching `shop` and `jobId`; otherwise it is also uncertain. No automatic replay, credit refund, or schedule rewind occurs for uncertain jobs. Known failures **before** an n8n POST (missing configuration, verified product-context failure, invalid URL, preflight errors) can still fail and refund under existing store-row locks. An authenticated callback may still complete an uncertain job once, without changing its reserved credit.
+
+**Tradeoff:** A genuine authentication failure or bad webhook path may now strand a credit until an operator checks the n8n execution log. This is intentional conservatism, not a complete billing solution. A future signed, durable *rejection-before-work* receipt and an authenticated reconciliation ledger could permit safe automatic refunds. A status code or response body without that guarantee cannot. Never assume the 202 acceptance acknowledgment proves completion.
+
+**Regression plan:** For every previously refundable 4xx, use an isolated HTTP stub to assert exactly one POST, `dispatch_uncertain` state, no refund, and no retry. Verify a valid late callback after HTTP 400 still completes once. Run both SQLite and PostgreSQL CI. In authorized staging, inject a proxy 400 after webhook acceptance, confirm execution-history correlation, and measure false uncertain cases and time to reconcile. Do not deploy or activate workflows for this test without approval.
+
+**Impact hypothesis:** Lower risk of false credit refunds and duplicate model expenditure, with potentially higher manual reconciliation workload. No merchant-level incident reduction, retained revenue, draft acceptance or SEO lift has been measured. Reference: [n8n execution history](https://docs.n8n.io/workflows/executions/all-executions/), [n8n Webhook and Respond to Webhook behavior](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.respondtowebhook/).

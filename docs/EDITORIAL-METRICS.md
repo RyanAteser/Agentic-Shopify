@@ -87,3 +87,40 @@ minutes coverage, blind-score factual quality and product links, and compare
 review time against human-written controls. Google's people-first guidance
 prioritizes usefulness over raw automated article volume:
 https://developers.google.com/search/docs/fundamentals/creating-helpful-content
+
+## Cohort-aligned review participation (2026-10-30)
+
+The Growth dashboard now adds a **draft-creation-date cohort** to complement
+the separate review-decision-date cohort. The denominator is **every draft
+created in the last 28 x 24 hours** for the authenticated shop, including
+pending, rejected, published, and reconciliation statuses. The numerator is
+the number of those draft IDs with a recorded usable or rejected review,
+regardless of the review's timestamp. This avoids interpreting voluntary
+review submissions alone as merchant-wide editorial adoption.
+
+- Display counts for recorded, unrecorded, usable, rejected, and historically
+  published drafts lacking a recorded review. The latter is a diagnostic for
+  legacy/imported data, **not** evidence that the current publisher can bypass
+  the mandatory current usable review.
+- Display the percentage only when at least five drafts were created. The
+  bounded query loads only IDs and statuses for at most 1,000 drafts and
+  corresponding decisions. Above that cap it abstains entirely, never
+  presenting a partial cohort as complete.
+- The creation-date cohort is **not** the review-date cohort, a publication
+  rate, an up-to-date review-approval count, or a randomized treatment effect.
+  Review renewal updates the same row. A usable decision may become stale
+  after a draft edit, and the metric does not imply a factual check occurred.
+- All queries filter by authenticated shop; no article body, merchant content,
+  buyer data, order data, new permissions, or third-party tracking are required.
+
+**Pilot design:** Pre-register a set of eligible drafts and compare the
+percentage with recorded decisions, draft acceptance after blinded factual
+review, confirmed product-link errors, and optional self-reported review time.
+Include unresolved and rejected drafts. A high coverage rate is not proof
+of helpful content or sales. Google's guidance explicitly prioritizes
+original, accurate, people-first content over automation volume:
+https://developers.google.com/search/docs/fundamentals/creating-helpful-content
+
+Shopify's analytics platform may eventually support separately consented
+merchant outcome measurement, but that is not authorized or implemented here:
+https://shopify.dev/docs/apps/build/analytics

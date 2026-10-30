@@ -55,7 +55,16 @@ export function evaluatePilot(input){
     fail("pairs exceed planned sample or are not an array");
   const ids=new Set();
   const pairs=input.pairs.map((p,i)=>{
-    record(p,["id","order","blindScored","ai","manual"],"pairs["+i+"]");
+    // Merchant groups are opaque *study-local* random labels, never shop domains.
+    // Accept legacy pair records without groups for descriptive results, but do
+    // not treat a single merchant's many drafts as broad merchant evidence.
+    const fields=["id","order","blindScored","ai","manual"];
+    const hasGroup=Object.hasOwn(p ?? {}, "merchantGroup");
+    record(p,hasGroup?[...fields,"merchantGroup"]:fields,"pairs["+i+"]");
+    if(hasGroup && (typeof p.merchantGroup!=="string" ||
+        !/^group_[A-Za-z0-9_-]{6,40}$/.test(p.merchantGroup))) {
+      fail("merchantGroup must be a study-local opaque random label");
+    }
     if(typeof p.id!=="string"||!/^[A-Za-z0-9_-]{1,40}$/.test(p.id)||ids.has(p.id))
       fail("pair IDs must be unique opaque identifiers");
     ids.add(p.id);
@@ -63,6 +72,27 @@ export function evaluatePilot(input){
     if(typeof p.blindScored!=="boolean")fail("blindScored must be boolean");
     return {...p,ai:arm(p.ai,"pairs["+i+"].ai"),manual:arm(p.manual,"pairs["+i+"].manual")};
   });
+  // A complete pilot can be dominated by one shop, even if it has 20 pairs.
+  // Report only aggregate counts; never expose merchant-group labels in output.
+  const groupedPairs=pairs.filter(p=>Object.hasOwn(p,"merchantGroup"));
+  if(groupedPairs.length>0 && groupedPairs.length!==pairs.length) {
+    fail("merchantGroup must be present on every recorded pair or none");
+  }
+  const merchantGroupsProvided=groupedPairs.length===input.plannedPairs;
+  const groupCounts=new Map();
+  for(const p of groupedPairs) {
+    groupCounts.set(p.merchantGroup,(groupCounts.get(p.merchantGroup)??0)+1);
+  }
+  const largestGroupPairs=groupCounts.size?Math.max(...groupCounts.values()):0;
+  const merchantDiversity={
+    groupsProvided:merchantGroupsProvided,
+    merchantGroups:groupCounts.size,
+    largestGroupPairs,
+    largestGroupSharePct:groupedPairs.length?100*largestGroupPairs/groupedPairs.length:null,
+    // Conservative operational screen, not a cluster-adjusted power calculation.
+    operationalScreenPassed:merchantGroupsProvided&&groupCounts.size>=5&&
+      largestGroupPairs/input.plannedPairs<=0.25
+  };
   const complete=pairs.filter(p=>p.ai!==null&&p.manual!==null);
   const ai=summarizeArm(complete,"ai"),manual=summarizeArm(complete,"manual");
   const orderCounts={
@@ -112,11 +142,13 @@ export function evaluatePilot(input){
     relativeLaborPerPassPct>=0?"no-observed-efficiency-gain":
     orderSensitivity==="inconclusive"?"order-strata-inconclusive":
     orderSensitivity!=="consistent-ai-advantage"?"order-sensitive-efficiency":
+    !merchantDiversity.groupsProvided?"merchant-diversity-unverified":
+    !merchantDiversity.operationalScreenPassed?"merchant-concentration-risk":
     "candidate-for-independent-review";
   return {
     protocol:PROTOCOL,plannedPairs:input.plannedPairs,recordedPairs:pairs.length,
     completedPairs:complete.length,incompletePairs:input.plannedPairs-complete.length,
-    orderCounts,balancedOrder,allBlindScoredAttested:allBlind,
+    orderCounts,balancedOrder,allBlindScoredAttested:allBlind,merchantDiversity,
     status:readyForReview?"ready-for-external-review":"insufficient-or-incomplete",
     ai,manual,pairedQuality,
     qualityPassRateDifferencePercentagePoints:readyForReview?100*(ai.qualityPassed-manual.qualityPassed)/complete.length:null,
@@ -131,6 +163,9 @@ export function evaluatePilot(input){
       "The decisionSupport field is descriptive triage, not a launch, statistical non-inferiority, or publishing authorization.",
       "Order-stratified efficiency is descriptive only. Review order may affect labor, but this tool cannot identify carryover, learning or period effects; small strata can be unstable.",
       "Only completed pairs enter arm summaries; incomplete planned pairs block comparative metrics.",
+      "Merchant-group labels are self-reported, study-local, and are not independently verified against distinct merchants.",
+      "The five-group and 25%-maximum-concentration thresholds are operational screens, not an effective sample size calculation or a cluster-robust confidence interval.",
+      "Repeated drafts from one merchant can be correlated. Even a diverse pilot requires merchant-cluster-aware replication and analysis before generalization.",
       "No merchant revenue, conversions, retention, organic traffic, or causal lift is measured."
     ]
   };

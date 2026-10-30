@@ -5,7 +5,7 @@ import {evaluatePilot} from "../scripts/merchant-pilot-evaluate.mjs";
 const outcome=(decision="usable",laborMinutes=10,criticalFactualErrors=0,productLinkErrors=0)=>
   ({decision,laborMinutes,criticalFactualErrors,productLinkErrors});
 const pair=i=>({
-  id:"case_"+i,order:i%2?"ai-first":"manual-first",blindScored:true,merchantGroup:"group_"+String(i%10).padStart(6,"0"),
+  id:"case_"+i,order:i%2?"ai-first":"manual-first",blindScored:true,merchantGroup:"group_"+String(Math.floor(i/2)).padStart(6,"0"),
   ai:outcome("usable",10),manual:outcome("usable",20)
 });
 const pilot=(n=20)=>({
@@ -251,4 +251,25 @@ test("incomplete and ungrouped pilots never calculate merchant sensitivity",()=>
   const r=evaluatePilot(p);
   assert.equal(r.merchantSensitivity,"not-assessed");
   assert.equal(r.merchantSensitivitySummary,null);
+});
+
+test("global review-order balance cannot conceal merchant-order confounding",()=>{
+  const p=pilot();
+  p.pairs.forEach((x,i)=>{x.merchantGroup="group_"+String(i%10).padStart(6,"0");});
+  const r=evaluatePilot(p);
+  assert.equal(r.balancedOrder,true);
+  assert.equal(r.merchantDiversity.operationalScreenPassed,true);
+  assert.equal(r.merchantOrderCoverage.groupsWithBothOrders,0);
+  assert.equal(r.merchantOrderCoverage.groupsWithSingleOrder,10);
+  assert.equal(r.decisionSupport,"merchant-order-confounding");
+});
+test("within-merchant balanced order allows independent review triage",()=>{
+  const r=evaluatePilot(pilot());
+  assert.equal(r.merchantOrderCoverage.groupsWithBothOrders,10);
+  assert.equal(r.merchantOrderCoverage.groupsWithSingleOrder,0);
+  assert.equal(r.decisionSupport,"candidate-for-independent-review");
+});
+test("legacy pilots do not reveal merchant-order coverage",()=>{
+  const p=pilot();p.pairs.forEach(x=>{delete x.merchantGroup;});
+  assert.equal(evaluatePilot(p).merchantOrderCoverage,null);
 });

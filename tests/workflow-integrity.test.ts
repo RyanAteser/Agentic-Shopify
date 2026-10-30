@@ -110,6 +110,7 @@ test("writer callback destination is operator-pinned and cannot be changed by we
   const untrusted = {
     jobId: "job-1", shop: "demo.myshopify.com", topic: "boots",
     callbackToken: "a".repeat(43), productCatalog: [], productCatalogHasMore: false,
+    productCatalogSampledCount: 0, productCatalogMissingUrls: 0,
     callbackUrl: "https://attacker.example/collect-credentials", brief: {}
   };
   const prepared = runInNewContext("(() => {" + find("Prepare Brief").parameters.jsCode + "})()", {
@@ -252,6 +253,7 @@ test("writer packs complete product URLs into parseable bounded JSON instead of 
   const input = {
     jobId: "job-1", shop: "merchant.myshopify.com", topic: "Useful products",
     callbackToken: "a".repeat(43), productCatalog: catalog, productCatalogHasMore: false,
+    productCatalogSampledCount: 20, productCatalogMissingUrls: 0,
     brief: {
       audience: "a".repeat(2000), brandVoice: "b".repeat(2000),
       seedTopics: "c".repeat(2000),
@@ -291,6 +293,7 @@ test("writer excludes over-budget product URLs and marks omitted products withou
   const input = {
     jobId: "job-2", shop: "merchant.myshopify.com", topic: "Mug guide",
     callbackToken: "b".repeat(43), productCatalogHasMore: false,
+    productCatalogSampledCount: 2, productCatalogMissingUrls: 0,
     productCatalog: [
       { name: "Mug", description: "A reusable cup", url: good },
       { name: "Too long", description: "Unusable", url: good + "x".repeat(400) }
@@ -307,7 +310,7 @@ test("writer excludes over-budget product URLs and marks omitted products withou
     { name: "Mug", description: "A reusable cup", url: good }
   ]);
   const empty = runInNewContext("(() => {" + prepare.parameters.jsCode + "})()", {
-    $input: { first: () => ({ json: { body: { ...input, productCatalog: [] } } }) }
+    $input: { first: () => ({ json: { body: { ...input, productCatalog: [], productCatalogSampledCount: 0 } } }) }
   }) as Array<{ json: { user: string } }>;
   const emptyContext = JSON.parse(empty[0].json.user.split("brief: ")[1]);
   assert.equal(emptyContext.productCountSampled, 0);
@@ -324,6 +327,7 @@ test("writer marks an otherwise fitting 20-product Shopify sample incomplete whe
   const input = {
     jobId: "job-more", shop: "merchant.myshopify.com", topic: "Guide",
     callbackToken: "c".repeat(43), productCatalogHasMore: true,
+    productCatalogSampledCount: 20, productCatalogMissingUrls: 0,
     productCatalog: Array.from({ length: 20 }, (_, i) => ({
       name: "Product " + i, description: "Simple product",
       url: "https://merchant.example/products/" + i
@@ -345,4 +349,38 @@ test("writer marks an otherwise fitting 20-product Shopify sample incomplete whe
     /Missing or invalid Shopify catalog sample evidence/);
   const complete = JSON.parse(prepareInput({ ...input, productCatalogHasMore: false })[0].json.user.split("brief: ")[1]);
   assert.equal(complete.productSampleTruncated, false);
+});
+
+
+test("writer distinguishes no storefront URLs from a genuinely empty published catalog", () => {
+  const workflow = load("n8n/shopify-blog-writer.json");
+  const prepare = (workflow.nodes as Array<NodeShape & { parameters: { jsCode?: string } }>)
+    .find(node => node.name === "Prepare Brief");
+  assert.ok(prepare?.parameters.jsCode);
+  const run = (body: Record<string, unknown>) => runInNewContext(
+    "(() => {" + prepare.parameters.jsCode + "})()",
+    { $input: { first: () => ({ json: { body } }) } }
+  ) as Array<{ json: { user: string } }>;
+  const base = {
+    jobId: "job-null-urls", shop: "demo.myshopify.com", topic: "Care guide",
+    callbackToken: "d".repeat(43), brief: {}, productCatalog: [],
+    productCatalogHasMore: false, productCatalogSampledCount: 0,
+    productCatalogMissingUrls: 0
+  };
+  const empty = JSON.parse(run(base)[0].json.user.split("brief: ")[1]);
+  assert.equal(empty.shopifyRowsSampled, 0);
+  assert.equal(empty.productsWithoutStorefrontUrl, 0);
+  assert.equal(empty.productSampleTruncated, false);
+  const noUrls = JSON.parse(run({ ...base, productCatalogSampledCount: 2,
+    productCatalogMissingUrls: 2 })[0].json.user.split("brief: ")[1]);
+  assert.equal(noUrls.shopifyRowsSampled, 2);
+  assert.equal(noUrls.productsWithoutStorefrontUrl, 2);
+  assert.equal(noUrls.productCountSampled, 0);
+  assert.equal(noUrls.productSampleTruncated, true);
+  assert.match(run({ ...base, productCatalogSampledCount: 2,
+    productCatalogMissingUrls: 2 })[0].json.user, /productsWithoutStorefrontUrl/);
+  assert.throws(() => run({ ...base, productCatalogSampledCount: 2,
+    productCatalogMissingUrls: 0 }), /Inconsistent Shopify product sample counts/);
+  assert.throws(() => run({ ...base, productCatalogSampledCount: -1 }),
+    /Inconsistent Shopify product sample counts/);
 });

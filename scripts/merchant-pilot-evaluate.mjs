@@ -74,17 +74,37 @@ export function evaluatePilot(input){
   const readyForReview=complete.length===input.plannedPairs&&complete.length>=20&&balancedOrder&&allBlind;
   const relativeLaborPerPassPct=readyForReview&&ai.laborMinutesPerQualityPass!==null&&manual.laborMinutesPerQualityPass!==null
     ?100*(ai.laborMinutesPerQualityPass/manual.laborMinutesPerQualityPass-1):null;
+  // Discordant pairs matter: aggregate quality rates alone hide which topics regress.
+  const qualityPass=x=>x.decision==="usable"&&x.criticalFactualErrors===0&&x.productLinkErrors===0;
+  const pairedQuality={
+    bothPass:complete.filter(p=>qualityPass(p.ai)&&qualityPass(p.manual)).length,
+    aiOnlyPass:complete.filter(p=>qualityPass(p.ai)&&!qualityPass(p.manual)).length,
+    manualOnlyPass:complete.filter(p=>!qualityPass(p.ai)&&qualityPass(p.manual)).length,
+    neitherPass:complete.filter(p=>!qualityPass(p.ai)&&!qualityPass(p.manual)).length
+  };
+  // This is a conservative descriptive triage, NEVER a statistical or launch approval.
+  const decisionSupport=!readyForReview?"insufficient-evidence":
+    ai.criticalFactualErrors>0||ai.productLinkErrors>0||ai.qualityPassed<manual.qualityPassed
+      ?"quality-review-required":
+    relativeLaborPerPassPct===null?"cannot-compare-efficiency":
+    relativeLaborPerPassPct>=0?"no-observed-efficiency-gain":
+    "candidate-for-independent-review";
   return {
     protocol:PROTOCOL,plannedPairs:input.plannedPairs,recordedPairs:pairs.length,
     completedPairs:complete.length,incompletePairs:input.plannedPairs-complete.length,
     orderCounts,balancedOrder,allBlindScoredAttested:allBlind,
     status:readyForReview?"ready-for-external-review":"insufficient-or-incomplete",
-    ai,manual,relativeLaborPerQualityPassPct:relativeLaborPerPassPct,
+    ai,manual,pairedQuality,
+    qualityPassRateDifferencePercentagePoints:readyForReview?100*(ai.qualityPassed-manual.qualityPassed)/complete.length:null,
+    relativeLaborPerQualityPassPct:relativeLaborPerPassPct,
+    decisionSupport,
     limitations:[
       "Outcomes are descriptive; registration, randomization, and blinding are self-attested, not verified.",
       "Labor minutes are self-reported, include all attempts, and exclude machine wait time and model fees.",
       "Quality pass requires human usable decision, zero critical factual errors, and zero product-link errors.",
       "Missing or incomplete pairs never count as successes; comparisons abstain until all planned pairs are complete and review gates pass.",
+      "The decisionSupport field is descriptive triage, not a launch, statistical non-inferiority, or publishing authorization.",
+      "Only completed pairs enter arm summaries; incomplete planned pairs block comparative metrics.",
       "No merchant revenue, conversions, retention, organic traffic, or causal lift is measured."
     ]
   };

@@ -5,7 +5,7 @@ import {evaluatePilot} from "../scripts/merchant-pilot-evaluate.mjs";
 const outcome=(decision="usable",laborMinutes=10,criticalFactualErrors=0,productLinkErrors=0)=>
   ({decision,laborMinutes,criticalFactualErrors,productLinkErrors});
 const pair=i=>({
-  id:"case_"+i,order:i%2?"ai-first":"manual-first",blindScored:true,
+  id:"case_"+i,order:i%2?"ai-first":"manual-first",blindScored:true,merchantGroup:"group_"+String(i%10).padStart(6,"0"),
   ai:outcome("usable",10),manual:outcome("usable",20)
 });
 const pilot=(n=20)=>({
@@ -165,4 +165,56 @@ test("incomplete pilot suppresses order-stratified efficiency entirely",()=>{
   assert.equal(r.orderStratifiedEfficiency,null);
   assert.equal(r.orderSensitivity,"not-assessed");
   assert.equal(r.decisionSupport,"insufficient-evidence");
+});
+
+test("legacy anonymized pilots remain readable but cannot claim multi-merchant support",()=>{
+  const p=pilot();
+  p.pairs.forEach(x=>{delete x.merchantGroup;});
+  const r=evaluatePilot(p);
+  assert.equal(r.status,"ready-for-external-review");
+  assert.equal(r.relativeLaborPerQualityPassPct,-50);
+  assert.equal(r.merchantDiversity.groupsProvided,false);
+  assert.equal(r.decisionSupport,"merchant-diversity-unverified");
+});
+
+test("a single merchant cannot be treated as twenty independent merchant pilots",()=>{
+  const p=pilot();
+  p.pairs.forEach(x=>{x.merchantGroup="group_000001";});
+  const r=evaluatePilot(p);
+  assert.equal(r.merchantDiversity.merchantGroups,1);
+  assert.equal(r.merchantDiversity.largestGroupPairs,20);
+  assert.equal(r.merchantDiversity.largestGroupSharePct,100);
+  assert.equal(r.decisionSupport,"merchant-concentration-risk");
+});
+
+test("a few merchants dominating otherwise balanced observations block favorable triage",()=>{
+  const p=pilot();
+  p.pairs.forEach((x,i)=>{x.merchantGroup=i<10?"group_000001":"group_"+String(i).padStart(6,"0");});
+  const r=evaluatePilot(p);
+  assert.equal(r.merchantDiversity.merchantGroups,11);
+  assert.equal(r.merchantDiversity.largestGroupSharePct,50);
+  assert.equal(r.merchantDiversity.operationalScreenPassed,false);
+  assert.equal(r.decisionSupport,"merchant-concentration-risk");
+});
+
+test("multiple balanced study-local groups qualify for independent assessment, not statistical proof",()=>{
+  const r=evaluatePilot(pilot());
+  assert.equal(r.merchantDiversity.groupsProvided,true);
+  assert.equal(r.merchantDiversity.merchantGroups,10);
+  assert.equal(r.merchantDiversity.largestGroupPairs,2);
+  assert.equal(r.merchantDiversity.operationalScreenPassed,true);
+  assert.equal(r.decisionSupport,"candidate-for-independent-review");
+  assert.equal(JSON.stringify(r).includes("group_000001"),false);
+});
+
+test("group IDs must be opaque, complete, non-identifying and nonempty",()=>{
+  const p=pilot();
+  p.pairs[0].merchantGroup="merchant.myshopify.com";
+  assert.throws(()=>evaluatePilot(p),/merchantGroup/);
+  p.pairs[0].merchantGroup="group_000000";
+  delete p.pairs[0].merchantGroup;
+  assert.throws(()=>evaluatePilot(p),/merchantGroup must be present/);
+  p.pairs[0].merchantGroup="group_000000";
+  p.pairs[0].merchantGroup="";
+  assert.throws(()=>evaluatePilot(p),/merchantGroup/);
 });

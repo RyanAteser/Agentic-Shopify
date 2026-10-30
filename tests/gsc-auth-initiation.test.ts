@@ -2,13 +2,38 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {randomUUID,createHash} from "node:crypto";
 import db from "../app/db.server";
-import {beginGoogleAuthorization,disconnectGoogle,storeGoogleConnection} from "../app/lib/gsc.server";
+import {beginGoogleAuthorization,databaseConsentTime,disconnectGoogle,storeGoogleConnection} from "../app/lib/gsc.server";
 import {eraseMerchantData} from "../app/lib/merchant-redaction.server";
 
 const shopName=()=> "gsc-init-" + randomUUID() + ".myshopify.com";
 const state=(value:string)=>createHash("sha256").update(value).digest("hex");
 const createSession=(shop:string,id:string)=>db.session.create({
   data:{id,shop,state:"",accessToken:"test-only"}
+});
+
+test("GSC consent clock comes from the database, not a skewed worker",async()=>{
+  const shop=shopName(),sessionId="session-"+randomUUID();
+  const originalNow=Date.now;
+  try{
+    await createSession(shop,sessionId);
+    const before=await databaseConsentTime();
+    // A worker can have a badly skewed clock without changing the
+    // shared database time used by both Connect and Disconnect.
+    Date.now=()=>originalNow()+24*60*60*1000;
+    const sampled=await databaseConsentTime();
+    assert.ok(Math.abs(sampled.getTime()-before.getTime())<30_000,
+      "database consent time must ignore a 24-hour worker-clock skew");
+    await disconnectGoogle(shop);
+    const revoked=(await db.storeConfig.findUniqueOrThrow({where:{shop}})).gscConsentRevokedAt;
+    const after=await databaseConsentTime();
+    assert.ok(revoked&&revoked.getTime()>=before.getTime()&&revoked.getTime()<=after.getTime(),
+      "revocation is sampled after the merchant lock on the database clock");
+    assert.equal(await beginGoogleAuthorization(shop,sessionId,state("skewed-worker"),before),"revoked");
+    assert.equal(await db.googleAuthState.count({where:{shop}}),0);
+  }finally{
+    Date.now=originalNow;
+    await eraseMerchantData(shop);
+  }
 });
 
 test("GSC initiation requires a persisted, same-shop session and bounds pending consent",async()=>{

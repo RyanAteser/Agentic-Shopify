@@ -18,8 +18,9 @@ export async function createCreditedJob(shop:string,topic:string){
 }
 
 /**
- * Refund only a definitively rejected job. A network timeout after HTTP POST
- * cannot prove whether n8n accepted the work and must NOT refund automatically.
+ * Refund only a known pre-POST failure or an independently reconciled job.
+ * No HTTP status after an attempted POST proves n8n did not begin paid work.
+ * Callers must never invoke this function for an uncertain dispatch.
  */
 export async function failCreditedJob(shop:string,id:string,error:unknown){
   return db.$transaction(async tx=>{

@@ -7,11 +7,9 @@ const GOOGLE_AUTHORIZE="https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN="https://oauth2.googleapis.com/token";
 const GSC_BASE="https://www.googleapis.com/webmasters/v3";
 
-// The OAuth start must be ordered before Shopify authentication, while
-// Disconnect records revocation after acquiring the merchant lock. Use the
-// *same primary database clock* for both: application workers can have
-// different wall clocks. Never fall back to the worker clock on DB failure.
-// PostgreSQL clock_timestamp() advances within transactions; now() does not.
+// Consent ordering uses a serialized database counter, not wall-clock time.
+// The clock helper remains for an audit timestamp only. Never use timestamps
+// to decide whether a delayed Connect precedes a merchant's Disconnect.
 export async function databaseConsentTime(client:Pick<typeof db,"$queryRaw">=db):Promise<Date>{
   const postgres=/^postgres(?:ql)?:\/\//i.test(process.env.DATABASE_URL??"");
   const rows=postgres
@@ -21,6 +19,16 @@ export async function databaseConsentTime(client:Pick<typeof db,"$queryRaw">=db)
   const instant=raw instanceof Date?raw:new Date(raw);
   if(!Number.isFinite(instant.getTime()))throw new Error("Database consent clock unavailable");
   return instant;
+}
+
+/** Capture Connect intent before asynchronous Shopify authentication. The
+ * atomic increment is committed before returning; no external HTTP work
+ * occurs while holding the counter row lock. Missing seed fails closed. */
+export async function nextGoogleConsentOrder():Promise<bigint>{
+  const row=await db.gscConsentOrderCounter.update({
+    where:{id:1},data:{sequence:{increment:1}},select:{sequence:true}
+  });
+  return row.sequence;
 }
 
 function secrets(){
@@ -76,9 +84,9 @@ export async function verifyGoogleSite(accessToken:string,primaryHost:string) {
  * The StoreConfig lock also serializes concurrent per-shop state limits.
  */
 export async function beginGoogleAuthorization(
-  shop:string,sessionId:string,stateHash:string,requestStartedAt=new Date()
+  shop:string,sessionId:string,stateHash:string,requestOrder:bigint
 ):Promise<"created"|"session_missing"|"rate_limited"|"revoked"> {
-  if(!/^[a-f0-9]{64}$/.test(stateHash)||!Number.isFinite(requestStartedAt.getTime())){
+  if(!/^[a-f0-9]{64}$/.test(stateHash)||typeof requestOrder!=="bigint"||requestOrder<=0n){
     throw new Error("Invalid Google authorization request");
   }
   return db.$transaction(async (tx):Promise<"created"|"session_missing"|"rate_limited"|"revoked">=>{
@@ -92,15 +100,15 @@ export async function beginGoogleAuthorization(
     const config=await tx.storeConfig.upsert({
       where:{shop},create:{shop},update:{updatedAt:new Date()}
     });
-    if(config.gscConsentRevokedAt &&
-      requestStartedAt.getTime()<=config.gscConsentRevokedAt.getTime())return "revoked";
-    await tx.googleAuthState.deleteMany({where:{shop,expiresAt:{lte:requestStartedAt}}});
+    if(requestOrder<=config.gscConsentRevokedOrder)return "revoked";
+    const now=new Date();
+    await tx.googleAuthState.deleteMany({where:{shop,expiresAt:{lte:now}}});
     const pending=await tx.googleAuthState.count({
-      where:{shop,expiresAt:{gt:requestStartedAt}}
+      where:{shop,expiresAt:{gt:now}}
     });
     if(pending>=3)return "rate_limited";
     await tx.googleAuthState.create({
-      data:{stateHash,shop,expiresAt:new Date(requestStartedAt.getTime()+10*60000)}
+      data:{stateHash,shop,expiresAt:new Date(now.getTime()+10*60000)}
     });
     return "created";
   });
@@ -249,12 +257,15 @@ export async function disconnectGoogle(shop:string){
         where:{shop},data:{updatedAt:new Date()}
       });
     }
-    // The revocation boundary is sampled from the same database clock as
-    // Connect's pre-authentication intent, after the merchant row lock.
-    // A skewed application worker must not be able to revive stale consent.
+    // Advance the same database-serialized order as Connect, after the
+    // merchant row lock. A late pre-disconnect Connect has a smaller order
+    // even if worker/database clocks jump or two events share a millisecond.
+    const revocation=await tx.gscConsentOrderCounter.update({
+      where:{id:1},data:{sequence:{increment:1}},select:{sequence:true}
+    });
     const revokedAt=await databaseConsentTime(tx);
     await tx.storeConfig.updateMany({
-      where:{shop},data:{gscConsentRevokedAt:revokedAt}
+      where:{shop},data:{gscConsentRevokedOrder:revocation.sequence,gscConsentRevokedAt:revokedAt}
     });
     await tx.googleAuthState.deleteMany({where:{shop}});
     await tx.searchConsoleConnection.deleteMany({where:{shop}});

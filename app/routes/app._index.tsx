@@ -217,8 +217,10 @@ export default function BlogAgent() {
           {linkReviewMap.get(d.id)?.previewChanged && <p role="status">Stored HTML differs from the safe preview. Correct the draft before approving or publishing.</p>}
           {linkReviewMap.get(d.id)?.previewUnavailable ? <p>Link inventory unavailable because this draft cannot be safely previewed. Inspect and correct the original in the editor.</p> : <>
             {linkReviewMap.get(d.id)?.uniqueTotal === 0 && <p>No safe link destinations found in the preview.</p>}
+            {(linkReviewMap.get(d.id)?.emptyAnchorOccurrences ?? 0) + (linkReviewMap.get(d.id)?.genericAnchorOccurrences ?? 0) > 0 &&
+              <p role="status">Anchor-text review: {linkReviewMap.get(d.id)?.emptyAnchorOccurrences ?? 0} link occurrence(s) have no visible text or title; {linkReviewMap.get(d.id)?.genericAnchorOccurrences ?? 0} use generic labels such as "click here" or "read more". Consider descriptive, relevant link text. These are editorial suggestions, not ranking predictions.</p>}
             <ul>{linkReviewMap.get(d.id)?.links.map(link => <li key={link.href}>
-              <strong>{link.kind === "store-relative" ? "Store-relative" : "Absolute HTTPS"}</strong>{link.host ? " (" + link.host + ")" : ""} · {link.occurrences} occurrence(s): <code style={{overflowWrap:"anywhere"}}>{link.href}</code>
+              <strong>{link.kind === "store-relative" ? "Store-relative" : "Absolute HTTPS"}</strong>{link.host ? " (" + link.host + ")" : ""} · {link.occurrences} occurrence(s): <code style={{overflowWrap:"anywhere"}}>{link.href}</code>{link.emptyAnchorText > 0 && <> · <strong>Missing anchor text:</strong> {link.emptyAnchorText}</>}{link.genericAnchorText > 0 && <> · <strong>Generic anchor text:</strong> {link.genericAnchorText}</>}
             </li>)}</ul>
             {linkReviewMap.get(d.id)?.truncated && <p role="status">Only the first 20 unique links are shown, out of {linkReviewMap.get(d.id)?.uniqueTotal}. This is not a complete link review.</p>}
           </>}

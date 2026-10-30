@@ -83,6 +83,7 @@ Example anonymized **illustrative costs**, not measured invoices:
 ```json
 {
   "protocol": "paired-editorial-costs-v1",
+  "currency": "USD",
   "costBasis": "estimated",
   "laborValueCentsPerHour": 3000,
   "pairs": [
@@ -97,6 +98,8 @@ all relevant expenses (including rejected attempts), then run:
 ```bash
 node scripts/merchant-pilot-economics.mjs /path/to/anonymized-pilot.json /path/to/anonymized-costs.json
 ```
+
+**Cost units:** All amounts are integer **US-dollar cents**. The ledger must explicitly state `"currency": "USD"`; unsupported currencies fail validation. Convert foreign-currency expenses using a documented rate and timestamp outside the input file before comparing them. Exchange-rate assumptions can materially change the decision.
 
 **Cost collection protocol:** Keep consented supplier invoices or token-usage
 accounting in a secure private system, not in GitHub or the evaluator input.

@@ -218,3 +218,37 @@ test("group IDs must be opaque, complete, non-identifying and nonempty",()=>{
   p.pairs[0].merchantGroup="";
   assert.throws(()=>evaluatePilot(p),/merchantGroup/);
 });
+
+test("pooled and review-order savings cannot hide merchant-level reversal",()=>{
+  const p=pilot();
+  p.pairs.forEach((x,i)=>{
+    // Each group occurs in both order strata. One group is slower on AI.
+    x.ai=outcome("usable",i%10===0?30:5);
+    x.manual=outcome("usable",20);
+  });
+  const r=evaluatePilot(p);
+  assert.ok(r.relativeLaborPerQualityPassPct<0);
+  assert.equal(r.orderSensitivity,"consistent-ai-advantage");
+  assert.equal(r.merchantSensitivity,"merchant-heterogeneity-or-no-gain");
+  assert.equal(r.merchantSensitivitySummary.groupsWithoutAiAdvantage,1);
+  assert.equal(r.merchantSensitivitySummary.groupsWithAiAdvantage,9);
+  assert.equal(r.decisionSupport,"merchant-efficiency-heterogeneity");
+  assert.equal(JSON.stringify(r).includes("group_000000"),false);
+});
+test("missing quality pass for a merchant does not imply an efficiency gain",()=>{
+  const p=pilot();
+  p.pairs.filter(x=>x.merchantGroup==="group_000000").forEach(x=>{x.manual=outcome("rejected",20);});
+  const r=evaluatePilot(p);
+  assert.equal(r.merchantSensitivity,"inconclusive");
+  assert.equal(r.merchantSensitivitySummary.groupsWithUndefinedComparison,1);
+  assert.equal(r.decisionSupport,"merchant-efficiency-inconclusive");
+});
+test("incomplete and ungrouped pilots never calculate merchant sensitivity",()=>{
+  const p=pilot();p.pairs[0].ai=null;
+  assert.equal(evaluatePilot(p).merchantSensitivity,"not-assessed");
+  p.pairs[0].ai=outcome();
+  p.pairs.forEach(x=>{delete x.merchantGroup;});
+  const r=evaluatePilot(p);
+  assert.equal(r.merchantSensitivity,"not-assessed");
+  assert.equal(r.merchantSensitivitySummary,null);
+});

@@ -17,3 +17,17 @@ This solves a specific review-workflow problem: a merchant previously had to man
 Automated tests cover duplicate destinations, HTML entities, unsafe link removal, oversized legacy HTML, and truncated inventories. For a consented pilot, measure **time to verify links per draft**, **incorrect links discovered per draft**, and **draft acceptance**, including rejected drafts. Compare against a review flow without the inventory, randomized or counterbalanced where possible. No time savings, traffic, conversion, ranking or revenue impact has yet been measured.
 
 Google's people-first content guidance emphasizes accurate, useful content and trustworthy sources rather than producing more articles: https://developers.google.com/search/docs/fundamentals/creating-helpful-content
+
+## Anchor-text review signals (2026-10-30)
+
+The same sanitized link inventory now counts two **high-confidence editorial prompts** across all link occurrences, including links beyond the 20-URL display cap:
+
+- **Missing anchor text:** no visible text and no `title` fallback. Google can use `title` when text is absent, so a descriptive title is not flagged.
+- **Generic anchor text:** a narrow exact-match set (`here`, `click here`, `read more`, `learn more`, `more`, `link`), ignoring case, whitespace and trailing sentence punctuation. Nested formatting and HTML entities are parsed by `sanitize-html`, not a raw HTML regex.
+
+Both totals and per-destination counts are read-only and do not block publication. A generic call to action may be intentional, and language-dependent patterns may be missed. These are **not** Google ranking factors, accessibility certification, factual verification, or a substitute for human inspection. Unsafe stripped links are not counted as safe links or review signals. No network requests, extra Shopify scopes, database migrations or n8n changes.
+
+Google's official link guidance recommends concise, descriptive anchor text and warns against generic phrases:
+https://developers.google.com/search/docs/crawling-indexing/links-crawlable
+
+**Pilot test:** Randomize or counterbalance review with versus without anchor prompts. On *all* reviewed drafts, record (a) missing/generic links confirmed by merchants, (b) time to resolve each, (c) false-positive rate, and (d) draft acceptance and corrections. Pre-register outcomes; do not equate more flags with improved SEO or merchant value. Avoid publishing or editing stores automatically.

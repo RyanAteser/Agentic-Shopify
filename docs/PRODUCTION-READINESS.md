@@ -64,6 +64,12 @@ See [SEO-AGENTS.md](./SEO-AGENTS.md) for exact eligibility, false-positive
 limitations and the consented merchant pilot. CI and real Bright Data
 payload validation are still required; no observed merchant outcome is claimed.
 
+## Recorded editorial decision elapsed time (2026-10-30)
+
+The Growth dashboard now reports the median and nearest-rank 90th percentile of elapsed clock hours from draft creation to the **latest recorded editorial decision** for a complete, bounded 28-day creation cohort. It includes only explicitly reviewed drafts and requires at least five valid intervals; any future-dated or pre-creation review timestamp suppresses both percentiles. Duplicate/foreign decisions fail closed. It does not infer elapsed time for missing reviews, inspect article bodies, or introduce new permissions.
+
+**Important distinction:** a merchant can edit and renew an earlier review, so `reviewedAt` is not a guaranteed first-decision timestamp. These are not time-to-first-review, human labor minutes, time savings, or a queue SLA. Selection bias remains because unresolved drafts are excluded. A genuine first-response latency metric requires a separate immutable event record of entering the review queue and initial decision, with an independently tested migration and merchant consent. The current 28-day creation-date cohort does not cover older actionable queues. Before claiming productivity gains, collect a consented baseline and compare quality-adjusted total human time and provider costs, including rejected and unresolved work.
+
 ## Hard go/no-go gates
 
 | Gate | Current status | Completion proof required |

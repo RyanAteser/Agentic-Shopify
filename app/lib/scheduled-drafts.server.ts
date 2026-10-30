@@ -152,8 +152,9 @@ export async function claimDueScheduledDraft(
 }
 
 /**
- * Only a definitive rejection before n8n accepts work may be refunded.
- * A callback, timeout, uncertain dispatch or a redacted store must not be
+ * Only a known pre-POST failure or independently reconciled rejection may
+ * be refunded. HTTP errors after a POST are uncertain. A callback, timeout,
+ * uncertain dispatch or a redacted store must not be
  * rolled back. Schedule rewind is conditional on unchanged merchant settings:
  * a merchant edit must never be undone by a late delivery failure.
  *

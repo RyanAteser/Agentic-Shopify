@@ -214,13 +214,23 @@ export async function disconnectGoogle(shop:string){
     // Same StoreConfig -> OAuth state -> connection -> metrics lock order as
     // callback finalization. A disconnect cannot deadlock a late callback
     // or leave its state behind after deleting the Google connection.
-    // Lock first, then record the revocation time AFTER the lock is acquired.
-    // This prevents a delayed Connect request (started before Disconnect)
-    // from creating a new state when its Shopify authentication finishes late.
-    const locked=await tx.storeConfig.updateMany({
-      where:{shop},data:{updatedAt:new Date()}
-    });
-    if(locked.count){
+    // Lock the Shopify session first, matching initiation and uninstall.
+    // A merchant may press Disconnect while a Connect request has not yet
+    // created StoreConfig. Persist a revocation tombstone for active installs,
+    // but never recreate merchant data after uninstall removed all sessions.
+    const session=await tx.session.findFirst({where:{shop},select:{id:true}});
+    const sessionLock=session?await tx.session.updateMany({
+      where:{shop,id:session.id},data:{id:session.id}
+    }):{count:0};
+    if(sessionLock.count===1){
+      await tx.storeConfig.upsert({
+        where:{shop},
+        create:{shop,gscConsentRevokedAt:new Date()},
+        update:{gscConsentRevokedAt:new Date()}
+      });
+    }else{
+      // Legacy/test records may have no Session; revoke existing consent
+      // without recreating a configuration for an uninstalled merchant.
       await tx.storeConfig.updateMany({
         where:{shop},data:{gscConsentRevokedAt:new Date()}
       });

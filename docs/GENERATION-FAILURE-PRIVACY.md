@@ -8,9 +8,9 @@ The manual and scheduled generation-credit refund paths previously persisted `St
 
 ## Change
 
-Both refund paths now call `safeGenerationFailureReason`, which emits only fixed messages. It recognizes unavailable verified Shopify product context, missing n8n configuration, missing blog selection, and the precise set of HTTP codes already treated as definitive n8n rejections. Unknown errors are classified generically. It never stringifies unknown objects, stores raw upstream messages, or attempts to redact arbitrary free text with brittle regular expressions.
+Both refund paths now call `safeGenerationFailureReason`, which emits only fixed messages. It recognizes unavailable verified Shopify product context, missing n8n configuration, and missing blog selection. No HTTP status after an attempted n8n POST is now treated as a definitive rejection, so the old HTTP rejection category has been removed. Unknown errors are classified generically. It never stringifies unknown objects, stores raw upstream messages, or attempts to redact arbitrary free text with brittle regular expressions.
 
-The existing **definitive failure / uncertain outcome** boundary is unchanged. The formatter does not decide whether a refund is permitted. Ambiguous dispatches still retain their credits and require reconciliation. Scheduled slot rewind, store locking, tenant isolation and idempotent refund behavior are unchanged.
+The **definitive pre-POST failure / uncertain post-POST outcome** boundary is now stricter: even 4xx responses after an attempted POST require reconciliation. The formatter does not decide whether a refund is permitted. Ambiguous dispatches still retain their credits and require reconciliation. Scheduled slot rewind, store locking, tenant isolation and idempotent refund behavior are unchanged.
 
 ## Evidence and limitations
 

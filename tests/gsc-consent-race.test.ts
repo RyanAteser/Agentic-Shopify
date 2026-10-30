@@ -105,7 +105,7 @@ test("pending Google OAuth cannot reconnect after disconnect, expire, replay, or
   const createState=(stateHash:string,owner=shop,expiresAt=new Date(Date.now()+60_000))=>
     db.googleAuthState.create({data:{stateHash,shop:owner,expiresAt}});
   try{
-    await db.storeConfig.create({data:{shop}});
+    await db.storeConfig.createMany({data:[{shop},{shop:other}]});
     // The callback already read this state, then stalled during Google HTTP.
     // Merchant disconnects while no connection has yet been persisted.
     await createState(revokedHash);

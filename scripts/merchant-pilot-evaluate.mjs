@@ -93,6 +93,18 @@ export function evaluatePilot(input){
     operationalScreenPassed:merchantGroupsProvided&&groupCounts.size>=5&&
       largestGroupPairs/input.plannedPairs<=0.25
   };
+  // Global order balance can still assign every merchant to a single
+  // sequence. Then merchant effects and review-order effects are confounded.
+  const merchantOrderCoverage=merchantGroupsProvided?{
+    groupsWithBothOrders:Array.from(groupCounts.keys()).filter(group=>{
+      const orders=new Set(pairs.filter(p=>p.merchantGroup===group).map(p=>p.order));
+      return orders.size===2;
+    }).length,
+    groupsWithSingleOrder:Array.from(groupCounts.keys()).filter(group=>{
+      const orders=new Set(pairs.filter(p=>p.merchantGroup===group).map(p=>p.order));
+      return orders.size===1;
+    }).length
+  }:null;
   const complete=pairs.filter(p=>p.ai!==null&&p.manual!==null);
   const ai=summarizeArm(complete,"ai"),manual=summarizeArm(complete,"manual");
   const orderCounts={
@@ -163,13 +175,14 @@ export function evaluatePilot(input){
     orderSensitivity!=="consistent-ai-advantage"?"order-sensitive-efficiency":
     !merchantDiversity.groupsProvided?"merchant-diversity-unverified":
     !merchantDiversity.operationalScreenPassed?"merchant-concentration-risk":
+    merchantOrderCoverage.groupsWithSingleOrder>0?"merchant-order-confounding":
     merchantSensitivity==="inconclusive"?"merchant-efficiency-inconclusive":
     merchantSensitivity!=="consistent-ai-advantage"?"merchant-efficiency-heterogeneity":
     "candidate-for-independent-review";
   return {
     protocol:PROTOCOL,plannedPairs:input.plannedPairs,recordedPairs:pairs.length,
     completedPairs:complete.length,incompletePairs:input.plannedPairs-complete.length,
-    orderCounts,balancedOrder,allBlindScoredAttested:allBlind,merchantDiversity,
+    orderCounts,balancedOrder,allBlindScoredAttested:allBlind,merchantDiversity,merchantOrderCoverage,
     status:readyForReview?"ready-for-external-review":"insufficient-or-incomplete",
     ai,manual,pairedQuality,
     qualityPassRateDifferencePercentagePoints:readyForReview?100*(ai.qualityPassed-manual.qualityPassed)/complete.length:null,
@@ -188,6 +201,7 @@ export function evaluatePilot(input){
       "The five-group and 25%-maximum-concentration thresholds are operational screens, not an effective sample size calculation or a cluster-robust confidence interval.",
       "Repeated drafts from one merchant can be correlated. Even a diverse pilot requires merchant-cluster-aware replication and analysis before generalization.",
       "Per-merchant efficiency is a descriptive heterogeneity screen, not a population estimate; small groups can be unstable and all groups need valid denominators.",
+      "Global counterbalancing does not guarantee within-merchant counterbalancing. Single-order merchant groups confound merchant and sequence effects and cannot receive favorable triage.",
       "No merchant revenue, conversions, retention, organic traffic, or causal lift is measured."
     ]
   };

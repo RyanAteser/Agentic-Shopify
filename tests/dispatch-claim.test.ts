@@ -46,14 +46,11 @@ test("queued job is claimed only once; other shops and completed jobs cannot dis
 });
 
 
-test("only known permanent n8n rejections allow refund; transient HTTP outcomes require reconciliation", () => {
+test("no HTTP error after a POST proves n8n rejected the job before paid work", () => {
   for (const status of [200, 201, 202, 204]) {
     assert.equal(classifyN8nDispatchStatus(status), "accepted", String(status));
   }
-  for (const status of [400, 401, 403, 404, 405, 410, 413, 415, 422]) {
-    assert.equal(classifyN8nDispatchStatus(status), "rejected", String(status));
-  }
-  for (const status of [0, 301, 307, 308, 402, 408, 409, 425, 429, 500, 502, 503, 504, 599]) {
+  for (const status of [0, 301, 307, 308, 400, 401, 402, 403, 404, 405, 408, 409, 410, 413, 415, 422, 425, 429, 500, 502, 503, 504, 599]) {
     assert.equal(classifyN8nDispatchStatus(status), "uncertain", String(status));
   }
 });

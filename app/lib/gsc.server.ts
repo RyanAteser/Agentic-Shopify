@@ -232,11 +232,10 @@ export async function syncOrganicMetrics(shop:string,now=new Date()){
   }
 }
 export async function disconnectGoogle(shop:string){
-  const connection=await db.searchConsoleConnection.findUnique({where:{shop}});
-  // Erase local data even if Google revocation is temporarily unavailable.
-  // Delete the connection FIRST. The importer locks that row before inserting
-  // metrics; this ordering serializes revocation against any in-flight import.
-  await db.$transaction(async tx=>{
+  // Capture the credential under the same merchant lock that serializes
+  // re-consent. Reading before the transaction could revoke an obsolete token
+  // while deleting a newer connection committed during the lock wait.
+  const encryptedRefresh=await db.$transaction(async tx=>{
     // Same StoreConfig -> OAuth state -> connection -> metrics lock order as
     // callback finalization. A disconnect cannot deadlock a late callback
     // or leave its state behind after deleting the Google connection.
@@ -270,18 +269,27 @@ export async function disconnectGoogle(shop:string){
     await tx.storeConfig.updateMany({
       where:{shop},data:{gscConsentRevokedOrder:revocation.sequence,gscConsentRevokedAt:revokedAt}
     });
+    // Read the CURRENT connection only after acquiring the merchant lock.
+    // Google HTTP revocation happens after commit, never inside the DB lock.
+    const current=await tx.searchConsoleConnection.findUnique({
+      where:{shop},select:{encryptedRefresh:true}
+    });
     await tx.googleAuthState.deleteMany({where:{shop}});
     await tx.searchConsoleConnection.deleteMany({where:{shop}});
     await tx.organicDailyMetric.deleteMany({where:{shop}});
+    return current?.encryptedRefresh??null;
   });
-  if(connection){
+  if(encryptedRefresh){
     try{
-      const token=decryptToken(connection.encryptedRefresh);
-      await fetch("https://oauth2.googleapis.com/revoke",{
+      const token=decryptToken(encryptedRefresh);
+      const response=await fetch("https://oauth2.googleapis.com/revoke",{
         method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},
         body:new URLSearchParams({token}),signal:AbortSignal.timeout(5000)
       });
+      // An HTTP 4xx/5xx is not proof of successful Google revocation.
+      if(!response.ok)throw new Error("Google revocation not confirmed");
     }catch{
+      // Never log raw upstream responses, refresh tokens, or merchant data.
       console.warn("Google token revocation could not be confirmed; local credential deleted");
     }
   }

@@ -109,7 +109,7 @@ test("writer callback destination is operator-pinned and cannot be changed by we
   }
   const untrusted = {
     jobId: "job-1", shop: "demo.myshopify.com", topic: "boots",
-    callbackToken: "a".repeat(43),
+    callbackToken: "a".repeat(43), productCatalog: [], productCatalogHasMore: false,
     callbackUrl: "https://attacker.example/collect-credentials", brief: {}
   };
   const prepared = runInNewContext("(() => {" + find("Prepare Brief").parameters.jsCode + "})()", {
@@ -251,7 +251,7 @@ test("writer packs complete product URLs into parseable bounded JSON instead of 
   }));
   const input = {
     jobId: "job-1", shop: "merchant.myshopify.com", topic: "Useful products",
-    callbackToken: "a".repeat(43), productCatalog: catalog,
+    callbackToken: "a".repeat(43), productCatalog: catalog, productCatalogHasMore: false,
     brief: {
       audience: "a".repeat(2000), brandVoice: "b".repeat(2000),
       seedTopics: "c".repeat(2000),
@@ -269,11 +269,11 @@ test("writer packs complete product URLs into parseable bounded JSON instead of 
   const json = prepared[0].json.user.slice(prefix.length);
   assert.ok(json.length <= 10000);
   const context = JSON.parse(json) as {
-    audience: string; productCountAvailable: number; productSampleTruncated: boolean;
+    audience: string; productCountSampled: number; productSampleTruncated: boolean;
     verifiedStoreProducts: Array<{ name: string; description: string; url: string }>;
   };
   assert.equal(context.audience.length, 500);
-  assert.equal(context.productCountAvailable, 20);
+  assert.equal(context.productCountSampled, 20);
   assert.equal(context.productSampleTruncated, true);
   assert.ok(context.verifiedStoreProducts.length > 0 && context.verifiedStoreProducts.length < 20);
   assert.ok(context.verifiedStoreProducts.every(p => catalog.some(original => original.url === p.url)),
@@ -290,7 +290,7 @@ test("writer excludes over-budget product URLs and marks omitted products withou
   const good = "https://merchant.example/products/mug";
   const input = {
     jobId: "job-2", shop: "merchant.myshopify.com", topic: "Mug guide",
-    callbackToken: "b".repeat(43),
+    callbackToken: "b".repeat(43), productCatalogHasMore: false,
     productCatalog: [
       { name: "Mug", description: "A reusable cup", url: good },
       { name: "Too long", description: "Unusable", url: good + "x".repeat(400) }
@@ -301,7 +301,7 @@ test("writer excludes over-budget product URLs and marks omitted products withou
     $input: { first: () => ({ json: { body: input } }) }
   }) as Array<{ json: { user: string } }>;
   const context = JSON.parse(result[0].json.user.split("brief: ")[1]);
-  assert.equal(context.productCountAvailable, 2);
+  assert.equal(context.productCountSampled, 2);
   assert.equal(context.productSampleTruncated, true);
   assert.deepEqual(context.verifiedStoreProducts, [
     { name: "Mug", description: "A reusable cup", url: good }
@@ -310,7 +310,39 @@ test("writer excludes over-budget product URLs and marks omitted products withou
     $input: { first: () => ({ json: { body: { ...input, productCatalog: [] } } }) }
   }) as Array<{ json: { user: string } }>;
   const emptyContext = JSON.parse(empty[0].json.user.split("brief: ")[1]);
-  assert.equal(emptyContext.productCountAvailable, 0);
+  assert.equal(emptyContext.productCountSampled, 0);
   assert.equal(emptyContext.productSampleTruncated, false);
   assert.deepEqual(emptyContext.verifiedStoreProducts, []);
+});
+
+
+test("writer marks an otherwise fitting 20-product Shopify sample incomplete when more pages exist", () => {
+  const workflow = load("n8n/shopify-blog-writer.json");
+  const prepare = (workflow.nodes as Array<NodeShape & { parameters: { jsCode?: string } }>)
+    .find(node => node.name === "Prepare Brief");
+  assert.ok(prepare?.parameters.jsCode);
+  const input = {
+    jobId: "job-more", shop: "merchant.myshopify.com", topic: "Guide",
+    callbackToken: "c".repeat(43), productCatalogHasMore: true,
+    productCatalog: Array.from({ length: 20 }, (_, i) => ({
+      name: "Product " + i, description: "Simple product",
+      url: "https://merchant.example/products/" + i
+    })), brief: {}
+  };
+  const prepareInput = (body: unknown) => runInNewContext(
+    "(() => {" + prepare.parameters.jsCode + "})()",
+    { $input: { first: () => ({ json: { body } }) } }
+  ) as Array<{ json: { user: string } }>;
+  const result = prepareInput(input);
+  const context = JSON.parse(result[0].json.user.split("brief: ")[1]);
+  assert.equal(context.productCountSampled, 20);
+  assert.equal(context.verifiedStoreProducts.length, 20);
+  assert.equal(context.productSampleTruncated, true,
+    "Shopify has more pages even though every sampled entry fits the prompt");
+  assert.throws(() => prepareInput({ ...input, productCatalogHasMore: undefined }),
+    /Missing or invalid Shopify catalog sample evidence/);
+  assert.throws(() => prepareInput({ ...input, productCatalog: undefined }),
+    /Missing or invalid Shopify catalog sample evidence/);
+  const complete = JSON.parse(prepareInput({ ...input, productCatalogHasMore: false })[0].json.user.split("brief: ")[1]);
+  assert.equal(complete.productSampleTruncated, false);
 });

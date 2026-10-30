@@ -11,8 +11,10 @@ const product = {
   description: "Stainless steel cup from the merchant catalog",
   onlineStoreUrl: "https://merchant.example/products/travel-mug"
 };
-const response = (nodes: unknown[], actualShop = shop) => ({
-  data: { shop: { myshopifyDomain: actualShop }, products: { nodes } }
+const response = (nodes: unknown[], actualShop = shop, hasMore = false) => ({
+  data: { shop: { myshopifyDomain: actualShop }, products: {
+    nodes, pageInfo: { hasNextPage: hasMore }
+  } }
 });
 
 test("Shopify product context attests tenant and preserves verified published products", async () => {
@@ -23,16 +25,17 @@ test("Shopify product context attests tenant and preserves verified published pr
       assert.match(query, /shop\s*\{\s*myshopifyDomain/);
       assert.match(query, /products\(first:\s*20/);
       assert.match(query, /published_status:published/);
+      assert.match(query, /pageInfo\s*\{\s*hasNextPage/);
       return { ok: true, json: async () => response([product, {
         ...product, onlineStoreUrl: null
       }]) };
     }
   });
   assert.equal(calls, 1);
-  assert.deepEqual(result, [{
+  assert.deepEqual(result, { products: [{
     name: product.title, description: product.description, url: product.onlineStoreUrl
-  }]);
-  assert.deepEqual(parseVerifiedPublishedProducts(shop, response([])), [],
+  }], hasMore: false });
+  assert.deepEqual(parseVerifiedPublishedProducts(shop, response([])), { products: [], hasMore: false },
     "an authenticated empty catalog is valid, unlike a failed query");
 });
 
@@ -44,6 +47,11 @@ test("GraphQL failures, malformed data and wrong tenant cannot masquerade as an 
     { ...response([]), errors: "not an array" },
     { data: { shop: { myshopifyDomain: shop }, products: {} } },
     response([null]), response([{ ...product, title: null }]),
+    { data: { shop: { myshopifyDomain: shop }, products: { nodes: [product] } } },
+    { data: { shop: { myshopifyDomain: shop }, products: {
+      nodes: [product], pageInfo: { hasNextPage: "false" }
+    } } },
+    response([], shop, true),
     response(Array.from({ length: 21 }, () => product))
   ]) {
     assert.throws(() => parseVerifiedPublishedProducts(shop, raw),
@@ -89,8 +97,25 @@ test("product URLs are never silently truncated before the AI brief", () => {
   assert.equal(exact.length, 350);
   assert.deepEqual(parseVerifiedPublishedProducts(shop, response([
     { ...product, onlineStoreUrl: exact }
-  ]))[0].url, exact);
+  ])).products[0].url, exact);
   assert.throws(() => parseVerifiedPublishedProducts(shop, response([
     { ...product, onlineStoreUrl: exact + "x" }
   ])), ProductContextUnavailableError);
+});
+
+
+test("Shopify pagination evidence distinguishes a full 20-product sample from a complete catalog", () => {
+  const twenty = Array.from({ length: 20 }, (_, index) => ({
+    ...product, title: `Product ${index}`,
+    onlineStoreUrl: `https://merchant.example/products/${index}`
+  }));
+  const partial = parseVerifiedPublishedProducts(shop, response(twenty, shop, true));
+  assert.equal(partial.products.length, 20);
+  assert.equal(partial.hasMore, true, "The first 20 products are not the entire catalog");
+  const complete = parseVerifiedPublishedProducts(shop, response(twenty, shop, false));
+  assert.equal(complete.hasMore, false);
+  const onlyNoUrl = parseVerifiedPublishedProducts(shop, response([
+    { ...product, onlineStoreUrl: null }
+  ], shop, false));
+  assert.deepEqual(onlyNoUrl, { products: [], hasMore: false });
 });

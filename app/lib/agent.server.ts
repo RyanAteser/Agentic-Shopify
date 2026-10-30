@@ -57,6 +57,8 @@ export async function dispatchArticleJob(jobId: string, shop: string) {
     },
     productCatalog: catalogSample.products,
     productCatalogHasMore: catalogSample.hasMore,
+    productCatalogSampledCount: catalogSample.sampledCount,
+    productCatalogMissingUrls: catalogSample.missingUrlCount,
   };
   // Serialize with merchant settings changes after the preflight. A stale
   // snapshot must not send an obsolete audience, author or destination.

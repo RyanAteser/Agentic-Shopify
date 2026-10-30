@@ -223,7 +223,7 @@ test("pooled and review-order savings cannot hide merchant-level reversal",()=>{
   const p=pilot();
   p.pairs.forEach((x,i)=>{
     // Each group occurs in both order strata. One group is slower on AI.
-    x.ai=outcome("usable",i%10===0?30:5);
+    x.ai=outcome("usable",Math.floor(i/2)===0?30:5);
     x.manual=outcome("usable",20);
   });
   const r=evaluatePilot(p);

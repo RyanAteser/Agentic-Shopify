@@ -134,19 +134,36 @@ test("callback winning before malformed 202 acknowledgment cannot be overwritten
   });
 });
 
-test("definitive 400 rejection can refund exactly once", async () => {
-  await withJob(async (shop, jobId) => {
-    await withHttpStub((_req, res) => {
-      res.writeHead(400);
-      res.end();
-    }, async url => {
-      await assert.rejects(deliver(shop, jobId, url), /HTTP 400/);
+test("4xx responses after POST remain uncertain and cannot silently refund or replay", async () => {
+  // A proxy or a workflow may emit 4xx after accepting the request. An HTTP
+  // code without a durable job-specific rejection receipt is not proof of no work.
+  for (const status of [400, 401, 403, 404, 405, 410, 413, 415, 422]) {
+    await withJob(async (shop, jobId) => {
+      let received = 0;
+      await withHttpStub((_req, res) => {
+        received++;
+        res.writeHead(status);
+        res.end();
+      }, async url => {
+        await assert.rejects(deliver(shop, jobId, url), UncertainDispatchError);
+      });
+      assert.equal(received, 1, "no automatic retry after " + status);
+      assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: jobId } })).status,
+        "dispatch_uncertain", String(status));
+      assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed,
+        1, String(status));
+      assert.equal(await failCreditedJob(shop, jobId, "misclassified HTTP " + status), false);
+      if (status === 400) {
+        // A callback can arrive after a misleading HTTP error. It must still
+        // complete exactly once and preserve the original reserved credit.
+        const saved = await persistArticleCallback(shop, jobId, article);
+        assert.deepEqual(await persistArticleCallback(shop, jobId, article), saved);
+        assert.equal(await db.articleDraft.count({ where: { jobId } }), 1);
+        assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: jobId } })).status,
+          "completed");
+      }
     });
-    assert.equal(await failCreditedJob(shop, jobId, "HTTP 400"), true);
-    assert.equal(await failCreditedJob(shop, jobId, "duplicate"), false);
-    assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 0);
-    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: jobId } })).status, "failed");
-  });
+  }
 });
 
 test("429 response is uncertain, retains credit, and accepts a later idempotent callback", async () => {

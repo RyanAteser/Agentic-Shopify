@@ -69,13 +69,13 @@ test("stale scheduler candidate cannot consume a credit after merchant brief edi
   }
 });
 
-test("definitive rejection refunds and restores due slot exactly once", async () => {
+test("verified pre-POST failure refunds and restores due slot exactly once", async () => {
   await withStore({ topicCursor: 1 }, async shop => {
     const snapshot = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
     const claim = await claimDueScheduledDraft(snapshot, now);
     assert.ok(claim);
     assert.equal(claim.topic, "Second topic");
-    assert.equal(await failScheduledDraft(claim, "n8n definitive HTTP 400"), true);
+    assert.equal(await failScheduledDraft(claim, "pre-POST Shopify context failure"), true);
     assert.equal(await failScheduledDraft(claim, "duplicate"), false);
     const config = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
     assert.equal(config.freeDraftsUsed, 0);
@@ -107,7 +107,7 @@ test("uncertain delivery cannot be refunded or requeued", async () => {
   });
 });
 
-test("merchant changes are never overwritten by a late definitive failure", async () => {
+test("merchant changes are never overwritten by a late pre-POST failure", async () => {
   await withStore({}, async shop => {
     const snapshot = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
     const claim = await claimDueScheduledDraft(snapshot, now);
@@ -116,7 +116,7 @@ test("merchant changes are never overwritten by a late definitive failure", asyn
     await db.storeConfig.update({
       where: { shop }, data: { seedTopics: "New merchant plan", nextRunAt: merchantDate }
     });
-    assert.equal(await failScheduledDraft(claim, "n8n HTTP 400"), true);
+    assert.equal(await failScheduledDraft(claim, "pre-POST integration configuration failure"), true);
     const config = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
     assert.equal(config.freeDraftsUsed, 0);
     assert.equal(config.topicCursor, 1, "do not roll back cursor after merchant edit");

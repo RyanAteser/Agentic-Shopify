@@ -14,6 +14,7 @@ import { parseReviewMinutes, recordEditorialReview } from "../lib/editorial-revi
 import { hasCurrentUsableReview, reviewFormDigest, publishFormDigest } from "../lib/editorial-review-integrity";
 import { editorialEditDigest, saveMerchantDraftEdit } from "../lib/editorial-edit.server";
 import { safeArticlePreviewHtml } from "../lib/content-quality.server";
+import { summarizeDraftLinks } from "../lib/article-link-review";
 
 function value(form: FormData, key: string, max = 500) {
   return String(form.get(key) ?? "").trim().slice(0, max);
@@ -49,6 +50,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       hasCurrentUsableReview(review, draftMap.get(review.draftId)!, config)
   }));
   const draftPreviews = drafts.map(draft => ({draftId: draft.id, ...safeArticlePreviewHtml(draft.body)}));
+  const draftLinkReviews = drafts.map(draft => ({draftId: draft.id, ...summarizeDraftLinks(draft.body)}));
   const editVersions = drafts.map(draft => ({draftId: draft.id, digest: editorialEditDigest(draft)}));
   const reviewVersions = drafts.map(draft => ({draftId: draft.id, digest: reviewFormDigest(draft, config)}));
   const publishVersions = drafts.map(draft => ({draftId: draft.id, digest: publishFormDigest(draft, config)}));
@@ -60,7 +62,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     seedTopics: config.seedTopics, cadenceDays: config.cadenceDays,
     enabled: config.enabled, freeDraftsUsed: config.freeDraftsUsed
   };
-  return { shop: session.shop, blogs, config: visibleConfig, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates, draftPreviews, editVersions, reviewVersions, publishVersions };
+  return { shop: session.shop, blogs, config: visibleConfig, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates, draftPreviews, draftLinkReviews, editVersions, reviewVersions, publishVersions };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -156,8 +158,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function BlogAgent() {
-  const { shop, blogs, config, drafts, jobs, reviews, draftPreviews, editVersions, reviewVersions, publishVersions } = useLoaderData<typeof loader>();
+  const { shop, blogs, config, drafts, jobs, reviews, draftPreviews, draftLinkReviews, editVersions, reviewVersions, publishVersions } = useLoaderData<typeof loader>();
   const previewMap = new Map(draftPreviews.map(preview => [preview.draftId, preview]));
+  const linkReviewMap = new Map(draftLinkReviews.map(review => [review.draftId, review]));
   const editVersionMap = new Map(editVersions.map(version => [version.draftId, version.digest]));
   const reviewVersionMap = new Map(reviewVersions.map(version => [version.draftId, version.digest]));
   const publishVersionMap = new Map(publishVersions.map(version => [version.draftId, version.digest]));
@@ -208,6 +211,17 @@ export default function BlogAgent() {
           {previewMap.get(d.id)?.unavailable ? <p>Preview unavailable. Inspect the original HTML in the draft editor.</p> :
             <div style={{padding:10,border:"1px solid #ddd",maxHeight:400,overflow:"auto"}} dangerouslySetInnerHTML={{__html:previewMap.get(d.id)?.html ?? ""}}/>}
           <pre style={{whiteSpace:"pre-wrap"}}>{d.reviewNotes}</pre>
+        </details>
+        <details><summary>Review link destinations ({linkReviewMap.get(d.id)?.uniqueTotal ?? 0} unique)</summary>
+          <p>This is an inventory from the sanitized preview, not proof that a destination is live, accurate or associated with a real product. Check each URL and any affiliate disclosures before approval.</p>
+          {linkReviewMap.get(d.id)?.previewChanged && <p role="status">Stored HTML differs from the safe preview. Correct the draft before approving or publishing.</p>}
+          {linkReviewMap.get(d.id)?.previewUnavailable ? <p>Link inventory unavailable because this draft cannot be safely previewed. Inspect and correct the original in the editor.</p> : <>
+            {linkReviewMap.get(d.id)?.uniqueTotal === 0 && <p>No safe link destinations found in the preview.</p>}
+            <ul>{linkReviewMap.get(d.id)?.links.map(link => <li key={link.href}>
+              <strong>{link.kind === "store-relative" ? "Store-relative" : "Absolute HTTPS"}</strong>{link.host ? " (" + link.host + ")" : ""} · {link.occurrences} occurrence(s): <code style={{overflowWrap:"anywhere"}}>{link.href}</code>
+            </li>)}</ul>
+            {linkReviewMap.get(d.id)?.truncated && <p role="status">Only the first 20 unique links are shown, out of {linkReviewMap.get(d.id)?.uniqueTotal}. This is not a complete link review.</p>}
+          </>}
         </details>
         {["ready", "needs_review"].includes(d.status) && <details>
           <summary>Edit this unpublished draft</summary>

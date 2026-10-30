@@ -19,7 +19,7 @@ test("failure categories are fixed, useful and cannot echo arbitrary upstream de
   assert.equal(safeGenerationFailureReason(new Error("Select a Shopify blog first")),
     "No Shopify destination blog selected.");
   assert.equal(safeGenerationFailureReason(new Error("n8n rejected generation request (HTTP 422)")),
-    "n8n rejected generation request (HTTP 422).");
+    "Generation failed before confirmed acceptance; operator review required.");
   for (const error of [
     new Error("Prisma failed on " + sensitive),
     new Error("n8n rejected generation request (HTTP 400) " + sensitive),

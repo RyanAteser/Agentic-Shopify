@@ -56,3 +56,14 @@ Synthetic tests exercise 20 long products, large merchant briefs, whole-URL pres
 **Pilot hypothesis:** Fewer unsupported product-availability claims and less merchant correction time. On an authorized development store, test catalogs of 0, 20 and 21+ published products and compare the exact n8n prompt flags to Shopify pagination. In a consented merchant pilot, record false completeness claims per reviewed draft and median correction minutes with denominators. This does not prove more organic traffic, conversions or revenue.
 
 Primary source: [Shopify GraphQL `products` pagination and `pageInfo`](https://shopify.dev/docs/api/admin-graphql/latest/queries/products). The app remains development-only and the n8n commercial license and real-store validation gates remain open.
+
+
+## Missing storefront URL provenance (2026-10-29)
+
+**Additional accuracy gap:** Shopify's nullable `Product.onlineStoreUrl` was previously filtered out before the writer received the sample. If Shopify returned two published products with null URLs, the model received `productCountSampled: 0`, `productSampleTruncated: false` and an empty product array, indistinguishable from an actually empty result. This could encourage unsupported assertions that the merchant has no products. A null URL can occur for a published product, including on password-protected development storefronts; it does not establish inventory or sales availability.
+
+The app now preserves the count of **all Shopify rows returned** (`productCatalogSampledCount`) and the number without storefront URLs (`productCatalogMissingUrls`) alongside the eligible URL-bearing sample. The inactive n8n writer validates the count invariant `sampled = URL-bearing + missing-URL` before accepting a brief, and explicitly tells the model that missing URLs do not mean missing products. Its incomplete-context flag is set when URL-less rows are omitted, Shopify reports further pages, or product entries exceed the bounded prompt. Every Shopify row, including a null-URL row, must still have valid title and description fields. This adds no API calls, permissions, or external writes.
+
+Synthetic tests distinguish a genuine zero-row result from two null-URL rows, reject inconsistent counts and malformed null-URL products, and preserve the existing 20-product/10,000-character budget. **Limit:** counts only describe the first page; they do not prove the rest of the catalog, inventory status, live links, model factual accuracy or merchant outcomes. In authorized staging, test a password-protected development store with null `onlineStoreUrl` and verify the n8n brief and generated draft never claim the catalog is empty. Measure false product-absence claims per reviewed draft and editing time. No live merchant results have been measured.
+
+Source: [Shopify GraphQL Product.onlineStoreUrl](https://shopify.dev/docs/api/admin-graphql/latest/objects/Product).

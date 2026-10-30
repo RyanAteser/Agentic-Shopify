@@ -33,6 +33,35 @@ export function summarizeDraftReviewCoverage(drafts: CohortDraft[], reviews: Coh
   };
 }
 
+/** Age of drafts without an explicit recorded review, not necessarily waiting in the UI.
+ * Snapshots are bounded and calculated against the same reporting instant.
+ * Review status can be stale after edits; this is a backlog diagnostic only.
+ */
+export function summarizeUnreviewedAge(
+  drafts: Array<CohortDraft & {createdAt: Date}>,
+  reviews: CohortReview[],
+  now: Date
+) {
+  const instant=now.getTime();
+  if(!Number.isFinite(instant))throw new Error("Invalid editorial reporting instant");
+  const reviewed=new Set(reviews.map(review=>review.draftId));
+  const seen=new Set<string>();
+  let aged7Days=0, aged14Days=0, oldestUnreviewedDays: number|null=null;
+  for(const draft of drafts) {
+    if(!draft.id||seen.has(draft.id))throw new Error("Duplicate or missing editorial draft identifier");
+    seen.add(draft.id);
+    const created=draft.createdAt.getTime();
+    if(!Number.isFinite(created)||created>instant)throw new Error("Invalid editorial draft creation date");
+    if(reviewed.has(draft.id))continue;
+    const ageDays=Math.floor((instant-created)/86400000);
+    if(ageDays>=7)aged7Days++;
+    if(ageDays>=14)aged14Days++;
+    oldestUnreviewedDays=Math.max(oldestUnreviewedDays??0,ageDays);
+  }
+  if(reviews.some(review=>!seen.has(review.draftId)))throw new Error("Foreign editorial review");
+  return {aged7Days,aged14Days,oldestUnreviewedDays};
+}
+
 /**
  * Drafts are selected by creation date; their recorded review can have happened
  * later. This is not a review-action cohort, a current approval count or an
@@ -44,7 +73,7 @@ export function summarizeDraftReviewCoverage(drafts: CohortDraft[], reviews: Coh
 export async function loadDraftReviewCoverage(shop: string, since: Date, now: Date) {
   const drafts = await db.articleDraft.findMany({
     where: { shop, createdAt: { gte: since, lt: now } },
-    select: { id: true, status: true },
+    select: { id: true, status: true, createdAt: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: MAX_REVIEW_COHORT_DRAFTS + 1,
   });
@@ -58,5 +87,6 @@ export async function loadDraftReviewCoverage(shop: string, since: Date, now: Da
   return {
     available: true as const,
     ...summarizeDraftReviewCoverage(drafts, reviews),
+    ...summarizeUnreviewedAge(drafts, reviews, now),
   };
 }

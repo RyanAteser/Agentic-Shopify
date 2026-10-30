@@ -5,6 +5,7 @@ import {authenticate} from "../shopify.server";
 import db from "../db.server";
 import {compareOrganicWindows,isExactHttpsStorefrontProperty} from "../lib/growth";
 import {summarizeEditorialCohort,summarizeEditorialReviews} from "../lib/editorial-funnel";
+import {loadDraftReviewCoverage} from "../lib/editorial-review-coverage.server";
 import {disconnectGoogle,syncOrganicMetrics} from "../lib/gsc.server";
 
 export const loader=async ({request}:LoaderFunctionArgs)=>{
@@ -41,11 +42,12 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
     jobGroups.map(row=>({status:row.status,count:row._count._all})),
     draftGroups.map(row=>({status:row.status,count:row._count._all}))
   );
+  const coverage=await loadDraftReviewCoverage(shop,since,now);
   const reviews=summarizeEditorialReviews(reviewGroups.map(row=>({
     decision:row.decision,count:row._count._all,
     minutesSamples:row._count.reviewMinutes,minutesTotal:row._sum.reviewMinutes??0
   })));
-  return {shop,connection,scoped,comparison,editorial,reviews,recent:chronological.slice(-14),connected:new URL(request.url).searchParams.has("connected")};
+  return {shop,connection,scoped,comparison,editorial,reviews,coverage,recent:chronological.slice(-14),connected:new URL(request.url).searchParams.has("connected")};
 };
 
 export const action=async ({request}:ActionFunctionArgs)=>{
@@ -80,7 +82,7 @@ export const action=async ({request}:ActionFunctionArgs)=>{
 function number(x:number){return Math.round(x).toLocaleString();}
 function pct(x:number|null){return x===null?"Insufficient baseline":(x>0?"+":"")+x.toFixed(1)+"%";}
 export default function GrowthDashboard(){
-  const {shop,connection,scoped,comparison,editorial,reviews,recent,connected}=useLoaderData<typeof loader>();
+  const {shop,connection,scoped,comparison,editorial,reviews,coverage,recent,connected}=useLoaderData<typeof loader>();
   const result=useActionData<typeof action>();
   const busy=useNavigation().state!=="idle";
   return <s-page heading="Growth · Verified Organic Search">
@@ -102,6 +104,14 @@ export default function GrowthDashboard(){
       <p><strong>Usable among recorded reviews:</strong> {reviews.usableAmongReviewedPct===null?"Insufficient reviews":reviews.usableAmongReviewedPct.toFixed(1)+"%"} (shown only after at least five decisions).</p>
       <p><strong>Self-reported review time:</strong> {reviews.meanReportedMinutes===null?"Not recorded":reviews.meanReportedMinutes.toFixed(1)+" minutes on average"} from {reviews.minutesSamples} reports. This is time spent, not time saved.</p>
       <p>These are voluntary, one-time decisions dated by review, not all drafts generated in the window. Unreviewed and directly published drafts are not counted as accepted or rejected; the observed share may be selection-biased. Marking usable never publishes an article. No revenue or productivity lift is implied.</p>
+    </s-section>
+    <s-section heading="Editorial review coverage · drafts created in the past 28 days">
+      {!coverage.available ? <p role="status">Review participation is unavailable because the draft cohort exceeds the bounded reporting limit. No partial coverage percentage is shown.</p> : <>
+        <p><strong>{coverage.reviewed}</strong> of <strong>{coverage.drafts}</strong> drafts created in this period have an explicit recorded editorial decision. <strong>{coverage.unreviewed}</strong> have no recorded decision.</p>
+        <p><strong>Recorded review coverage:</strong> {coverage.coveragePct===null?"Insufficient drafts":coverage.coveragePct.toFixed(1)+"%"} (percentage shown after at least five created drafts). Recorded decisions: {coverage.usable} usable, {coverage.rejected} rejected.</p>
+        {coverage.publishedWithoutReview>0&&<p role="status"><strong>{coverage.publishedWithoutReview}</strong> published draft(s) have no recorded editorial review. Investigate legacy or imported records; this is not evidence of a current publishing bypass.</p>}
+        <p>This is a draft-creation cohort, unlike the review-date cohort above. Decisions may have occurred later, and an old usable review may now be stale after editing. Coverage measures recorded participation, not current approval, content accuracy, productivity gains or SEO results.</p>
+      </>}
     </s-section>
     <s-section heading="Google Search Console connection">
       {!connection?<div>

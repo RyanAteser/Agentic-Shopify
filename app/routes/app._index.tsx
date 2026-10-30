@@ -52,7 +52,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const editVersions = drafts.map(draft => ({draftId: draft.id, digest: editorialEditDigest(draft)}));
   const reviewVersions = drafts.map(draft => ({draftId: draft.id, digest: reviewFormDigest(draft, config)}));
   const publishVersions = drafts.map(draft => ({draftId: draft.id, digest: publishFormDigest(draft, config)}));
-  return { shop: session.shop, blogs, config, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates, draftPreviews, editVersions, reviewVersions, publishVersions };
+  // Expose only merchant-editable/displayed settings. Internal consent-order
+  // BigInts must not be serialized into a loader response or leaked to UI.
+  const visibleConfig = {
+    blogId: config.blogId, authorName: config.authorName,
+    audience: config.audience, brandVoice: config.brandVoice,
+    seedTopics: config.seedTopics, cadenceDays: config.cadenceDays,
+    enabled: config.enabled, freeDraftsUsed: config.freeDraftsUsed
+  };
+  return { shop: session.shop, blogs, config: visibleConfig, drafts, jobs: jobs.map(job => ({...job, healthNotice: generationJobNotice(job.status, job.updatedAt)})), reviews: reviewStates, draftPreviews, editVersions, reviewVersions, publishVersions };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {

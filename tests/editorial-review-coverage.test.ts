@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import db from "../app/db.server";
 import {
-  loadDraftReviewCoverage, summarizeDraftReviewCoverage,
+  loadDraftReviewCoverage, summarizeDraftReviewCoverage, summarizeUnreviewedAge,
 } from "../app/lib/editorial-review-coverage.server";
 
 test("coverage denominator includes unresolved and rejected drafts, not only decisions", () => {
@@ -78,4 +78,29 @@ test("database coverage is tenant-scoped and uses draft creation dates, not revi
     await db.contentJob.deleteMany({where});
     await db.storeConfig.deleteMany({where});
   }
+});
+
+test("unreviewed aging counts exact 7/14 day boundaries without labeling reviewed drafts overdue",()=>{
+  const now=new Date("2026-10-30T12:00:00Z");
+  const days=(n:number)=>new Date(now.getTime()-n*86400000);
+  const drafts=[
+    {id:"new",status:"ready",createdAt:days(6)},
+    {id:"week",status:"ready",createdAt:days(7)},
+    {id:"fortnight",status:"needs_review",createdAt:days(14)},
+    {id:"reviewed",status:"published",createdAt:days(27)},
+  ];
+  assert.deepEqual(summarizeUnreviewedAge(drafts,[{draftId:"reviewed",decision:"usable"}],now),{
+    aged7Days:2,aged14Days:1,oldestUnreviewedDays:14,
+  });
+  assert.deepEqual(summarizeUnreviewedAge(drafts,drafts.map(d=>({draftId:d.id,decision:"usable"})),now),{
+    aged7Days:0,aged14Days:0,oldestUnreviewedDays:null,
+  });
+});
+test("unreviewed aging fails closed on future dates, duplicates and foreign review IDs",()=>{
+  const now=new Date("2026-10-30T12:00:00Z");
+  const row={id:"a",status:"ready",createdAt:now};
+  assert.throws(()=>summarizeUnreviewedAge([row,{...row}],[],now),/Duplicate/);
+  assert.throws(()=>summarizeUnreviewedAge([{...row,createdAt:new Date(now.getTime()+1)}],[],now),/creation date/);
+  assert.throws(()=>summarizeUnreviewedAge([row],[{draftId:"other",decision:"usable"}],now),/Foreign/);
+  assert.throws(()=>summarizeUnreviewedAge([row],[],new Date(NaN)),/reporting instant/);
 });

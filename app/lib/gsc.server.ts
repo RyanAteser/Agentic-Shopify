@@ -7,6 +7,22 @@ const GOOGLE_AUTHORIZE="https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN="https://oauth2.googleapis.com/token";
 const GSC_BASE="https://www.googleapis.com/webmasters/v3";
 
+// The OAuth start must be ordered before Shopify authentication, while
+// Disconnect records revocation after acquiring the merchant lock. Use the
+// *same primary database clock* for both: application workers can have
+// different wall clocks. Never fall back to the worker clock on DB failure.
+// PostgreSQL clock_timestamp() advances within transactions; now() does not.
+export async function databaseConsentTime(client:Pick<typeof db,"$queryRaw">=db):Promise<Date>{
+  const postgres=/^postgres(?:ql)?:\/\//i.test(process.env.DATABASE_URL??"");
+  const rows=postgres
+    ?await client.$queryRaw<Array<{instant:Date}>>`SELECT clock_timestamp() AS instant`
+    :await client.$queryRaw<Array<{instant:string}>>`SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now') AS instant`;
+  const raw=rows[0]?.instant;
+  const instant=raw instanceof Date?raw:new Date(raw);
+  if(!Number.isFinite(instant.getTime()))throw new Error("Database consent clock unavailable");
+  return instant;
+}
+
 function secrets(){
   const clientId=process.env.GSC_CLIENT_ID,clientSecret=process.env.GSC_CLIENT_SECRET;
   const appUrl=process.env.SHOPIFY_APP_URL;
@@ -233,11 +249,12 @@ export async function disconnectGoogle(shop:string){
         where:{shop},data:{updatedAt:new Date()}
       });
     }
-    // Record the timestamp only AFTER acquiring the merchant row lock.
-    // Otherwise a callback holding that lock could delay the transaction
-    // while an in-flight Connect receives a falsely newer start timestamp.
+    // The revocation boundary is sampled from the same database clock as
+    // Connect's pre-authentication intent, after the merchant row lock.
+    // A skewed application worker must not be able to revive stale consent.
+    const revokedAt=await databaseConsentTime(tx);
     await tx.storeConfig.updateMany({
-      where:{shop},data:{gscConsentRevokedAt:new Date()}
+      where:{shop},data:{gscConsentRevokedAt:revokedAt}
     });
     await tx.googleAuthState.deleteMany({where:{shop}});
     await tx.searchConsoleConnection.deleteMany({where:{shop}});

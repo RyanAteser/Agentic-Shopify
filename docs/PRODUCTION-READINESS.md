@@ -70,6 +70,10 @@ The Growth dashboard now reports the median and nearest-rank 90th percentile of 
 
 **Important distinction:** a merchant can edit and renew an earlier review, so `reviewedAt` is not a guaranteed first-decision timestamp. These are not time-to-first-review, human labor minutes, time savings, or a queue SLA. Selection bias remains because unresolved drafts are excluded. A genuine first-response latency metric requires a separate immutable event record of entering the review queue and initial decision, with an independently tested migration and merchant consent. The current 28-day creation-date cohort does not cover older actionable queues. Before claiming productivity gains, collect a consented baseline and compare quality-adjusted total human time and provider costs, including rejected and unresolved work.
 
+## Editorial review time coverage CI regression (2026-10-30)
+
+The new 80%-coverage/at-least-five-time-reports gate deliberately suppresses an average from only three self-reported time samples among five reviews. Hosted CI on commit `a4a809e` failed in both SQLite and PostgreSQL because an older integration test still asserted that this under-covered example should report a 15-minute average. The failing assertion was a **test expectation**, not evidence that missing reports should be interpreted as zero. Commit `72eabcf` corrects that test to require a null average, `insufficient-time-reports`, 60% coverage and two missing reports. The new CI must pass before the branch is considered green; no merchant-facing data or runtime policy was changed by the correction.
+
 ## Hard go/no-go gates
 
 | Gate | Current status | Completion proof required |

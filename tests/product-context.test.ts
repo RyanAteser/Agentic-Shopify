@@ -34,8 +34,8 @@ test("Shopify product context attests tenant and preserves verified published pr
   assert.equal(calls, 1);
   assert.deepEqual(result, { products: [{
     name: product.title, description: product.description, url: product.onlineStoreUrl
-  }], hasMore: false });
-  assert.deepEqual(parseVerifiedPublishedProducts(shop, response([])), { products: [], hasMore: false },
+  }], hasMore: false, sampledCount: 2, missingUrlCount: 1 });
+  assert.deepEqual(parseVerifiedPublishedProducts(shop, response([])), { products: [], hasMore: false, sampledCount: 0, missingUrlCount: 0 },
     "an authenticated empty catalog is valid, unlike a failed query");
 });
 
@@ -117,5 +117,20 @@ test("Shopify pagination evidence distinguishes a full 20-product sample from a 
   const onlyNoUrl = parseVerifiedPublishedProducts(shop, response([
     { ...product, onlineStoreUrl: null }
   ], shop, false));
-  assert.deepEqual(onlyNoUrl, { products: [], hasMore: false });
+  assert.deepEqual(onlyNoUrl, { products: [], hasMore: false, sampledCount: 1, missingUrlCount: 1 });
+});
+
+
+test("missing storefront URLs remain counted, not misreported as an empty Shopify catalog", () => {
+  const noUrls = response([
+    { ...product, title: "Hidden URL A", onlineStoreUrl: null },
+    { ...product, title: "Hidden URL B", onlineStoreUrl: null }
+  ]);
+  assert.deepEqual(parseVerifiedPublishedProducts(shop, noUrls), {
+    products: [], hasMore: false, sampledCount: 2, missingUrlCount: 2
+  });
+  assert.throws(() => parseVerifiedPublishedProducts(shop, response([
+    { ...product, title: null, onlineStoreUrl: null }
+  ])), ProductContextUnavailableError,
+  "A malformed no-URL product cannot bypass response validation");
 });

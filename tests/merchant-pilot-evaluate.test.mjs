@@ -78,3 +78,49 @@ test("registration must precede start and planned sample is bounded",()=>{
   p.plannedPairs=501;
   assert.throws(()=>evaluatePilot(p),/plannedPairs/);
 });
+
+test("paired discordance exposes topic-specific quality regressions even when rates tie",()=>{
+  const p=pilot();
+  p.pairs[0].ai=outcome("rejected",5);
+  p.pairs[1].manual=outcome("rejected",20);
+  const r=evaluatePilot(p);
+  assert.deepEqual(r.pairedQuality,{bothPass:18,aiOnlyPass:1,manualOnlyPass:1,neitherPass:0});
+  assert.equal(r.qualityPassRateDifferencePercentagePoints,0);
+  assert.equal(r.decisionSupport,"candidate-for-independent-review");
+});
+
+test("quality regressions block positive triage despite faster AI labor",()=>{
+  const p=pilot();
+  p.pairs[0].ai=outcome("usable",5,1,0);
+  const r=evaluatePilot(p);
+  assert.equal(r.pairedQuality.manualOnlyPass,1);
+  assert.equal(r.ai.qualityPassed,19);
+  assert.ok(r.relativeLaborPerQualityPassPct<0);
+  assert.equal(r.decisionSupport,"quality-review-required");
+});
+
+test("any AI product-link error requires review even if manual quality is worse",()=>{
+  const p=pilot();
+  p.pairs[0].manual=outcome("rejected",20);
+  p.pairs[1].ai=outcome("usable",10,0,1);
+  const r=evaluatePilot(p);
+  assert.equal(r.ai.qualityPassed,r.manual.qualityPassed);
+  assert.equal(r.decisionSupport,"quality-review-required");
+});
+
+test("no efficiency gain and zero passing output never imply candidate status",()=>{
+  const p=pilot();
+  p.pairs.forEach(x=>{x.ai=outcome("usable",30);});
+  assert.equal(evaluatePilot(p).decisionSupport,"no-observed-efficiency-gain");
+  p.pairs.forEach(x=>{x.ai=outcome("rejected",5);x.manual=outcome("rejected",5);});
+  assert.equal(evaluatePilot(p).decisionSupport,"cannot-compare-efficiency");
+});
+
+test("incomplete pilots abstain from quality comparison and triage",()=>{
+  const p=pilot();p.pairs[0].manual=null;
+  const r=evaluatePilot(p);
+  assert.equal(r.decisionSupport,"insufficient-evidence");
+  assert.equal(r.qualityPassRateDifferencePercentagePoints,null);
+  assert.equal(r.pairedQuality.bothPass,19);
+  assert.equal(r.ai.attempts,19);
+});

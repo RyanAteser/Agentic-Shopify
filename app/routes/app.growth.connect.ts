@@ -1,22 +1,22 @@
 import type {LoaderFunctionArgs} from "react-router";
 import {redirect} from "react-router";
 import {authenticate} from "../shopify.server";
-import db from "../db.server";
 import {randomOAuthState} from "../lib/gsc-crypto.server";
-import {googleAuthorizationUrl} from "../lib/gsc.server";
+import {beginGoogleAuthorization,googleAuthorizationUrl} from "../lib/gsc.server";
 
 /** Must be navigated at the top-level for Google's non-iframe OAuth consent. */
 export const loader=async ({request}:LoaderFunctionArgs)=>{
   const {session}=await authenticate.admin(request);
-  const shop=session.shop;
-  await db.googleAuthState.deleteMany({where:{expiresAt:{lt:new Date()}}});
-  const pending=await db.googleAuthState.count({where:{shop,expiresAt:{gt:new Date()}}});
-  if(pending>=3)return redirect("/app/growth?error=rate");
-  // Check configuration before creating a state.
+  // Check configuration before creating a state or writing merchant records.
   const {raw,hash}=randomOAuthState();
   const target=googleAuthorizationUrl(raw);
-  await db.googleAuthState.create({
-    data:{stateHash:hash,shop,expiresAt:new Date(Date.now()+10*60000)}
-  });
+  // authenticate.admin() may have completed before a concurrent uninstall.
+  // Recheck the persisted, shop-scoped Session inside the same transaction
+  // that creates the pending state; never resurrect data after redaction.
+  const outcome=await beginGoogleAuthorization(session.shop,session.id,hash);
+  if(outcome==="session_missing"){
+    return new Response("Shopify session is no longer active. Reopen the installed app.",{status:409});
+  }
+  if(outcome==="rate_limited")return redirect("/app/growth?error=rate");
   return redirect(target);
 };

@@ -52,10 +52,48 @@ export async function verifyGoogleSite(accessToken:string,primaryHost:string) {
   if(!options.length)throw new Error("Add a verified HTTPS URL-prefix Search Console property for your exact Shopify primary host. Domain properties include other hosts and cannot support this storefront-only scorecard.");
   return String(options[0].siteUrl);
 }
+/**
+ * Begin OAuth only while the authenticated Shopify Session still exists.
+ * Redaction deletes Session first, then StoreConfig and pending states.
+ * This transaction uses that same lock order, so a request delayed past
+ * uninstall cannot create a fresh state or resurrect merchant configuration.
+ * The StoreConfig lock also serializes concurrent per-shop state limits.
+ */
+export async function beginGoogleAuthorization(
+  shop:string,sessionId:string,stateHash:string,now=new Date()
+):Promise<"created"|"session_missing"|"rate_limited"> {
+  if(!/^[a-f0-9]{64}$/.test(stateHash)||!Number.isFinite(now.getTime())){
+    throw new Error("Invalid Google authorization request");
+  }
+  return db.$transaction(async tx=>{
+    const active=await tx.session.updateMany({
+      where:{id:sessionId,shop},data:{id:sessionId}
+    });
+    if(active.count!==1)return "session_missing";
+    await tx.storeConfig.upsert({where:{shop},create:{shop},update:{}});
+    await tx.googleAuthState.deleteMany({where:{shop,expiresAt:{lte:now}}});
+    const pending=await tx.googleAuthState.count({
+      where:{shop,expiresAt:{gt:now}}
+    });
+    if(pending>=3)return "rate_limited";
+    await tx.googleAuthState.create({
+      data:{stateHash,shop,expiresAt:new Date(now.getTime()+10*60000)}
+    });
+    return "created";
+  });
+}
+
 export async function storeGoogleConnection(shop:string,property:string,refreshToken:string,stateHash:string) {
   if(!isExactHttpsStorefrontProperty(property))throw new Error("Storefront-only metrics require an exact HTTPS URL-prefix property");
   const encryptedRefresh=encryptToken(refreshToken);
   await db.$transaction(async tx=>{
+    // Lock the active merchant before consuming the state. Redaction deletes
+    // StoreConfig before pending OAuth states, so a late callback cannot
+    // recreate a Google connection even if a stale state was somehow present.
+    const active=await tx.storeConfig.updateMany({
+      where:{shop},data:{updatedAt:new Date()}
+    });
+    if(active.count!==1)throw new Error("Shopify merchant is no longer connected");
     // Keep the pending state until the same transaction that stores consent.
     // Disconnect/uninstall/redaction delete pending states, fencing off delayed
     // Google callbacks even when the external token exchange has succeeded.
@@ -165,11 +203,17 @@ export async function disconnectGoogle(shop:string){
   // Erase local data even if Google revocation is temporarily unavailable.
   // Delete the connection FIRST. The importer locks that row before inserting
   // metrics; this ordering serializes revocation against any in-flight import.
-  await db.$transaction([
-    db.searchConsoleConnection.deleteMany({where:{shop}}),
-    db.organicDailyMetric.deleteMany({where:{shop}}),
-    db.googleAuthState.deleteMany({where:{shop}})
-  ]);
+  await db.$transaction(async tx=>{
+    // Same StoreConfig -> OAuth state -> connection -> metrics lock order as
+    // callback finalization. A disconnect cannot deadlock a late callback
+    // or leave its state behind after deleting the Google connection.
+    await tx.storeConfig.updateMany({
+      where:{shop},data:{updatedAt:new Date()}
+    });
+    await tx.googleAuthState.deleteMany({where:{shop}});
+    await tx.searchConsoleConnection.deleteMany({where:{shop}});
+    await tx.organicDailyMetric.deleteMany({where:{shop}});
+  });
   if(connection){
     try{
       const token=decryptToken(connection.encryptedRefresh);

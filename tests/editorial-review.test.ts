@@ -14,7 +14,12 @@ test("review aggregation uses explicit decisions and observed minutes",()=>{
   ]);
   assert.equal(result.reviewed,5);
   assert.equal(result.usableAmongReviewedPct,60);
-  assert.equal(result.meanReportedMinutes,15);
+  // Only 3/5 decisions reported minutes. The mean must be withheld rather
+  // than presented as representative of all merchant review decisions.
+  assert.equal(result.meanReportedMinutes,null);
+  assert.equal(result.minutesInterpretation,"insufficient-time-reports");
+  assert.equal(result.minutesCoveragePct,60);
+  assert.equal(result.minutesMissing,2);
   assert.equal(result.minutesSamples,3);
   assert.throws(()=>summarizeEditorialReviews([{decision:"published",count:5,minutesSamples:0,minutesTotal:0}]));
   assert.throws(()=>summarizeEditorialReviews([{decision:"usable",count:1,minutesSamples:2,minutesTotal:10}]));

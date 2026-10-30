@@ -48,8 +48,9 @@ function scenario(pilot,rows,hourlyCents,ready) {
  */
 export function evaluatePilotEconomics(pilot,ledger) {
   const pilotResult=evaluatePilot(pilot);
-  exact(ledger,["protocol","costBasis","laborValueCentsPerHour","pairs"],"root");
+  exact(ledger,["protocol","currency","costBasis","laborValueCentsPerHour","pairs"],"root");
   if (ledger.protocol !== COST_PROTOCOL) fail("unsupported protocol");
+  if (ledger.currency !== "USD") fail("cost currency must be USD");
   if (!["estimated","invoice-backed"].includes(ledger.costBasis)) fail("costBasis invalid");
   cents(ledger.laborValueCentsPerHour,1_000_000,"laborValueCentsPerHour");
   if (!Array.isArray(ledger.pairs) || ledger.pairs.length > 500) fail("pairs must be a bounded array");
@@ -82,7 +83,7 @@ export function evaluatePilotEconomics(pilot,ledger) {
     ledger.costBasis!=="invoice-backed"?"estimated-costs-only":
     "candidate-for-independent-cost-review";
   return {
-    protocol:COST_PROTOCOL,pilotStatus:pilotResult.status,
+    protocol:COST_PROTOCOL,currency:"USD",pilotStatus:pilotResult.status,
     editorialDecisionSupport:pilotResult.decisionSupport,
     recordedCostPairs:rows.size,plannedPairs:pilotResult.plannedPairs,
     costBasis:ledger.costBasis,scenarios,decisionSupport,

@@ -32,7 +32,11 @@ test("GSC initiation requires a persisted, same-shop session and bounds pending 
     await disconnectGoogle(shop);
     assert.equal(await db.googleAuthState.count({where:{shop}}),0);
     assert.equal(await db.storeConfig.count({where:{shop}}),1);
-    assert.equal(await beginGoogleAuthorization(shop,own,state("fresh"),now),"created",
+    const revokedAt=(await db.storeConfig.findUniqueOrThrow({where:{shop}})).gscConsentRevokedAt;
+    assert.ok(revokedAt,"explicit disconnect must persist a revocation boundary");
+    assert.equal(await beginGoogleAuthorization(shop,own,state("stale"),now),"revoked");
+    assert.equal(await beginGoogleAuthorization(shop,own,state("fresh"),
+      new Date(revokedAt.getTime()+1)),"created",
       "a new explicit consent request remains possible while installed");
   }finally{
     await eraseMerchantData(shop);
@@ -118,6 +122,63 @@ test("PostgreSQL GSC initiation and uninstall cannot leave orphaned consent",{
       assert.equal(await db.storeConfig.count({where:{shop}}),0);
       assert.equal(await db.googleAuthState.count({where:{shop}}),0);
       assert.equal(await db.searchConsoleConnection.count({where:{shop}}),0);
+    }finally{
+      await eraseMerchantData(shop);
+    }
+  }
+});
+
+test("a delayed pre-disconnect Connect cannot reattach consent, but a new intent can",async()=>{
+  const shop=shopName(),other=shopName(),sessionId="session-"+randomUUID();
+  const otherSessionId="session-"+randomUUID();
+  const previousKey=process.env.GSC_ENCRYPTION_KEY;
+  process.env.GSC_ENCRYPTION_KEY=Buffer.alloc(32,71).toString("base64");
+  const startedAt=new Date(Date.now()-1000);
+  const priorState=state("prior-"+randomUUID());
+  try{
+    await createSession(shop,sessionId);
+    await createSession(other,otherSessionId);
+    assert.equal(await beginGoogleAuthorization(shop,sessionId,priorState,startedAt),"created");
+    await disconnectGoogle(shop);
+    const config=await db.storeConfig.findUniqueOrThrow({where:{shop}});
+    assert.ok(config.gscConsentRevokedAt);
+    assert.equal(await beginGoogleAuthorization(shop,sessionId,state("delayed-"+randomUUID()),startedAt),"revoked");
+    assert.equal(await db.googleAuthState.count({where:{shop}}),0);
+    await assert.rejects(
+      storeGoogleConnection(shop,"https://example.test/","replayed-token",priorState),
+      /expired or revoked/
+    );
+    assert.equal(await db.searchConsoleConnection.count({where:{shop}}),0);
+    assert.equal(await beginGoogleAuthorization(other,otherSessionId,state("neighbor-"+randomUUID())),"created",
+      "revocation is scoped to the merchant");
+    assert.equal(await beginGoogleAuthorization(shop,sessionId,state("new-"+randomUUID()),
+      new Date(config.gscConsentRevokedAt.getTime()+1)),"created");
+    assert.equal(await db.googleAuthState.count({where:{shop}}),1);
+  }finally{
+    await eraseMerchantData(shop);
+    await eraseMerchantData(other);
+    if(previousKey===undefined)delete process.env.GSC_ENCRYPTION_KEY;
+    else process.env.GSC_ENCRYPTION_KEY=previousKey;
+  }
+});
+
+test("PostgreSQL concurrent Connect and Disconnect leave no stale state",{
+  skip:!process.env.DATABASE_URL
+},async()=>{
+  for(let i=0;i<4;i++){
+    const shop=shopName(),sessionId="session-"+randomUUID();
+    await createSession(shop,sessionId);
+    try{
+      const startedAt=new Date(Date.now()-1000);
+      const outcomes=await Promise.allSettled([
+        beginGoogleAuthorization(shop,sessionId,state("race-"+randomUUID()),startedAt),
+        disconnectGoogle(shop)
+      ]);
+      assert.equal(outcomes[0].status,"fulfilled");
+      assert.equal(outcomes[1].status,"fulfilled");
+      assert.equal(await db.googleAuthState.count({where:{shop}}),0);
+      assert.equal(await db.searchConsoleConnection.count({where:{shop}}),0);
+      assert.ok((await db.storeConfig.findUniqueOrThrow({where:{shop}})).gscConsentRevokedAt);
     }finally{
       await eraseMerchantData(shop);
     }

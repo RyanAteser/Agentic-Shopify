@@ -33,3 +33,11 @@ Expected merchant benefit: reduced risk of post-uninstall data reattachment and 
 
 - [Shopify privacy-law compliance and mandatory shop redaction](https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance)
 - [Google OAuth 2.0 web server applications, state and CSRF](https://developers.google.com/identity/protocols/oauth2/web-server)
+
+## Follow-up: explicit Disconnect intent boundary (October 30, 2026)
+
+An installed merchant's explicit Disconnect now persists `StoreConfig.gscConsentRevokedAt` (new PostgreSQL migration and matching SQLite schema). The top-level Connect route captures its start timestamp **before** asynchronous Shopify authentication. `beginGoogleAuthorization` locks the same merchant configuration row as Disconnect and refuses to create a pending OAuth state when the request started at or before the latest revocation. It returns HTTP 409 and requires the merchant to initiate a fresh Connect action. Disconnect continues to delete pending states, credentials and measurements in one transaction.
+
+This closes the demonstrated delayed-authentication race under a consistent application-clock assumption. It does **not** prove safety under arbitrarily skewed application workers: the boundary uses millisecond wall-clock timestamps. Before multi-region production deployment, verify NTP synchronization and clock skew under staging load or replace the timestamp fence with a strictly ordered, database-backed intent protocol. Do not interpret a new connection request as permission to bypass explicit merchant consent.
+
+Regression coverage includes stale and fresh intent, pending-state deletion, replay refusal, cross-shop isolation and PostgreSQL concurrent Connect/Disconnect. No live Google account, Shopify store or merchant content is accessed. A staging integration must verify actual request/response ordering and revocation behavior before release.

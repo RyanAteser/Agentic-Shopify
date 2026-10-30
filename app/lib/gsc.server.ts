@@ -60,24 +60,31 @@ export async function verifyGoogleSite(accessToken:string,primaryHost:string) {
  * The StoreConfig lock also serializes concurrent per-shop state limits.
  */
 export async function beginGoogleAuthorization(
-  shop:string,sessionId:string,stateHash:string,now=new Date()
-):Promise<"created"|"session_missing"|"rate_limited"> {
-  if(!/^[a-f0-9]{64}$/.test(stateHash)||!Number.isFinite(now.getTime())){
+  shop:string,sessionId:string,stateHash:string,requestStartedAt=new Date()
+):Promise<"created"|"session_missing"|"rate_limited"|"revoked"> {
+  if(!/^[a-f0-9]{64}$/.test(stateHash)||!Number.isFinite(requestStartedAt.getTime())){
     throw new Error("Invalid Google authorization request");
   }
-  return db.$transaction(async (tx):Promise<"created"|"session_missing"|"rate_limited">=>{
+  return db.$transaction(async (tx):Promise<"created"|"session_missing"|"rate_limited"|"revoked">=>{
     const active=await tx.session.updateMany({
       where:{id:sessionId,shop},data:{id:sessionId}
     });
     if(active.count!==1)return "session_missing";
-    await tx.storeConfig.upsert({where:{shop},create:{shop},update:{}});
-    await tx.googleAuthState.deleteMany({where:{shop,expiresAt:{lte:now}}});
+    // Upsert UPDATE takes the merchant row lock also used by Disconnect.
+    // A request that began before the last explicit revocation must not
+    // resurrect a pending consent state after a slow Shopify authentication.
+    const config=await tx.storeConfig.upsert({
+      where:{shop},create:{shop},update:{updatedAt:new Date()}
+    });
+    if(config.gscConsentRevokedAt &&
+      requestStartedAt.getTime()<=config.gscConsentRevokedAt.getTime())return "revoked";
+    await tx.googleAuthState.deleteMany({where:{shop,expiresAt:{lte:requestStartedAt}}});
     const pending=await tx.googleAuthState.count({
-      where:{shop,expiresAt:{gt:now}}
+      where:{shop,expiresAt:{gt:requestStartedAt}}
     });
     if(pending>=3)return "rate_limited";
     await tx.googleAuthState.create({
-      data:{stateHash,shop,expiresAt:new Date(now.getTime()+10*60000)}
+      data:{stateHash,shop,expiresAt:new Date(requestStartedAt.getTime()+10*60000)}
     });
     return "created";
   });
@@ -207,9 +214,17 @@ export async function disconnectGoogle(shop:string){
     // Same StoreConfig -> OAuth state -> connection -> metrics lock order as
     // callback finalization. A disconnect cannot deadlock a late callback
     // or leave its state behind after deleting the Google connection.
-    await tx.storeConfig.updateMany({
+    // Lock first, then record the revocation time AFTER the lock is acquired.
+    // This prevents a delayed Connect request (started before Disconnect)
+    // from creating a new state when its Shopify authentication finishes late.
+    const locked=await tx.storeConfig.updateMany({
       where:{shop},data:{updatedAt:new Date()}
     });
+    if(locked.count){
+      await tx.storeConfig.updateMany({
+        where:{shop},data:{gscConsentRevokedAt:new Date()}
+      });
+    }
     await tx.googleAuthState.deleteMany({where:{shop}});
     await tx.searchConsoleConnection.deleteMany({where:{shop}});
     await tx.organicDailyMetric.deleteMany({where:{shop}});

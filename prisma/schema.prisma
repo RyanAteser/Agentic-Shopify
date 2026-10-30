@@ -47,6 +47,8 @@ model StoreConfig {
   rankingRequestsUsed Int      @default(0)
   rankingRecordsUsed  Int      @default(0)
   lastManagerSyncAt DateTime?
+  // Latest explicit Google disconnect, retained while the Shopify app remains installed.
+  gscConsentRevokedAt DateTime?
   nextRunAt        DateTime?
   enabled          Boolean  @default(false)
   createdAt        DateTime @default(now())

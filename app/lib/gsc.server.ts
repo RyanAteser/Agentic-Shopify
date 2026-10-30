@@ -65,7 +65,7 @@ export async function beginGoogleAuthorization(
   if(!/^[a-f0-9]{64}$/.test(stateHash)||!Number.isFinite(now.getTime())){
     throw new Error("Invalid Google authorization request");
   }
-  return db.$transaction(async tx=>{
+  return db.$transaction(async (tx):Promise<"created"|"session_missing"|"rate_limited">=>{
     const active=await tx.session.updateMany({
       where:{id:sessionId,shop},data:{id:sessionId}
     });

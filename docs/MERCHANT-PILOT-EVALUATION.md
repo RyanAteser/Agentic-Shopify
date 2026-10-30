@@ -45,11 +45,16 @@ node scripts/merchant-pilot-evaluate.mjs /path/to/anonymized-pilot.json
 - **Quality pass rate**: quality-passing attempts / all completed paired attempts in an arm.
 - **Human labor minutes per quality pass**: all human labor minutes, including rejected attempts, / quality-passing outputs. Null when none pass. This is a descriptive throughput proxy, **not time saved**.
 - **Relative labor per quality pass**: 100 × (AI minutes per pass / manual minutes per pass − 1), shown only when operational gates pass. A negative number favors AI, but cannot establish a causal or statistically significant effect.
+- **Paired quality discordance**: both pass, AI only passes, manual only passes, neither passes. A tied aggregate pass rate can still conceal different failing topics.
+- **Quality pass rate difference**: AI minus manual in percentage points, suppressed until the same operational gates pass.
+- **Conservative decision support**: `insufficient-evidence` for incomplete/unblinded/imbalanced pilots; `quality-review-required` if AI has any critical factual or product-link error or fewer quality passes than manual; `cannot-compare-efficiency` if neither arm has a passing output; `no-observed-efficiency-gain` if AI labor per pass is not lower; otherwise `candidate-for-independent-review`. **Even candidate status does not authorize publishing, launch, billing, or a claim of improvement.**
 - **Incomplete pairs**: includes missing arms and unrecorded planned pairs. They are never silently counted as successes. Registration and blinding flags are self-attestations, not verification.
 
 Pre-register an actual merchant decision rule: quality pass rate no worse than manual, fewer human labor minutes per pass after all failures, and no unacceptable critical factual or product-link errors. Review uncertainty, reviewer disagreement, costs, merchant mix and subscription economics before claiming benefit. Do not publish or charge based on the offline result.
 
 ## Limitations and next step
+
+The per-arm summaries use only completed pairs, and incomplete planned pairs block comparative metrics. A negative relative labor ratio can coexist with serious quality regressions, so decision support checks quality first. The zero-error AI threshold is deliberately conservative for triage, not a calibrated non-inferiority margin. The tool cannot establish whether recorded review order was randomized, or independently verify merchant assessments.
 
 Paired evaluations can suffer from carryover, reviewer learning, order effects, and correlated samples from the same merchant. No p-values, confidence intervals, causal inference or real merchant outcome data are produced. Existing app review-minute reports do **not** include manual creation baselines. Collect separately consented, blinded pilot observations before making a claim. Later study qualified Search Console traffic and Shopify conversions with a separate, appropriately designed longitudinal analysis.
 

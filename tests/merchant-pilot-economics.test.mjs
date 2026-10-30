@@ -10,7 +10,7 @@ const pilot=()=>({
   startedAt:"2026-10-02T00:00:00Z",
   plannedPairs:20,
   pairs:Array.from({length:20},(_,i)=>({
-    id:"case_"+i,order:i%2?"ai-first":"manual-first",blindScored:true,merchantGroup:"group_"+String(i%10).padStart(6,"0"),
+    id:"case_"+i,order:i%2?"ai-first":"manual-first",blindScored:true,merchantGroup:"group_"+String(Math.floor(i/2)).padStart(6,"0"),
     ai:arm("usable",10),manual:arm("usable",20)
   }))
 });
@@ -131,5 +131,13 @@ test("legacy ungrouped pilot stays descriptive but cannot recommend economic ado
   const p=pilot();p.pairs.forEach(x=>{delete x.merchantGroup;});
   const r=evaluatePilotEconomics(p,ledger());
   assert.equal(r.scenarios.declaredLaborValue.relativeAiCostPct,-40);
+  assert.equal(r.decisionSupport,"editorial-gates-not-met");
+});
+
+test("merchant-by-order confounding blocks cost candidate despite lower observed costs",()=>{
+  const p=pilot();
+  p.pairs.forEach((x,i)=>{x.merchantGroup="group_"+String(i%10).padStart(6,"0");});
+  const r=evaluatePilotEconomics(p,ledger());
+  assert.equal(r.editorialDecisionSupport,"merchant-order-confounding");
   assert.equal(r.decisionSupport,"editorial-gates-not-met");
 });

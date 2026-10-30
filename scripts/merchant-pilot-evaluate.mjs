@@ -74,6 +74,28 @@ export function evaluatePilot(input){
   const readyForReview=complete.length===input.plannedPairs&&complete.length>=20&&balancedOrder&&allBlind;
   const relativeLaborPerPassPct=readyForReview&&ai.laborMinutesPerQualityPass!==null&&manual.laborMinutesPerQualityPass!==null
     ?100*(ai.laborMinutesPerQualityPass/manual.laborMinutesPerQualityPass-1):null;
+  // A pooled advantage can mask reversal in one review-order sequence. This
+  // sensitivity check is descriptive, not an estimator of carryover or causality.
+  const orderStratifiedEfficiency=readyForReview?Object.fromEntries(
+    ["ai-first","manual-first"].map(order=>{
+      const stratum=complete.filter(p=>p.order===order);
+      const aiArm=summarizeArm(stratum,"ai"),manualArm=summarizeArm(stratum,"manual");
+      const ratio=aiArm.laborMinutesPerQualityPass!==null&&manualArm.laborMinutesPerQualityPass!==null
+        ?100*(aiArm.laborMinutesPerQualityPass/manualArm.laborMinutesPerQualityPass-1):null;
+      return [order,{
+        completedPairs:stratum.length,
+        aiQualityPassed:aiArm.qualityPassed,manualQualityPassed:manualArm.qualityPassed,
+        aiLaborMinutesPerQualityPass:aiArm.laborMinutesPerQualityPass,
+        manualLaborMinutesPerQualityPass:manualArm.laborMinutesPerQualityPass,
+        relativeLaborPerQualityPassPct:ratio
+      }];
+    })
+  ):null;
+  const orderSensitivity=!readyForReview?"not-assessed":
+    Object.values(orderStratifiedEfficiency).some(x=>x.relativeLaborPerQualityPassPct===null)
+      ?"inconclusive":
+    Object.values(orderStratifiedEfficiency).every(x=>x.relativeLaborPerQualityPassPct<0)
+      ?"consistent-ai-advantage":"order-sensitive-or-no-gain";
   // Discordant pairs matter: aggregate quality rates alone hide which topics regress.
   const qualityPass=x=>x.decision==="usable"&&x.criticalFactualErrors===0&&x.productLinkErrors===0;
   const pairedQuality={
@@ -88,6 +110,8 @@ export function evaluatePilot(input){
       ?"quality-review-required":
     relativeLaborPerPassPct===null?"cannot-compare-efficiency":
     relativeLaborPerPassPct>=0?"no-observed-efficiency-gain":
+    orderSensitivity==="inconclusive"?"order-strata-inconclusive":
+    orderSensitivity!=="consistent-ai-advantage"?"order-sensitive-efficiency":
     "candidate-for-independent-review";
   return {
     protocol:PROTOCOL,plannedPairs:input.plannedPairs,recordedPairs:pairs.length,
@@ -97,6 +121,7 @@ export function evaluatePilot(input){
     ai,manual,pairedQuality,
     qualityPassRateDifferencePercentagePoints:readyForReview?100*(ai.qualityPassed-manual.qualityPassed)/complete.length:null,
     relativeLaborPerQualityPassPct:relativeLaborPerPassPct,
+    orderStratifiedEfficiency,orderSensitivity,
     decisionSupport,
     limitations:[
       "Outcomes are descriptive; registration, randomization, and blinding are self-attested, not verified.",
@@ -104,6 +129,7 @@ export function evaluatePilot(input){
       "Quality pass requires human usable decision, zero critical factual errors, and zero product-link errors.",
       "Missing or incomplete pairs never count as successes; comparisons abstain until all planned pairs are complete and review gates pass.",
       "The decisionSupport field is descriptive triage, not a launch, statistical non-inferiority, or publishing authorization.",
+      "Order-stratified efficiency is descriptive only. Review order may affect labor, but this tool cannot identify carryover, learning or period effects; small strata can be unstable.",
       "Only completed pairs enter arm summaries; incomplete planned pairs block comparative metrics.",
       "No merchant revenue, conversions, retention, organic traffic, or causal lift is measured."
     ]

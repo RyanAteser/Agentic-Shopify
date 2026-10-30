@@ -85,6 +85,7 @@ export function evaluatePilotEconomics(pilot,ledger) {
   return {
     protocol:COST_PROTOCOL,currency:"USD",pilotStatus:pilotResult.status,
     editorialDecisionSupport:pilotResult.decisionSupport,
+    merchantDiversity:pilotResult.merchantDiversity,
     recordedCostPairs:rows.size,plannedPairs:pilotResult.plannedPairs,
     costBasis:ledger.costBasis,scenarios,decisionSupport,
     limitations:[
@@ -93,6 +94,7 @@ export function evaluatePilotEconomics(pilot,ledger) {
       "Labor value is a scenario assumption, not a measured wage or cash saving. Half/double sensitivities do not identify a true opportunity cost.",
       "Quality passes require usable decisions with zero critical factual and product-link errors; rejected attempts still incur labor and external cost.",
       "No comparative economic figures are emitted until the entire preregistered, counterbalanced, blinded pilot passes its evidence gates.",
+      "Merchant-group diversity is self-attested, and repeated pairs within a merchant may be correlated. A candidate is not a cluster-robust statistical result.",
       "The result is descriptive, not a statistical confidence interval, a causal effect, a Shopify revenue estimate or permission to deploy, bill or publish."
     ]
   };

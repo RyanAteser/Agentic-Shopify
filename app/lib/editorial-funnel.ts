@@ -11,6 +11,8 @@ export type EditorialCohort = {
   reconciliation: number;
   resolved: number;
   publishedAmongResolvedPct: number | null;
+  resolvedCoveragePct: number | null;
+  publishedAmongAllDraftsPct: number | null;
 };
 
 function countsByStatus(rows: EditorialStatusCount[]): Map<string, number> {
@@ -19,7 +21,9 @@ function countsByStatus(rows: EditorialStatusCount[]): Map<string, number> {
     if (!Number.isSafeInteger(row.count) || row.count < 0) {
       throw new Error("Invalid editorial aggregate count");
     }
-    counts.set(row.status, (counts.get(row.status) ?? 0) + row.count);
+    const total=(counts.get(row.status) ?? 0) + row.count;
+    if(!Number.isSafeInteger(total))throw new Error("Editorial aggregate exceeds safe integer range");
+    counts.set(row.status,total);
   }
   return counts;
 }
@@ -36,21 +40,31 @@ export function summarizeEditorialCohort(
   const jobs = countsByStatus(jobRows);
   const drafts = countsByStatus(draftRows);
   const sum = (rows: Map<string, number>) =>
-    [...rows.values()].reduce((total, count) => total + count, 0);
+    [...rows.values()].reduce((total, count) => {
+      const next=total+count;
+      if(!Number.isSafeInteger(next))throw new Error("Editorial cohort total exceeds safe integer range");
+      return next;
+    }, 0);
   const published = drafts.get("published") ?? 0;
   const rejected = drafts.get("rejected") ?? 0;
   const resolved = published + rejected;
+  const totalDrafts = sum(drafts);
+  if(!Number.isSafeInteger(resolved)||resolved>totalDrafts)throw new Error("Invalid editorial resolved count");
   return {
     requests: sum(jobs),
     failedJobs: jobs.get("failed") ?? 0,
     uncertainJobs: jobs.get("dispatch_uncertain") ?? 0,
-    drafts: sum(drafts),
+    drafts: totalDrafts,
     published,
     rejected,
     awaitingReview: (drafts.get("ready") ?? 0) + (drafts.get("needs_review") ?? 0),
     reconciliation: (drafts.get("needs_reconciliation") ?? 0) + (drafts.get("publishing") ?? 0),
     resolved,
     publishedAmongResolvedPct: resolved >= 5 ? published / resolved * 100 : null,
+    // Denominator visibility prevents an attractive resolved-only rate from
+    // concealing a backlog. These are snapshots, not conversion or retention.
+    resolvedCoveragePct: totalDrafts >= 5 ? resolved / totalDrafts * 100 : null,
+    publishedAmongAllDraftsPct: totalDrafts >= 5 ? published / totalDrafts * 100 : null,
   };
 }
 

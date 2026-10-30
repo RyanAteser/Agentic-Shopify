@@ -23,10 +23,12 @@ export async function databaseConsentTime(client:Pick<typeof db,"$queryRaw">=db)
 
 /** Capture Connect intent before asynchronous Shopify authentication. The
  * atomic increment is committed before returning; no external HTTP work
- * occurs while holding the counter row lock. Missing seed fails closed. */
+ * occurs while holding the counter row lock. SQLite db push may not seed
+ * the singleton, so native upsert initializes it atomically if absent. */
 export async function nextGoogleConsentOrder():Promise<bigint>{
-  const row=await db.gscConsentOrderCounter.update({
-    where:{id:1},data:{sequence:{increment:1}},select:{sequence:true}
+  const row=await db.gscConsentOrderCounter.upsert({
+    where:{id:1},create:{id:1,sequence:1n},
+    update:{sequence:{increment:1}},select:{sequence:true}
   });
   return row.sequence;
 }
@@ -260,8 +262,9 @@ export async function disconnectGoogle(shop:string){
     // Advance the same database-serialized order as Connect, after the
     // merchant row lock. A late pre-disconnect Connect has a smaller order
     // even if worker/database clocks jump or two events share a millisecond.
-    const revocation=await tx.gscConsentOrderCounter.update({
-      where:{id:1},data:{sequence:{increment:1}},select:{sequence:true}
+    const revocation=await tx.gscConsentOrderCounter.upsert({
+      where:{id:1},create:{id:1,sequence:1n},
+      update:{sequence:{increment:1}},select:{sequence:true}
     });
     const revokedAt=await databaseConsentTime(tx);
     await tx.storeConfig.updateMany({

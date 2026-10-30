@@ -34,9 +34,8 @@ test("reconciliation rejects invalid clocks and age configuration", () => {
 
 test("filters never include completed/failed jobs or classify age as proof of rejection", () => {
   const filters = generationReconciliationFilters(new Date("2026-10-30T02:00:00Z"), 300000);
-  assert.ok(Object.values(filters).every(where =>
-    where.status !== "completed" && where.status !== "failed"
-  ));
+  assert.deepEqual(new Set(Object.values(filters).map(where => where.status)),
+    new Set(["queued", "running", "dispatch_uncertain"]));
   assert.equal(filters.uncertainDelivery.status, "dispatch_uncertain");
   assert.equal(filters.manualQueued.outboxVersion.not, 1);
 });

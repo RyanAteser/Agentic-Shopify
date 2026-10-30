@@ -64,7 +64,7 @@ test("never automatically replays running, uncertain, completed, legacy or fresh
   });
 });
 
-test("scheduled queued recovery preserves atomic definitive rejection refund and slot rewind", async () => {
+test("scheduled queued recovery refunds an authenticated pre-POST failure and rewinds slot", async () => {
   await withStore(async shop => {
     const snapshot = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
     const claim = await claimDueScheduledDraft(snapshot, now);
@@ -73,9 +73,9 @@ test("scheduled queued recovery preserves atomic definitive rejection refund and
     const job = await db.contentJob.findUniqueOrThrow({ where: { id: claim.jobId } });
     assert.equal(job.outboxVersion, 1);
     assert.ok(job.scheduleClaim);
-    const result = await recoverQueuedJobs(now, async (id, tenant) => {
-      await claimQueuedDispatch(tenant, id);
-      throw new Error("Definitive HTTP 400");
+    const result = await recoverQueuedJobs(now, async () => {
+      // Product-context preflight fails BEFORE the queued -> running claim.
+      throw new Error("Verified product context unavailable before POST");
     });
     assert.equal(result.rejected, 1);
     assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: claim.jobId } })).status, "failed");
@@ -86,13 +86,12 @@ test("scheduled queued recovery preserves atomic definitive rejection refund and
   });
 });
 
-test("manual queued definitive rejection refunds once, never a second time", async () => {
+test("manual queued pre-POST failure refunds once, never a second time", async () => {
   await withStore(async shop => {
     const job = await createCreditedJob(shop, "Merchant guide");
     await aged(job.id);
-    const result = await recoverQueuedJobs(now, async (id, tenant) => {
-      await claimQueuedDispatch(tenant, id);
-      throw new Error("Definitive HTTP 404");
+    const result = await recoverQueuedJobs(now, async () => {
+      throw new Error("Missing n8n configuration before POST");
     });
     assert.equal(result.rejected, 1);
     assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 0);

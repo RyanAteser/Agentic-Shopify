@@ -7,6 +7,8 @@ export type QueryMixResult={
   status:"descriptive_only"|"insufficient_coverage";
   matchedQueries:number;newQueries:number;lostQueries:number;
   matchedPreviousImpressions:number;matchedCurrentImpressions:number;
+  matchedPreviousClicks:number;matchedCurrentClicks:number;
+  previousClicks:number;currentClicks:number;
   previousImpressions:number;currentImpressions:number;
   matchedPreviousCtr:number|null;matchedCurrentCtr:number|null;
   totalPreviousCtr:number|null;totalCurrentCtr:number|null;
@@ -39,6 +41,8 @@ export function compareQueryMix(previous:QueryPeriod[],current:QueryPeriod[]):Qu
     status:matched>=5&&pi>=100&&ci>=100?"descriptive_only":"insufficient_coverage",
     matchedQueries:matched,newQueries:c.map.size-matched,lostQueries:p.map.size-matched,
     matchedPreviousImpressions:pi,matchedCurrentImpressions:ci,
+    matchedPreviousClicks:pc,matchedCurrentClicks:cc,
+    previousClicks:p.clicks,currentClicks:c.clicks,
     previousImpressions:p.impressions,currentImpressions:c.impressions,
     matchedPreviousCtr:ctr(pc,pi),matchedCurrentCtr:ctr(cc,ci),
     totalPreviousCtr:ctr(p.clicks,p.impressions),totalCurrentCtr:ctr(c.clicks,c.impressions)
@@ -75,7 +79,7 @@ export function assessQueryExportCoverage(
 
 /** Two-period preflight: prevent a well-covered export from masking a tiny,
  * nonrepresentative matched-query cohort. Advisory research only.
- * The 50% matched-impression rule is a heuristic, not statistical proof.
+ * The 50% matched-impression and matched-click rules are heuristics, not statistical proof.
  */
 export function assessPairedQueryMix(
   previous:QueryPeriod[],current:QueryPeriod[],
@@ -93,7 +97,10 @@ export function assessPairedQueryMix(
   const matchedOk=comparison.status==="descriptive_only"&&
     comparison.previousImpressions>0&&comparison.currentImpressions>0&&
     comparison.matchedPreviousImpressions/comparison.previousImpressions>=0.5&&
-    comparison.matchedCurrentImpressions/comparison.currentImpressions>=0.5;
+    comparison.matchedCurrentImpressions/comparison.currentImpressions>=0.5&&
+    comparison.previousClicks>0&&comparison.currentClicks>0&&
+    comparison.matchedPreviousClicks/comparison.previousClicks>=0.5&&
+    comparison.matchedCurrentClicks/comparison.currentClicks>=0.5;
   const reason=!coverageOk?"export_coverage":!matchedOk?"matched_cohort":"ok";
   return {status:reason==="ok"?"descriptive_only":"withheld",reason,
     comparison,previousCoverage,currentCoverage};

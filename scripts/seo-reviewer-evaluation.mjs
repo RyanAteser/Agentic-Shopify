@@ -28,7 +28,14 @@ export function scoreAssessments(rows) {
     if (baseError && !guardError && row.guarded !== "abstain") result.corrected++;
     if (!baseError && guardError) result.regressed++;
   }
-  return { ...result, evidenceSufficient: result.adjudicated >= 30,
+  const adjudicatedRows = rows.filter(row => row.adjudicated !== "unknown");
+  const baselineActionable = adjudicatedRows.filter(row => row.baseline !== "abstain").length;
+  const guardedActionable = adjudicatedRows.filter(row => row.guarded !== "abstain").length;
+  const baselineActionableCoverage = result.adjudicated ? baselineActionable / result.adjudicated : null;
+  const guardedActionableCoverage = result.adjudicated ? guardedActionable / result.adjudicated : null;
+  const baselineErrorRate = baselineActionable ? result.baselineErrors / baselineActionable : null;
+  const guardedErrorRate = guardedActionable ? result.guardedErrors / guardedActionable : null;
+  return { ...result, baselineActionable, guardedActionable, baselineActionableCoverage, guardedActionableCoverage, baselineErrorRate, guardedErrorRate, evidenceSufficient: result.adjudicated >= 30,
     note: "Descriptive counts only. Abstentions are reported separately and are not counted as correct; unknown adjudications are excluded from error denominators." };
 }
 

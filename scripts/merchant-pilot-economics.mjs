@@ -36,7 +36,7 @@ function scenario(pilot,rows,hourlyCents,ready) {
   const ai=costsByArm(pilot,rows,"ai",hourlyCents);
   const manual=costsByArm(pilot,rows,"manual",hourlyCents);
   const possible=ai.centsPerQualityPass !== null && manual.centsPerQualityPass !== null;
-  return {laborValueCentsPerHour:hourlyCents,ai,manual,
+  const breakEvenAiExternalCentsTotal=manual.centsPerQualityPass===null || ai.qualityPasses===0 ? null :\n    manual.centsPerQualityPass*ai.qualityPasses-ai.valuedLaborCents;\n  const breakEvenAiExternalCentsPerAttempt=breakEvenAiExternalCentsTotal===null ? null :\n    breakEvenAiExternalCentsTotal/ai.attempts;\n  return {laborValueCentsPerHour:hourlyCents,ai,manual,\n    breakEvenAiExternalCentsTotal,breakEvenAiExternalCentsPerAttempt,
     manualMinusAiCentsPerQualityPass:possible ? manual.centsPerQualityPass-ai.centsPerQualityPass:null,
     relativeAiCostPct:possible && manual.centsPerQualityPass>0 ?
       100*(ai.centsPerQualityPass/manual.centsPerQualityPass-1) : null};
@@ -95,7 +95,7 @@ export function evaluatePilotEconomics(pilot,ledger) {
       "Quality passes require usable decisions with zero critical factual and product-link errors; rejected attempts still incur labor and external cost.",
       "No comparative economic figures are emitted until the entire preregistered, counterbalanced, blinded pilot passes its evidence gates.",
       "Merchant-group diversity is self-attested, and repeated pairs within a merchant may be correlated. A candidate is not a cluster-robust statistical result.",
-      "The result is descriptive, not a statistical confidence interval, a causal effect, a Shopify revenue estimate or permission to deploy, bill or publish."
+      "Break-even AI external-cost budgets are quality-adjusted scenario thresholds, not vendor quotes or authorization to spend; negative budgets mean labor alone already exceeds manual cost per quality pass.",\n      "The result is descriptive, not a statistical confidence interval, a causal effect, a Shopify revenue estimate or permission to deploy, bill or publish."
     ]
   };
 }

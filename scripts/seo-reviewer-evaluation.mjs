@@ -6,13 +6,17 @@ import { readFileSync } from "node:fs";
 
 const decisions = new Set(["change", "no_change", "abstain"]);
 const truths = new Set(["change", "no_change", "unknown"]);
+const allowedFields = new Set(["caseId", "baseline", "guarded", "adjudicated"]);
+const MAX_CASES = 500;
+const MAX_INPUT_BYTES = 1024 * 1024;
 
 export function scoreAssessments(rows) {
-  if (!Array.isArray(rows)) throw new Error("Expected an array");
+  if (!Array.isArray(rows) || rows.length > MAX_CASES) throw new Error("Expected at most 500 assessment rows");
   const seen = new Set();
   const result = { total: rows.length, adjudicated: 0, disagreement: 0, baselineAbstentions: 0, guardedAbstentions: 0, baselineErrors: 0, guardedErrors: 0, corrected: 0, regressed: 0, errorsAvoidedByAbstention: 0, correctDecisionsLostToAbstention: 0, pairedActionable: 0, pairedBaselineErrors: 0, pairedGuardedErrors: 0 };
   for (const row of rows) {
-    if (!row || typeof row.caseId !== "string" || !row.caseId.trim() || seen.has(row.caseId) ||
+    if (!row || typeof row !== "object" || Array.isArray(row) || Object.keys(row).some(key => !allowedFields.has(key)) ||
+        typeof row.caseId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(row.caseId) || seen.has(row.caseId) ||
         !decisions.has(row.baseline) || !decisions.has(row.guarded) || !truths.has(row.adjudicated))
       throw new Error("Invalid or duplicate assessment");
     seen.add(row.caseId);
@@ -81,7 +85,9 @@ if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).
       process.stdout.write("self-test passed\n");
     } else {
       if (!process.argv[2]) throw new Error("Provide JSON assessment file or --self-test");
-      process.stdout.write(JSON.stringify(scoreAssessments(JSON.parse(readFileSync(process.argv[2], "utf8"))), null, 2) + "\n");
+      const input = readFileSync(process.argv[2]);
+      if (input.byteLength > MAX_INPUT_BYTES) throw new Error("Assessment file exceeds 1 MiB");
+      process.stdout.write(JSON.stringify(scoreAssessments(JSON.parse(input.toString("utf8"))), null, 2) + "\n");
     }
   } catch (error) { process.stderr.write(String(error) + "\n"); process.exitCode = 1; }
 }

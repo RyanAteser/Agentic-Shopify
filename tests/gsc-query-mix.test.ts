@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {compareQueryMix,assessQueryExportCoverage} from "../app/lib/gsc-query-mix";
+import {compareQueryMix,assessQueryExportCoverage,assessPairedQueryMix} from "../app/lib/gsc-query-mix";
 
 test("aggregate CTR can fall while returning queries improve",()=>{
   const prev=Array.from({length:5},(_,i)=>({query:"product "+i,clicks:20,impressions:100}));
@@ -55,4 +55,20 @@ test("coverage gate abstains on zero totals and malformed observations",()=>{
   assert.equal(assessQueryExportCoverage([],{clicks:0,impressions:0}).status,"incomplete_export");
   assert.throws(()=>assessQueryExportCoverage([{query:"x",clicks:1,impressions:2},{query:"x",clicks:1,impressions:2}],{clicks:2,impressions:4}),/duplicate/);
   assert.throws(()=>assessQueryExportCoverage([],{clicks:2,impressions:1}),/Invalid property/);
+});
+
+test("paired review gate requires both export coverage and representative matched exposure",()=>{
+  const shared=Array.from({length:5},(_,i)=>({query:"item"+i,clicks:10,impressions:100}));
+  const total={clicks:50,impressions:500};
+  const pass=assessPairedQueryMix(shared,shared,total,total);
+  assert.equal(pass.status,"descriptive_only");
+  assert.equal(pass.reason,"ok");
+  const broad=[...shared,{query:"new broad",clicks:0,impressions:2000}];
+  const tinyMatched=assessPairedQueryMix(shared,broad,total,{clicks:50,impressions:2500});
+  assert.equal(tinyMatched.reason,"matched_cohort");
+  assert.equal(tinyMatched.status,"withheld");
+  const incomplete=assessPairedQueryMix(shared,shared,{clicks:100,impressions:1000},total);
+  assert.equal(incomplete.reason,"export_coverage");
+  assert.equal(incomplete.status,"withheld");
+  assert.throws(()=>assessPairedQueryMix(shared,shared,{clicks:49,impressions:500},total),/exceeds/);
 });

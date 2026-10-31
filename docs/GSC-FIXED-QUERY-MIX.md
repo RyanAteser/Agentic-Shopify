@@ -18,3 +18,9 @@ A query absent from an export may be anonymized or truncated, not genuinely new 
 The regression suite checks Simpson-style composition reversal, exact component reconciliation, identical weights, missing exposure, sparse cohorts, duplicate rows and unsafe integer sums. Next: use consented, independently reconciled exports, then blind-review cases where aggregate and standardized CTR disagree. Measure abstention and reviewer error rates before advisory integration.
 
 Source: [Google Search Analytics API](https://developers.google.com/webmaster-tools/v1/searchanalytics/query).
+
+## Guarded entry point (2026-10-31)
+
+Use `assessFixedQueryMix(previous, current, previousPropertyTotal, currentPropertyTotal)` for any new research consumer. It invokes `assessPairedQueryMix` first and returns only a `status` and `reason` if property export coverage or matched-cohort click/impression coverage fails. If preflight passes, it invokes the existing fixed-weight computation; missing exposure can still cause abstention. The lower-level `compareFixedQueryMix` remains available for pure mathematical tests, but bypasses independent coverage checks and must not be used directly to generate merchant-facing advice.
+
+This is a code-level guard, not a verification of consent, tenant ownership, identical Search Console filters, finalized reporting windows, or real merchant outcomes. Those remain upstream requirements. No recommendation or publication pathway is enabled.

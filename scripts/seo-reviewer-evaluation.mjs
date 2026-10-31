@@ -2,7 +2,7 @@
 // Offline, read-only pilot scoring. No merchant identifiers or credentials required.
 // Usage: node scripts/seo-reviewer-evaluation.mjs assessments.json
 // Input: [{caseId, baseline:"change"|"no_change"|"abstain", guarded:"change"|"no_change"|"abstain", adjudicated:"change"|"no_change"|"unknown"}]
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 
 const decisions = new Set(["change", "no_change", "abstain"]);
 const truths = new Set(["change", "no_change", "unknown"]);
@@ -85,6 +85,7 @@ if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).
       process.stdout.write("self-test passed\n");
     } else {
       if (!process.argv[2]) throw new Error("Provide JSON assessment file or --self-test");
+      if (statSync(process.argv[2]).size > MAX_INPUT_BYTES) throw new Error("Assessment file exceeds 1 MiB");
       const input = readFileSync(process.argv[2]);
       if (input.byteLength > MAX_INPUT_BYTES) throw new Error("Assessment file exceeds 1 MiB");
       process.stdout.write(JSON.stringify(scoreAssessments(JSON.parse(input.toString("utf8"))), null, 2) + "\n");

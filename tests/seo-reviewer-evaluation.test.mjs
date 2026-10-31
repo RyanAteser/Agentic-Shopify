@@ -111,3 +111,16 @@ test("joint bounds account for unknown cases with only one actionable arm", () =
   ]);
   assert.deepEqual(score.errorDifferenceBounds, [-1, 1]);
 });
+
+test("rejects extra fields that may contain merchant data", () => {
+  const row = {caseId:"opaque_1",baseline:"change",guarded:"change",adjudicated:"change"};
+  assert.throws(() => scoreAssessments([{...row, shopDomain:"example.myshopify.com"}]), /Invalid/);
+  assert.throws(() => scoreAssessments([{...row, caseId:"merchant@example.com"}]), /Invalid/);
+  assert.throws(() => scoreAssessments([{...row, caseId:"space separated"}]), /Invalid/);
+});
+
+test("bounds offline evaluation to 500 cases", () => {
+  const rows = Array.from({length:501}, (_,i) => ({caseId:"opaque_"+i,baseline:"change",guarded:"change",adjudicated:"unknown"}));
+  assert.throws(() => scoreAssessments(rows), /500/);
+  assert.equal(scoreAssessments(rows.slice(0,500)).total,500);
+});

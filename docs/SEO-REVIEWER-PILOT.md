@@ -34,3 +34,8 @@ The evaluator now reports `errorsAvoidedByAbstention` separately from `corrected
 `pairedActionable`, `pairedBaselineErrorRate` and `pairedGuardedErrorRate` describe only adjudicated cases where **both** systems made actionable decisions. The paired subset can be selectively easier than abstained cases; never use its conditional error rates alone to establish superiority. Rates are null when the paired denominator is zero. `evidenceSufficient` only means 30 adjudicated cases were supplied; it does not approve release or establish statistical significance.
 
 The preferred next experiment is a prespecified, consented reviewer study that records the cost of incorrect changes, the cost of missed useful changes and reviewer time. Do not tune thresholds on the held-out evaluation set.
+
+## Missing adjudication sensitivity (2026-10-31)
+The scorer reports `unknownAdjudications`, `adjudicationCoverage`, and conservative error-count bounds for each arm. Every actionable decision without an independent adjudication can be correct or incorrect. `errorDifferenceBounds` subtracts baseline errors from guarded errors, with negative values favoring the guarded arm. These are identification bounds, **not** statistical confidence intervals; they do not establish causal SEO or merchant gains.
+
+The operational `evidenceSufficient` flag now requires at least 30 independently adjudicated cases **and zero unknown adjudications**. This stricter flag is not a release gate or a power calculation. Unknown outcomes must be resolved independently or explicitly reported as missing; never silently discard them to manufacture favorable error rates. For a merchant pilot, also pre-register sampling, decision costs, acceptable actionable-coverage loss and reviewer agreement.

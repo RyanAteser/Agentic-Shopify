@@ -159,3 +159,24 @@ The offline merchant-pilot CLI checks the input file size **before** reading it 
 ### Economics CLI input boundary (2026-10-31)
 
 Both pilot and cost-ledger JSON files are rejected if their on-disk size exceeds 1 MiB **before** their contents are read. A second check validates the bytes actually read. This bounds accidental large-file allocations in offline cost analysis, but is not a substitute for OS-level limits or a secure environment. The CLI performs no store or network operations. Regression coverage: `tests/merchant-pilot-economics-cli.test.mjs`.
+
+
+## Quality-adjusted AI operating-cost break-even (2026-10-31)
+
+The offline economics report now provides `breakEvenAiExternalCentsTotal` and
+`breakEvenAiExternalCentsPerAttempt` for each labor-valuation scenario.
+The threshold is calculated as
+
+`(manual total cost / manual quality passes) × AI quality passes − AI valued labor cost`.
+
+Dividing by *all AI attempts*, not just successful drafts, gives the maximum
+average AI external cost per attempt at which AI and manual costs per passing
+draft are equal, holding the observed pilot quality and labor fixed. Compare
+this budget to the *measured* AI external costs, including failed generations,
+model fees, n8n licensing/hosting and allocated overhead. A negative threshold
+means AI labor alone exceeds the manual quality-adjusted cost. Null means one
+arm has no passing outputs and break-even is not identifiable. The threshold
+is suppressed with other scenarios until the pilot passes its completeness
+gates. These are descriptive sensitivity calculations, not spend approvals,
+pricing recommendations, expected future costs or proof of merchant savings.
+No external service is contacted.

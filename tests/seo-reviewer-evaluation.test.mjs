@@ -66,3 +66,30 @@ test("unknown adjudication never contributes to paired error rates", () => {
   assert.equal(score.correctDecisionsLostToAbstention, 0);
   assert.equal(score.pairedBaselineErrorRate, null);
 });
+
+test("unknown adjudications produce conservative error bounds and block sufficiency", () => {
+  const rows = Array.from({length: 30}, (_, i) => ({
+    caseId: "case-" + i,
+    baseline: "change",
+    guarded: "no_change",
+    adjudicated: i === 29 ? "unknown" : "no_change"
+  }));
+  const score = scoreAssessments(rows);
+  assert.equal(score.unknownAdjudications, 1);
+  assert.equal(score.adjudicationCoverage, 29 / 30);
+  assert.deepEqual(score.baselineErrorCountBounds, [29, 30]);
+  assert.deepEqual(score.guardedErrorCountBounds, [0, 1]);
+  assert.deepEqual(score.errorDifferenceBounds, [-30, -28]);
+  assert.equal(score.evidenceSufficient, false);
+});
+test("30 known adjudications have point-identified error counts", () => {
+  const rows = Array.from({length: 30}, (_, i) => ({
+    caseId: "known-" + i, baseline: "change", guarded: "no_change", adjudicated: "no_change"
+  }));
+  const score = scoreAssessments(rows);
+  assert.equal(score.unknownAdjudications, 0);
+  assert.deepEqual(score.baselineErrorCountBounds, [30, 30]);
+  assert.deepEqual(score.guardedErrorCountBounds, [0, 0]);
+  assert.deepEqual(score.errorDifferenceBounds, [-30, -30]);
+  assert.equal(score.evidenceSufficient, true);
+});

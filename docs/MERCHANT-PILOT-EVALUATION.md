@@ -151,3 +151,7 @@ A favorable candidate decision requires a strictly lower AI labor-per-quality-pa
 ## Merchant-by-sequence confounding check (2026-10-30)
 
 A pilot can be balanced overall (ten AI-first and ten manual-first pairs) while each individual merchant is assigned exclusively to one sequence. In that case the apparent sequence effect may actually be a merchant effect, or vice versa. For favorable descriptive triage, the evaluator now requires **both review sequences represented within each merchant group**, and emits only the counts of groups with both sequences and groups with one sequence. If a group has a single sequence, the result is `merchant-order-confounding` and cost candidate status is withheld. This does not prove randomization or eliminate carryover, learning, reviewer effects, or small-cluster uncertainty. Pre-register merchant-level counterbalancing and independent randomized allocation; consider additional pairs per merchant before any statistical claim. Existing ungrouped pilot files remain readable, with merchant-order coverage reported as null.
+
+## Oversized input rejection (2026-10-31)
+
+The offline merchant-pilot CLI checks the input file size **before** reading it into memory, then checks the actual bytes read. Inputs larger than 1 MiB fail closed. This protects the research runner against accidental large exports; it does not replace approved storage, retention, tenant isolation or consent controls. The in-memory evaluator still expects a trusted caller to enforce its own input-byte budget.

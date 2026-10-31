@@ -79,7 +79,7 @@ test("unknown adjudications produce conservative error bounds and block sufficie
   assert.equal(score.adjudicationCoverage, 29 / 30);
   assert.deepEqual(score.baselineErrorCountBounds, [29, 30]);
   assert.deepEqual(score.guardedErrorCountBounds, [0, 1]);
-  assert.deepEqual(score.errorDifferenceBounds, [-30, -28]);
+  assert.deepEqual(score.errorDifferenceBounds, [-29, -29]);
   assert.equal(score.evidenceSufficient, false);
 });
 test("30 known adjudications have point-identified error counts", () => {
@@ -92,4 +92,22 @@ test("30 known adjudications have point-identified error counts", () => {
   assert.deepEqual(score.guardedErrorCountBounds, [0, 0]);
   assert.deepEqual(score.errorDifferenceBounds, [-30, -30]);
   assert.equal(score.evidenceSufficient, true);
+});
+
+test("joint error bounds do not invent disagreement when both arms agree", () => {
+  const score = scoreAssessments([
+    {caseId:"same",baseline:"change",guarded:"change",adjudicated:"unknown"},
+    {caseId:"both-abstain",baseline:"abstain",guarded:"abstain",adjudicated:"unknown"}
+  ]);
+  assert.deepEqual(score.baselineErrorCountBounds, [0, 1]);
+  assert.deepEqual(score.guardedErrorCountBounds, [0, 1]);
+  assert.deepEqual(score.errorDifferenceBounds, [0, 0]);
+});
+
+test("joint bounds account for unknown cases with only one actionable arm", () => {
+  const score = scoreAssessments([
+    {caseId:"guard-only",baseline:"abstain",guarded:"change",adjudicated:"unknown"},
+    {caseId:"base-only",baseline:"no_change",guarded:"abstain",adjudicated:"unknown"}
+  ]);
+  assert.deepEqual(score.errorDifferenceBounds, [-1, 1]);
 });

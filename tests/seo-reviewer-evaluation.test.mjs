@@ -43,3 +43,26 @@ test("zero actionable cases return null rates, not fabricated zero error", () =>
   assert.equal(score.baselineActionableCoverage, 0);
   assert.equal(score.guardedActionableCoverage, 0);
 });
+
+test("distinguishes corrections from errors hidden by abstention", () => {
+  const score = scoreAssessments([
+    {caseId:"a",baseline:"change",guarded:"no_change",adjudicated:"no_change"},
+    {caseId:"b",baseline:"change",guarded:"abstain",adjudicated:"no_change"},
+    {caseId:"c",baseline:"no_change",guarded:"abstain",adjudicated:"no_change"},
+    {caseId:"d",baseline:"no_change",guarded:"change",adjudicated:"no_change"},
+    {caseId:"e",baseline:"abstain",guarded:"change",adjudicated:"change"}
+  ]);
+  assert.equal(score.corrected, 1);
+  assert.equal(score.errorsAvoidedByAbstention, 1);
+  assert.equal(score.correctDecisionsLostToAbstention, 1);
+  assert.equal(score.regressed, 1);
+  assert.equal(score.pairedActionable, 2);
+  assert.equal(score.pairedBaselineErrorRate, 0.5);
+  assert.equal(score.pairedGuardedErrorRate, 0.5);
+});
+test("unknown adjudication never contributes to paired error rates", () => {
+  const score = scoreAssessments([{caseId:"x",baseline:"change",guarded:"abstain",adjudicated:"unknown"}]);
+  assert.equal(score.errorsAvoidedByAbstention, 0);
+  assert.equal(score.correctDecisionsLostToAbstention, 0);
+  assert.equal(score.pairedBaselineErrorRate, null);
+});

@@ -273,3 +273,20 @@ test("legacy pilots do not reveal merchant-order coverage",()=>{
   const p=pilot();p.pairs.forEach(x=>{delete x.merchantGroup;});
   assert.equal(evaluatePilot(p).merchantOrderCoverage,null);
 });
+
+// Exercise the CLI boundary, not just the in-memory evaluator.
+test("CLI rejects oversized pilot input before attempting to parse it", async()=>{
+  const {mkdtempSync,writeFileSync,rmSync}=await import("node:fs");
+  const {tmpdir}=await import("node:os");
+  const {join}=await import("node:path");
+  const {spawnSync}=await import("node:child_process");
+  const dir=mkdtempSync(join(tmpdir(),"merchant-pilot-size-"));
+  try {
+    const file=join(dir,"oversized.json");
+    writeFileSync(file,"x".repeat(1024*1024+1));
+    const run=spawnSync(process.execPath,["scripts/merchant-pilot-evaluate.mjs",file],{encoding:"utf8"});
+    assert.notEqual(run.status,0);
+    assert.match(run.stderr,/input exceeds 1 MiB/);
+    assert.doesNotMatch(run.stderr,/Unexpected token|JSON/);
+  } finally {rmSync(dir,{recursive:true,force:true});}
+});

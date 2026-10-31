@@ -125,3 +125,37 @@ test("AES-GCM ciphertext roundtrip and tamper rejection",()=>{
     else process.env.GSC_ENCRYPTION_KEY=previous;
   }
 });
+
+test("GSC symmetric click decomposition reconciles exactly and identifies offsetting drivers",()=>{
+  const now=new Date("2026-10-26T12:00:00Z");
+  const start=Date.parse("2026-08-29T00:00:00Z");
+  const rows=Array.from({length:56},(_,i)=>{
+    const current=i>=28;
+    const impressions=current?200:100,clicks=current?10:20;
+    return {date:new Date(start+i*86400000).toISOString().slice(0,10),
+      clicks,impressions,ctr:clicks/impressions,position:8};
+  });
+  const r=compareOrganicWindows(rows,now);
+  assert.equal(r.comparable,true);
+  assert.equal(r.current.clicks-r.previous.clicks,-280);
+  assert.equal(r.clickChangeDrivers?.ctrChangePercentagePoints,-15);
+  assert.ok((r.clickChangeDrivers?.impressionEffectClicks??0)>0);
+  assert.ok((r.clickChangeDrivers?.ctrEffectClicks??0)<0);
+  assert.ok(Math.abs((r.clickChangeDrivers!.impressionEffectClicks+
+    r.clickChangeDrivers!.ctrEffectClicks)-(r.current.clicks-r.previous.clicks))<1e-8);
+});
+test("GSC click decomposition abstains on incomplete or zero-impression windows",()=>{
+  const now=new Date("2026-10-26T12:00:00Z");
+  const start=Date.parse("2026-08-29T00:00:00Z");
+  const rows=Array.from({length:56},(_,i)=>({
+    date:new Date(start+i*86400000).toISOString().slice(0,10),
+    clicks:i>=28?2:0,impressions:i>=28?20:0,ctr:i>=28?0.1:0,position:i>=28?7:0
+  }));
+  assert.equal(compareOrganicWindows(rows,now).clickChangeDrivers,null);
+  assert.equal(compareOrganicWindows(rows.slice(1),now).clickChangeDrivers,null);
+  const normal=rows.map(x=>({...x,clicks:2,impressions:20,ctr:0.1,position:7}));
+  const r=compareOrganicWindows(normal,now);
+  assert.deepEqual(r.clickChangeDrivers,{
+    impressionEffectClicks:0,ctrEffectClicks:0,ctrChangePercentagePoints:0
+  });
+});

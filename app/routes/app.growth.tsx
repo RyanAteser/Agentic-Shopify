@@ -142,6 +142,7 @@ export default function GrowthDashboard(){
           <div><strong>Average position</strong><p style={{fontSize:24}}>{comparison.current.avgPosition?.toFixed(1)??"—"}</p><p>Impression-weighted across available dates</p></div>
         </div>
       </>}
+      {comparison.clickChangeDrivers&&<p><strong>Where the observed click change came from:</strong> exposure (search impressions) {comparison.clickChangeDrivers.impressionEffectClicks>=0?"+":""}{number(comparison.clickChangeDrivers.impressionEffectClicks)} clicks; click yield (CTR) {comparison.clickChangeDrivers.ctrEffectClicks>=0?"+":""}{number(comparison.clickChangeDrivers.ctrEffectClicks)} clicks. CTR changed {comparison.clickChangeDrivers.ctrChangePercentagePoints>=0?"+":""}{comparison.clickChangeDrivers.ctrChangePercentagePoints.toFixed(2)} percentage points. Components reconcile to the total click difference before rounding. This symmetric accounting decomposition is not attribution to a specific page, ranking change, Shopify agent, or intervention. Search mix and seasonality can move both components.</p>}
       <p>Observed coverage: {comparison.current.days}/28 current dates and {comparison.previous.days}/28 baseline dates.</p>
       <p>Both windows use Google Search Console's Pacific reporting dates and exclude the three most recent calendar days. Finalized Google data can still be delayed; coverage and seasonality affect interpretation.</p>
     </s-section>

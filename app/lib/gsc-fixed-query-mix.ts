@@ -2,7 +2,7 @@
  * impression mix of returning queries. This is descriptive, not causal.
  * Do not use without assessPairedQueryMix's independent coverage preflight.
  */
-import type {QueryPeriod} from "./gsc-query-mix";
+import {assessPairedQueryMix, type QueryPeriod} from "./gsc-query-mix";
 
 export type FixedMixResult =
   | {status:"withheld";reason:"invalid_rows"|"insufficient_matched_exposure"|"zero_current_exposure"}
@@ -42,4 +42,21 @@ export function compareFixedQueryMix(previous:QueryPeriod[],current:QueryPeriod[
     fixedPreviousMixCurrentCtr,
     withinQueryEffect:fixedPreviousMixCurrentCtr-previousCtr,
     mixEffect:currentCtr-fixedPreviousMixCurrentCtr};
+}
+
+
+/** Safe entry point for research consumers. Unlike compareFixedQueryMix,
+ * this function enforces independent property-total and matched-cohort
+ * coverage checks before exposing any CTR effects. Withheld results never
+ * contain numeric effects that could be accidentally shown as advice.
+ */
+export function assessFixedQueryMix(
+  previous:QueryPeriod[],current:QueryPeriod[],
+  previousTotal:{clicks:number;impressions:number},
+  currentTotal:{clicks:number;impressions:number},
+): {status:"withheld";reason:"export_coverage"|"matched_cohort"|"invalid_rows"|"insufficient_matched_exposure"|"zero_current_exposure"} |
+   Extract<FixedMixResult,{status:"descriptive_only"}> {
+  const preflight=assessPairedQueryMix(previous,current,previousTotal,currentTotal);
+  if(preflight.status==="withheld")return {status:"withheld",reason:preflight.reason};
+  return compareFixedQueryMix(previous,current);
 }

@@ -57,6 +57,7 @@ export function assessFixedQueryMix(
 ): {status:"withheld";reason:"export_coverage"|"matched_cohort"|"invalid_rows"|"insufficient_matched_exposure"|"zero_current_exposure"} |
    Extract<FixedMixResult,{status:"descriptive_only"}> {
   const preflight=assessPairedQueryMix(previous,current,previousTotal,currentTotal);
-  if(preflight.status==="withheld")return {status:"withheld",reason:preflight.reason};
+  if(preflight.status==="withheld")return {status:"withheld",
+    reason:preflight.reason==="export_coverage"?"export_coverage":"matched_cohort"};
   return compareFixedQueryMix(previous,current);
 }

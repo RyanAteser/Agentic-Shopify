@@ -34,3 +34,9 @@ CI regression cases include 40% coverage, full coverage, impossible row sums, ze
 ## Paired-cohort guard (2026-10-30)
 
 Use `assessPairedQueryMix` rather than treating `compareQueryMix`'s descriptive label as permission to advise merchants. The paired guard requires each period's export to cover at least 80% of independently retrieved property clicks **and** impressions, at least five returning queries with 100 matched impressions per period, and matched queries to represent at least 50% of each period's exported impressions. It returns `withheld` and a reason when any guard fails. The 50% rule prevents a tiny matched cohort from being portrayed as the entire export. All thresholds are heuristic and do not eliminate query selection bias or validate a causal SEO claim. No live data was processed.
+
+## Matched-click representativeness (2026-10-31)
+
+A matched cohort can cover most impressions but almost none of the clicks. For example, five returning queries with 500 impressions and 5 clicks plus one newly observed query with 100 impressions and 50 clicks yield 83.3% matched-impression coverage but only 9.1% matched-click coverage. Treating the returning-query CTR as representative would obscure the vast majority of observed visits.
+
+The paired guard now additionally requires matched queries to account for at least **50% of exported clicks in each period**, with positive click denominators. It exposes matched and total click counts for auditing. This is a conservative abstention policy: it may withhold legitimate observations, and passing does not establish causality, representativeness of anonymized queries, qualified visits, sales, or statistical significance. Both periods must still pass the independently checked property-level export coverage gate. Synthetic regression tests cover the high-impression/low-click matched cohort and zero-click exports. The helper remains offline and advisory-only; no merchant data or store changes are involved.

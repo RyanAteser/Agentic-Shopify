@@ -44,3 +44,31 @@ export function compareQueryMix(previous:QueryPeriod[],current:QueryPeriod[]):Qu
     totalPreviousCtr:ctr(p.clicks,p.impressions),totalCurrentCtr:ctr(c.clicks,c.impressions)
   };
 }
+
+
+/** Compare exported query-row totals with a separately requested, identically
+ * filtered property-level Search Console total. This is an export completeness
+ * check, NOT a guarantee that anonymized queries are observable.
+ * Never use an incomplete query cohort for merchant-facing SEO conclusions.
+ */
+export function assessQueryExportCoverage(
+  rows:QueryPeriod[],
+  propertyTotal:{clicks:number;impressions:number},
+):{status:"usable_for_review"|"incomplete_export";clickCoverage:number|null;impressionCoverage:number|null}{
+  if(!propertyTotal||!Number.isSafeInteger(propertyTotal.clicks)||
+    !Number.isSafeInteger(propertyTotal.impressions)||propertyTotal.clicks<0||
+    propertyTotal.impressions<propertyTotal.clicks)
+    throw new Error("Invalid property totals");
+  // Reuse duplicate/unsafe-row validation rather than silently double counting.
+  const observed=compareQueryMix([],rows);
+  const sumClicks=rows.reduce((n,r)=>n+r.clicks,0);
+  const sumImpressions=observed.currentImpressions;
+  if(sumClicks>propertyTotal.clicks||sumImpressions>propertyTotal.impressions)
+    throw new Error("Query export exceeds property totals; filters may differ");
+  const ratio=(part:number,total:number)=>total>0?part/total:null;
+  const clickCoverage=ratio(sumClicks,propertyTotal.clicks);
+  const impressionCoverage=ratio(sumImpressions,propertyTotal.impressions);
+  return {status:clickCoverage!==null&&impressionCoverage!==null&&
+    clickCoverage>=0.8&&impressionCoverage>=0.8?"usable_for_review":"incomplete_export",
+    clickCoverage,impressionCoverage};
+}

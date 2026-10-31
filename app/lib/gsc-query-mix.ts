@@ -72,3 +72,29 @@ export function assessQueryExportCoverage(
     clickCoverage>=0.8&&impressionCoverage>=0.8?"usable_for_review":"incomplete_export",
     clickCoverage,impressionCoverage};
 }
+
+/** Two-period preflight: prevent a well-covered export from masking a tiny,
+ * nonrepresentative matched-query cohort. Advisory research only.
+ * The 50% matched-impression rule is a heuristic, not statistical proof.
+ */
+export function assessPairedQueryMix(
+  previous:QueryPeriod[],current:QueryPeriod[],
+  previousTotal:{clicks:number;impressions:number},
+  currentTotal:{clicks:number;impressions:number},
+):{status:"descriptive_only"|"withheld";reason:"ok"|"export_coverage"|"matched_cohort";
+  comparison:QueryMixResult;
+  previousCoverage:ReturnType<typeof assessQueryExportCoverage>;
+  currentCoverage:ReturnType<typeof assessQueryExportCoverage>}{
+  const previousCoverage=assessQueryExportCoverage(previous,previousTotal);
+  const currentCoverage=assessQueryExportCoverage(current,currentTotal);
+  const comparison=compareQueryMix(previous,current);
+  const coverageOk=previousCoverage.status==="usable_for_review"&&
+    currentCoverage.status==="usable_for_review";
+  const matchedOk=comparison.status==="descriptive_only"&&
+    comparison.previousImpressions>0&&comparison.currentImpressions>0&&
+    comparison.matchedPreviousImpressions/comparison.previousImpressions>=0.5&&
+    comparison.matchedCurrentImpressions/comparison.currentImpressions>=0.5;
+  const reason=!coverageOk?"export_coverage":!matchedOk?"matched_cohort":"ok";
+  return {status:reason==="ok"?"descriptive_only":"withheld",reason,
+    comparison,previousCoverage,currentCoverage};
+}

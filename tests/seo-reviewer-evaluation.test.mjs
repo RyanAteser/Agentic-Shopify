@@ -21,3 +21,25 @@ test("rejects invalid and duplicate cases", () => {
   const row = { caseId: "a", baseline: "change", guarded: "change", adjudicated: "change" };
   assert.throws(() => scoreAssessments([row, row]));
 });
+
+test("reports actionable denominators without rewarding abstention", () => {
+  const score = scoreAssessments([
+    {caseId:"a",baseline:"change",guarded:"abstain",adjudicated:"no_change"},
+    {caseId:"b",baseline:"no_change",guarded:"no_change",adjudicated:"no_change"},
+    {caseId:"c",baseline:"abstain",guarded:"change",adjudicated:"unknown"}
+  ]);
+  assert.equal(score.adjudicated, 2);
+  assert.equal(score.baselineActionable, 2);
+  assert.equal(score.guardedActionable, 1);
+  assert.equal(score.baselineActionableCoverage, 1);
+  assert.equal(score.guardedActionableCoverage, 0.5);
+  assert.equal(score.baselineErrorRate, 0.5);
+  assert.equal(score.guardedErrorRate, 0);
+});
+test("zero actionable cases return null rates, not fabricated zero error", () => {
+  const score = scoreAssessments([{caseId:"a",baseline:"abstain",guarded:"abstain",adjudicated:"change"}]);
+  assert.equal(score.baselineErrorRate, null);
+  assert.equal(score.guardedErrorRate, null);
+  assert.equal(score.baselineActionableCoverage, 0);
+  assert.equal(score.guardedActionableCoverage, 0);
+});

@@ -30,3 +30,7 @@ The pure `assessQueryExportCoverage` helper compares exported query-row click an
 For a two-period comparison, apply the check **separately to both periods** and withhold merchant-facing interpretation unless both pass. This helper is deliberately not wired to the dashboard or automatic recommendations. Search Console may anonymize queries, cap returned rows, and change reporting coverage; totals must be collected with the same property, dates, dimensions-independent filters and search type. A failure may reflect export truncation, anonymization or filter mismatch, not lost traffic.
 
 CI regression cases include 40% coverage, full coverage, impossible row sums, zero totals and duplicate query keys. No real merchant exports were used, and no SEO lift is claimed.
+
+## Paired-cohort guard (2026-10-30)
+
+Use `assessPairedQueryMix` rather than treating `compareQueryMix`'s descriptive label as permission to advise merchants. The paired guard requires each period's export to cover at least 80% of independently retrieved property clicks **and** impressions, at least five returning queries with 100 matched impressions per period, and matched queries to represent at least 50% of each period's exported impressions. It returns `withheld` and a reason when any guard fails. The 50% rule prevents a tiny matched cohort from being portrayed as the entire export. All thresholds are heuristic and do not eliminate query selection bias or validate a causal SEO claim. No live data was processed.

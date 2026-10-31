@@ -78,3 +78,21 @@ test("safe entry point withholds zero current exposure despite passing cohort co
     {clicks:60,impressions:600},{clicks:50,impressions:500});
   assert.deepEqual(result,{status:"withheld",reason:"zero_current_exposure"});
 });
+
+test("guarded entry point abstains on malformed or duplicate query rows",()=>{
+  const rows=Array.from({length:5},(_,i)=>({query:"q"+i,clicks:10,impressions:100}));
+  const total={clicks:50,impressions:500};
+  assert.deepEqual(assessFixedQueryMix([...rows,rows[0]],rows,total,total),
+    {status:"withheld",reason:"invalid_rows"});
+  assert.deepEqual(assessFixedQueryMix(rows,[{...rows[0],clicks:NaN},...rows.slice(1)],total,total),
+    {status:"withheld",reason:"invalid_rows"});
+});
+
+test("guarded entry point abstains on inconsistent property totals",()=>{
+  const rows=Array.from({length:5},(_,i)=>({query:"q"+i,clicks:10,impressions:100}));
+  const total={clicks:50,impressions:500};
+  assert.deepEqual(assessFixedQueryMix(rows,rows,{clicks:49,impressions:500},total),
+    {status:"withheld",reason:"invalid_rows"});
+  assert.deepEqual(assessFixedQueryMix(rows,rows,{clicks:-1,impressions:500},total),
+    {status:"withheld",reason:"invalid_rows"});
+});

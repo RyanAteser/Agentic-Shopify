@@ -27,3 +27,10 @@ Treat changes in GSC click-through rate as observational, not causal: search pos
 If 30 adjudicated cases cannot be collected, if inter-reviewer agreement is poor, if export coverage is inadequate, or if the guarded version increases wrong actionable recommendations, remain offline and do not integrate into merchant advice. Even a successful reviewer study does **not** establish merchant revenue lift; that requires a separate consented longitudinal pilot.
 
 References: [Google Search Analytics API](https://developers.google.com/webmaster-tools/v1/searchanalytics/query) (top-row ordering and non-exhaustive coverage); [Search Console performance report](https://support.google.com/webmasters/answer/7576553) (query anonymization and aggregation caveats).
+
+## Abstention tradeoff and paired comparison
+The evaluator now reports `errorsAvoidedByAbstention` separately from `corrected`. An incorrect baseline decision followed by a guarded abstention is **not** a correction. It also counts `correctDecisionsLostToAbstention`, where a valid baseline decision becomes unavailable. These counts must be reviewed alongside actionable coverage, not presented as merchant gains.
+
+`pairedActionable`, `pairedBaselineErrorRate` and `pairedGuardedErrorRate` describe only adjudicated cases where **both** systems made actionable decisions. The paired subset can be selectively easier than abstained cases; never use its conditional error rates alone to establish superiority. Rates are null when the paired denominator is zero. `evidenceSufficient` only means 30 adjudicated cases were supplied; it does not approve release or establish statistical significance.
+
+The preferred next experiment is a prespecified, consented reviewer study that records the cost of incorrect changes, the cost of missed useful changes and reviewer time. Do not tune thresholds on the held-out evaluation set.

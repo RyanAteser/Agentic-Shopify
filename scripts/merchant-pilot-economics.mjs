@@ -1,7 +1,7 @@
 /** Privacy-minimized cost sensitivity for the existing paired editorial pilot.
  * Read-only: no network, merchant account, live billing, publishing or store access.
  */
-import {readFileSync} from "node:fs";
+import {readFileSync,statSync} from "node:fs";
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {evaluatePilot} from "./merchant-pilot-evaluate.mjs";
@@ -100,6 +100,8 @@ export function evaluatePilotEconomics(pilot,ledger) {
   };
 }
 function readJson(path) {
+  // Bound allocation before reading an accidentally supplied large merchant export.
+  if (statSync(path).size>1024*1024) fail("input exceeds 1 MiB");
   const raw=readFileSync(path);
   if (raw.length>1024*1024) fail("input exceeds 1 MiB");
   return JSON.parse(raw.toString("utf8"));

@@ -79,7 +79,7 @@ test("unknown adjudications produce conservative error bounds and block sufficie
   assert.equal(score.adjudicationCoverage, 29 / 30);
   assert.deepEqual(score.baselineErrorCountBounds, [29, 30]);
   assert.deepEqual(score.guardedErrorCountBounds, [0, 1]);
-  assert.deepEqual(score.errorDifferenceBounds, [-29, -29]);
+  // The unknown case has opposite decisions: its truth can add -1 or +1.\n  assert.deepEqual(score.errorDifferenceBounds, [-30, -28]);
   assert.equal(score.evidenceSufficient, false);
 });
 test("30 known adjudications have point-identified error counts", () => {

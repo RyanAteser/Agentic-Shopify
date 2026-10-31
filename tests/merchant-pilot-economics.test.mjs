@@ -141,3 +141,28 @@ test("merchant-by-order confounding blocks cost candidate despite lower observed
   assert.equal(r.editorialDecisionSupport,"merchant-order-confounding");
   assert.equal(r.decisionSupport,"editorial-gates-not-met");
 });
+
+
+test("break-even AI operating-cost budget accounts for quality passes and labor",()=>{
+  const r=evaluatePilotEconomics(pilot(),ledger(100));
+  const d=r.scenarios.declaredLaborValue;
+  assert.equal(d.breakEvenAiExternalCentsTotal,10000);
+  assert.equal(d.breakEvenAiExternalCentsPerAttempt,500);
+  assert.equal(d.ai.externalCents,2000);
+  assert.equal(r.scenarios.halfLaborValue.breakEvenAiExternalCentsPerAttempt,250);
+  assert.equal(r.scenarios.doubleLaborValue.breakEvenAiExternalCentsPerAttempt,1000);
+});
+
+test("break-even budget falls with failed AI drafts and abstains without usable denominators",()=>{
+  const p=pilot();p.pairs[0].ai.decision="rejected";
+  const d=evaluatePilotEconomics(p,ledger()).scenarios.declaredLaborValue;
+  assert.equal(d.breakEvenAiExternalCentsTotal,9000);
+  assert.equal(d.breakEvenAiExternalCentsPerAttempt,450);
+  p.pairs.forEach(x=>{x.manual.decision="rejected";});
+  const noManual=evaluatePilotEconomics(p,ledger()).scenarios.declaredLaborValue;
+  assert.equal(noManual.breakEvenAiExternalCentsTotal,null);
+  assert.equal(noManual.breakEvenAiExternalCentsPerAttempt,null);
+  p.pairs.forEach(x=>{x.manual.decision="usable";x.ai.decision="rejected";});
+  const noAi=evaluatePilotEconomics(p,ledger()).scenarios.declaredLaborValue;
+  assert.equal(noAi.breakEvenAiExternalCentsTotal,null);
+});

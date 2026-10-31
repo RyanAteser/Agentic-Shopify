@@ -72,3 +72,23 @@ test("paired review gate requires both export coverage and representative matche
   assert.equal(incomplete.status,"withheld");
   assert.throws(()=>assessPairedQueryMix(shared,shared,{clicks:49,impressions:500},total),/exceeds/);
 });
+
+test("paired guard withholds when matched queries cover impressions but miss most clicks",()=>{
+  const shared=Array.from({length:5},(_,i)=>({query:"returning "+i,clicks:1,impressions:100}));
+  const current=[...shared,{query:"new converting query",clicks:50,impressions:100}];
+  const result=assessPairedQueryMix(shared,current,
+    {clicks:5,impressions:500},{clicks:55,impressions:600});
+  assert.equal(result.comparison.matchedCurrentImpressions,500);
+  assert.equal(result.comparison.matchedCurrentClicks,5);
+  assert.equal(result.comparison.currentClicks,55);
+  assert.equal(result.status,"withheld");
+  assert.equal(result.reason,"matched_cohort");
+});
+
+test("paired guard abstains when both cohorts have impressions but no clicks",()=>{
+  const rows=Array.from({length:5},(_,i)=>({query:"zero "+i,clicks:0,impressions:100}));
+  const result=assessPairedQueryMix(rows,rows,
+    {clicks:0,impressions:500},{clicks:0,impressions:500});
+  assert.equal(result.status,"withheld");
+  assert.equal(result.reason,"export_coverage");
+});

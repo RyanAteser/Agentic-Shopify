@@ -48,6 +48,7 @@ export type WindowResult={
   current:{days:number;clicks:number;impressions:number;ctr:number;avgPosition:number|null};
   previous:{days:number;clicks:number;impressions:number;ctr:number;avgPosition:number|null};
   clicksChangePct:number|null;impressionsChangePct:number|null;comparable:boolean;
+  clickChangeDrivers:{impressionEffectClicks:number;ctrEffectClicks:number;ctrChangePercentagePoints:number}|null;
 };
 const toYMD=(day:Date)=>day.toISOString().slice(0,10);
 const DAY_MS=86400000;
@@ -83,8 +84,23 @@ export function compareOrganicWindows(metrics:OrganicMetric[],now=new Date()):Wi
   const previous=bucket(metrics,toYMD(prevFrom),toYMD(prevEnd));
   const comparable=current.complete&&previous.complete;
   const change=(a:number,b:number)=>comparable&&b>0?(a-b)/b*100:null;
+  // Exact symmetric decomposition of C = impressions * CTR:
+  // ΔC = ΔI * (CTR_old+CTR_new)/2 + ΔCTR * (I_old+I_new)/2.
+  // Unlike a naive before/after CTR comparison, this separates changes in
+  // search exposure from click yield without assigning either to our app.
+  // Suppress when either period lacks impressions or observations are invalid.
+  const safe=metrics.every(x=>Number.isFinite(x.clicks)&&Number.isFinite(x.impressions)&&
+    Number.isFinite(x.ctr)&&Number.isFinite(x.position)&&x.clicks>=0&&
+    x.impressions>=x.clicks&&x.impressions>=0);
+  const drivers=comparable&&safe&&current.impressions>0&&previous.impressions>0
+    ?{
+      impressionEffectClicks:(current.impressions-previous.impressions)*(current.ctr+previous.ctr)/2,
+      ctrEffectClicks:(current.ctr-previous.ctr)*(current.impressions+previous.impressions)/2,
+      ctrChangePercentagePoints:100*(current.ctr-previous.ctr)
+    }:null;
   return {current,previous,clicksChangePct:change(current.clicks,previous.clicks),
-    impressionsChangePct:change(current.impressions,previous.impressions),comparable};
+    impressionsChangePct:change(current.impressions,previous.impressions),comparable,
+    clickChangeDrivers:drivers};
 }
 /**
  * The scorecard uses GSC byProperty aggregation. Domain properties include

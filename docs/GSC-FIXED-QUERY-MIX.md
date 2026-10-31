@@ -24,3 +24,9 @@ Source: [Google Search Analytics API](https://developers.google.com/webmaster-to
 Use `assessFixedQueryMix(previous, current, previousPropertyTotal, currentPropertyTotal)` for any new research consumer. It invokes `assessPairedQueryMix` first and returns only a `status` and `reason` if property export coverage or matched-cohort click/impression coverage fails. If preflight passes, it invokes the existing fixed-weight computation; missing exposure can still cause abstention. The lower-level `compareFixedQueryMix` remains available for pure mathematical tests, but bypasses independent coverage checks and must not be used directly to generate merchant-facing advice.
 
 This is a code-level guard, not a verification of consent, tenant ownership, identical Search Console filters, finalized reporting windows, or real merchant outcomes. Those remain upstream requirements. No recommendation or publication pathway is enabled.
+
+## Invalid-export failure policy (2026-10-31)
+
+The guarded `assessFixedQueryMix` entry point now abstains with `{status:"withheld",reason:"invalid_rows"}` for known validation failures: malformed or duplicate query observations, unsafe integer aggregates, invalid independent property totals, or query totals exceeding property totals. This prevents invalid exports from producing either partial SEO effect estimates or unhandled input-validation errors in future advisory consumers. Unexpected programming errors still propagate rather than being silently masked.
+
+Synthetic regression tests cover duplicate and non-finite query observations, inconsistent property totals, and negative property totals. This change does not verify real Google exports, merchant consent, equivalent filters, or any merchant outcome.

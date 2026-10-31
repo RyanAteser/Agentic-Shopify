@@ -56,8 +56,17 @@ export function assessFixedQueryMix(
   currentTotal:{clicks:number;impressions:number},
 ): {status:"withheld";reason:"export_coverage"|"matched_cohort"|"invalid_rows"|"insufficient_matched_exposure"|"zero_current_exposure"} |
    Extract<FixedMixResult,{status:"descriptive_only"}> {
-  const preflight=assessPairedQueryMix(previous,current,previousTotal,currentTotal);
-  if(preflight.status==="withheld")return {status:"withheld",
-    reason:preflight.reason==="export_coverage"?"export_coverage":"matched_cohort"};
-  return compareFixedQueryMix(previous,current);
+  // Untrusted or mismatched exports must abstain, not crash an advisory
+  // consumer or leak partially calculated CTR effects. Only known validation
+  // errors are translated; unexpected programming errors still surface.
+  try {
+    const preflight=assessPairedQueryMix(previous,current,previousTotal,currentTotal);
+    if(preflight.status==="withheld")return {status:"withheld",
+      reason:preflight.reason==="export_coverage"?"export_coverage":"matched_cohort"};
+    return compareFixedQueryMix(previous,current);
+  } catch(error) {
+    if(error instanceof Error && /^(Invalid or duplicate query observation|Unsafe (aggregate|matched aggregate)|Invalid property totals|Query export exceeds property totals)/.test(error.message))
+      return {status:"withheld",reason:"invalid_rows"};
+    throw error;
+  }
 }

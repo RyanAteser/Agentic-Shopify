@@ -10,7 +10,7 @@ const truths = new Set(["change", "no_change", "unknown"]);
 export function scoreAssessments(rows) {
   if (!Array.isArray(rows)) throw new Error("Expected an array");
   const seen = new Set();
-  const result = { total: rows.length, adjudicated: 0, disagreement: 0, baselineAbstentions: 0, guardedAbstentions: 0, baselineErrors: 0, guardedErrors: 0, corrected: 0, regressed: 0 };
+  const result = { total: rows.length, adjudicated: 0, disagreement: 0, baselineAbstentions: 0, guardedAbstentions: 0, baselineErrors: 0, guardedErrors: 0, corrected: 0, regressed: 0, errorsAvoidedByAbstention: 0, correctDecisionsLostToAbstention: 0, pairedActionable: 0, pairedBaselineErrors: 0, pairedGuardedErrors: 0 };
   for (const row of rows) {
     if (!row || typeof row.caseId !== "string" || !row.caseId.trim() || seen.has(row.caseId) ||
         !decisions.has(row.baseline) || !decisions.has(row.guarded) || !truths.has(row.adjudicated))
@@ -25,6 +25,13 @@ export function scoreAssessments(rows) {
     const guardError = row.guarded !== "abstain" && row.guarded !== row.adjudicated;
     if (baseError) result.baselineErrors++;
     if (guardError) result.guardedErrors++;
+    if (row.baseline !== "abstain" && row.guarded !== "abstain") {
+      result.pairedActionable++;
+      if (baseError) result.pairedBaselineErrors++;
+      if (guardError) result.pairedGuardedErrors++;
+    }
+    if (baseError && row.guarded === "abstain") result.errorsAvoidedByAbstention++;
+    if (row.baseline === row.adjudicated && row.guarded === "abstain") result.correctDecisionsLostToAbstention++;
     if (baseError && !guardError && row.guarded !== "abstain") result.corrected++;
     if (!baseError && guardError) result.regressed++;
   }
@@ -35,8 +42,10 @@ export function scoreAssessments(rows) {
   const guardedActionableCoverage = result.adjudicated ? guardedActionable / result.adjudicated : null;
   const baselineErrorRate = baselineActionable ? result.baselineErrors / baselineActionable : null;
   const guardedErrorRate = guardedActionable ? result.guardedErrors / guardedActionable : null;
-  return { ...result, baselineActionable, guardedActionable, baselineActionableCoverage, guardedActionableCoverage, baselineErrorRate, guardedErrorRate, evidenceSufficient: result.adjudicated >= 30,
-    note: "Descriptive counts only. Abstentions are reported separately and are not counted as correct; unknown adjudications are excluded from error denominators." };
+  const pairedBaselineErrorRate = result.pairedActionable ? result.pairedBaselineErrors / result.pairedActionable : null;
+  const pairedGuardedErrorRate = result.pairedActionable ? result.pairedGuardedErrors / result.pairedActionable : null;
+  return { ...result, pairedBaselineErrorRate, pairedGuardedErrorRate, baselineActionable, guardedActionable, baselineActionableCoverage, guardedActionableCoverage, baselineErrorRate, guardedErrorRate, evidenceSufficient: result.adjudicated >= 30,
+    note: "Descriptive counts only. Abstentions are reported separately and are not counted as correct; unknown adjudications are excluded from error denominators. Paired error rates include only cases where both arms act and may be selection-biased. evidenceSufficient is a sample-size screen, not a release decision." };
 }
 
 if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).href) {

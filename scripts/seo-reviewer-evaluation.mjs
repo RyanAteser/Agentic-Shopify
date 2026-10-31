@@ -35,6 +35,12 @@ export function scoreAssessments(rows) {
     if (baseError && !guardError && row.guarded !== "abstain") result.corrected++;
     if (!baseError && guardError) result.regressed++;
   }
+  const unknownAdjudications = result.total - result.adjudicated;
+  const adjudicationCoverage = result.total ? result.adjudicated / result.total : null;
+  // Conservative error bounds: every unknown actionable decision may be right or wrong.
+  // These are identification bounds, not confidence intervals.
+  const baselineUnknownActionable = rows.filter(row => row.adjudicated === "unknown" && row.baseline !== "abstain").length;
+  const guardedUnknownActionable = rows.filter(row => row.adjudicated === "unknown" && row.guarded !== "abstain").length;
   const adjudicatedRows = rows.filter(row => row.adjudicated !== "unknown");
   const baselineActionable = adjudicatedRows.filter(row => row.baseline !== "abstain").length;
   const guardedActionable = adjudicatedRows.filter(row => row.guarded !== "abstain").length;
@@ -44,8 +50,11 @@ export function scoreAssessments(rows) {
   const guardedErrorRate = guardedActionable ? result.guardedErrors / guardedActionable : null;
   const pairedBaselineErrorRate = result.pairedActionable ? result.pairedBaselineErrors / result.pairedActionable : null;
   const pairedGuardedErrorRate = result.pairedActionable ? result.pairedGuardedErrors / result.pairedActionable : null;
-  return { ...result, pairedBaselineErrorRate, pairedGuardedErrorRate, baselineActionable, guardedActionable, baselineActionableCoverage, guardedActionableCoverage, baselineErrorRate, guardedErrorRate, evidenceSufficient: result.adjudicated >= 30,
-    note: "Descriptive counts only. Abstentions are reported separately and are not counted as correct; unknown adjudications are excluded from error denominators. Paired error rates include only cases where both arms act and may be selection-biased. evidenceSufficient is a sample-size screen, not a release decision." };
+  const baselineErrorCountBounds = [result.baselineErrors, result.baselineErrors + baselineUnknownActionable];
+  const guardedErrorCountBounds = [result.guardedErrors, result.guardedErrors + guardedUnknownActionable];
+  const errorDifferenceBounds = [guardedErrorCountBounds[0] - baselineErrorCountBounds[1], guardedErrorCountBounds[1] - baselineErrorCountBounds[0]];
+  return { ...result, unknownAdjudications, adjudicationCoverage, baselineUnknownActionable, guardedUnknownActionable, baselineErrorCountBounds, guardedErrorCountBounds, errorDifferenceBounds, pairedBaselineErrorRate, pairedGuardedErrorRate, baselineActionable, guardedActionable, baselineActionableCoverage, guardedActionableCoverage, baselineErrorRate, guardedErrorRate, evidenceSufficient: result.adjudicated >= 30 && unknownAdjudications === 0,
+    note: "Descriptive counts only. Abstentions are reported separately and are not counted as correct; unknown adjudications are excluded from error denominators. Paired error rates include only cases where both arms act and may be selection-biased. Error count bounds include unknown adjudications as possibly right or wrong; they are not confidence intervals. evidenceSufficient requires 30 adjudicated cases and no unknown adjudications, but is not a release decision." };
 }
 
 if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).href) {

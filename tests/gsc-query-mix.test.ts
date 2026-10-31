@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {compareQueryMix} from "../app/lib/gsc-query-mix";
+import {compareQueryMix,assessQueryExportCoverage} from "../app/lib/gsc-query-mix";
 
 test("aggregate CTR can fall while returning queries improve",()=>{
   const prev=Array.from({length:5},(_,i)=>({query:"product "+i,clicks:20,impressions:100}));
@@ -38,4 +38,21 @@ test("missing query is not a zero-impression observation",()=>{
   assert.equal(r.lostQueries,1);
   assert.equal(r.matchedPreviousCtr,null);
   assert.equal(r.totalCurrentCtr,null);
+});
+
+test("coverage gate rejects truncated exports and inconsistent filters",()=>{
+  const rows=[{query:"product",clicks:40,impressions:400}];
+  const full=assessQueryExportCoverage(rows,{clicks:40,impressions:400});
+  assert.equal(full.status,"usable_for_review");
+  assert.equal(full.clickCoverage,1);
+  const truncated=assessQueryExportCoverage(rows,{clicks:100,impressions:1000});
+  assert.equal(truncated.status,"incomplete_export");
+  assert.equal(truncated.impressionCoverage,0.4);
+  assert.throws(()=>assessQueryExportCoverage(rows,{clicks:39,impressions:400}),/exceeds/);
+  assert.throws(()=>assessQueryExportCoverage(rows,{clicks:40,impressions:399}),/exceeds/);
+});
+test("coverage gate abstains on zero totals and malformed observations",()=>{
+  assert.equal(assessQueryExportCoverage([],{clicks:0,impressions:0}).status,"incomplete_export");
+  assert.throws(()=>assessQueryExportCoverage([{query:"x",clicks:1,impressions:2},{query:"x",clicks:1,impressions:2}],{clicks:2,impressions:4}),/duplicate/);
+  assert.throws(()=>assessQueryExportCoverage([],{clicks:2,impressions:1}),/Invalid property/);
 });

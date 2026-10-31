@@ -7,7 +7,7 @@ test("fixed baseline mix separates CTR improvement from adverse impression compo
     query:"q"+i,clicks:i===0?50:1,impressions:100
   }));
   const current=previous.map((r,i)=>({
-    ...r,clicks:i===0?60:2,impressions:i===0?100:1000
+    ...r,clicks:i===0?60:20,impressions:i===0?100:1000
   }));
   const result=compareFixedQueryMix(previous,current);
   assert.equal(result.status,"descriptive_only");

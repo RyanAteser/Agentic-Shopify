@@ -52,9 +52,21 @@ export function scoreAssessments(rows) {
   const pairedGuardedErrorRate = result.pairedActionable ? result.pairedGuardedErrors / result.pairedActionable : null;
   const baselineErrorCountBounds = [result.baselineErrors, result.baselineErrors + baselineUnknownActionable];
   const guardedErrorCountBounds = [result.guardedErrors, result.guardedErrors + guardedUnknownActionable];
-  const errorDifferenceBounds = [guardedErrorCountBounds[0] - baselineErrorCountBounds[1], guardedErrorCountBounds[1] - baselineErrorCountBounds[0]];
+  // Joint identification bounds preserve the shared ground truth for each case.
+  // Subtracting marginal extremes can invent impossible outcomes when arms agree.
+  let differenceMin = result.guardedErrors - result.baselineErrors;
+  let differenceMax = differenceMin;
+  for (const row of rows) {
+    if (row.adjudicated !== "unknown") continue;
+    const possible = ["change", "no_change"].map(truth =>
+      Number(row.guarded !== "abstain" && row.guarded !== truth) -
+      Number(row.baseline !== "abstain" && row.baseline !== truth));
+    differenceMin += Math.min(...possible);
+    differenceMax += Math.max(...possible);
+  }
+  const errorDifferenceBounds = [differenceMin, differenceMax];
   return { ...result, unknownAdjudications, adjudicationCoverage, baselineUnknownActionable, guardedUnknownActionable, baselineErrorCountBounds, guardedErrorCountBounds, errorDifferenceBounds, pairedBaselineErrorRate, pairedGuardedErrorRate, baselineActionable, guardedActionable, baselineActionableCoverage, guardedActionableCoverage, baselineErrorRate, guardedErrorRate, evidenceSufficient: result.adjudicated >= 30 && unknownAdjudications === 0,
-    note: "Descriptive counts only. Abstentions are reported separately and are not counted as correct; unknown adjudications are excluded from error denominators. Paired error rates include only cases where both arms act and may be selection-biased. Error count bounds include unknown adjudications as possibly right or wrong; they are not confidence intervals. evidenceSufficient requires 30 adjudicated cases and no unknown adjudications, but is not a release decision." };
+    note: "Descriptive counts only. Abstentions are reported separately and are not counted as correct; unknown adjudications are excluded from error denominators. Paired error rates include only cases where both arms act and may be selection-biased. Error count bounds include unknown adjudications as possibly right or wrong; joint difference bounds preserve paired decisions and are not confidence intervals. evidenceSufficient requires 30 adjudicated cases and no unknown adjudications, but is not a release decision." };
 }
 
 if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).href) {

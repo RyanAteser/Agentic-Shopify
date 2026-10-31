@@ -138,7 +138,8 @@ test("GSC symmetric click decomposition reconciles exactly and identifies offset
   const r=compareOrganicWindows(rows,now);
   assert.equal(r.comparable,true);
   assert.equal(r.current.clicks-r.previous.clicks,-280);
-  assert.equal(r.clickChangeDrivers?.ctrChangePercentagePoints,-15);
+  // Binary floating-point ratios need a tolerance; the reporting layer rounds for display.
+  assert.ok(Math.abs((r.clickChangeDrivers?.ctrChangePercentagePoints??NaN)-(-15))<1e-9);
   assert.ok((r.clickChangeDrivers?.impressionEffectClicks??0)>0);
   assert.ok((r.clickChangeDrivers?.ctrEffectClicks??0)<0);
   assert.ok(Math.abs((r.clickChangeDrivers!.impressionEffectClicks+

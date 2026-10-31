@@ -22,3 +22,11 @@ The function rejects duplicate, malformed, negative, inconsistent and unsafe-num
 4. Only consider advisory integration after reviewer validation and tenant-isolation tests. No claim of traffic, conversion or revenue improvement is warranted.
 
 Sources: [Google Search Analytics API](https://developers.google.com/webmaster-tools/v1/searchanalytics/query), [Search Analytics resource limitations](https://developers.google.com/webmaster-tools/v1/searchanalytics), [Google traffic-drop debugging](https://developers.google.com/search/docs/monitor-debug/debugging-search-traffic-drops).
+
+## Query export coverage preflight (2026-10-30)
+
+The pure `assessQueryExportCoverage` helper compares exported query-row click and impression sums with an **independently fetched, identically filtered property-level total**. A cohort is `usable_for_review` only when both click and impression coverage reach 80%, totals are positive, and the export does not exceed the property totals. Missing/zero denominators, duplicate rows, invalid counts and mismatched filters abstain or throw. This 80% threshold is a conservative review heuristic, **not** proof of completeness or statistical representativeness.
+
+For a two-period comparison, apply the check **separately to both periods** and withhold merchant-facing interpretation unless both pass. This helper is deliberately not wired to the dashboard or automatic recommendations. Search Console may anonymize queries, cap returned rows, and change reporting coverage; totals must be collected with the same property, dates, dimensions-independent filters and search type. A failure may reflect export truncation, anonymization or filter mismatch, not lost traffic.
+
+CI regression cases include 40% coverage, full coverage, impossible row sums, zero totals and duplicate query keys. No real merchant exports were used, and no SEO lift is claimed.

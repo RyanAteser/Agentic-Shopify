@@ -1,5 +1,5 @@
 /** Offline, privacy-minimized paired editorial pilot evaluator. No network or store access. */
-import {readFileSync} from "node:fs";
+import {readFileSync,statSync} from "node:fs";
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 
@@ -209,6 +209,8 @@ export function evaluatePilot(input){
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   try{
     if(process.argv.length!==3)fail("usage: node scripts/merchant-pilot-evaluate.mjs pilot.json");
+    // Reject oversized inputs before allocating memory for their contents.
+    if(statSync(process.argv[2]).size>1024*1024)fail("input exceeds 1 MiB");
     const raw=readFileSync(process.argv[2]);
     if(raw.length>1024*1024)fail("input exceeds 1 MiB");
     console.log(JSON.stringify(evaluatePilot(JSON.parse(raw.toString("utf8"))),null,2));

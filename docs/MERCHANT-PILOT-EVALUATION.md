@@ -155,3 +155,7 @@ A pilot can be balanced overall (ten AI-first and ten manual-first pairs) while 
 ## Oversized input rejection (2026-10-31)
 
 The offline merchant-pilot CLI checks the input file size **before** reading it into memory, then checks the actual bytes read. Inputs larger than 1 MiB fail closed. This protects the research runner against accidental large exports; it does not replace approved storage, retention, tenant isolation or consent controls. The in-memory evaluator still expects a trusted caller to enforce its own input-byte budget.
+
+### Economics CLI input boundary (2026-10-31)
+
+Both pilot and cost-ledger JSON files are rejected if their on-disk size exceeds 1 MiB **before** their contents are read. A second check validates the bytes actually read. This bounds accidental large-file allocations in offline cost analysis, but is not a substitute for OS-level limits or a secure environment. The CLI performs no store or network operations. Regression coverage: `tests/merchant-pilot-economics-cli.test.mjs`.

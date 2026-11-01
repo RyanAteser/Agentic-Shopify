@@ -13,6 +13,7 @@ STATUSES = {"completed", "abandoned", "failed"}
 def analyze(rows):
     seen = set()
     groups = defaultdict(list)
+    merchant_arms = defaultdict(set)
     for line, row in enumerate(rows, 2):
         if not FIELDS.issubset(row):
             raise ValueError("Missing required columns")
@@ -38,6 +39,7 @@ def analyze(rows):
         if (minutes is not None and (minutes < 0 or minutes != minutes or minutes == float("inf"))) or dollars < 0 or dollars != dollars or dollars == float("inf"):
             raise ValueError(f"Invalid nonnegative finite value on row {line}")
         groups[arm].append((minutes, dollars, useful, row["status"]))
+        merchant_arms[merchant].add(arm)
     result = {}
     for arm in sorted(ARMS):
         items = groups[arm]
@@ -61,7 +63,12 @@ def analyze(rows):
             "provider_cost_usd": round(total_cost, 4),
             "provider_cost_per_useful_usd": round(total_cost / useful_count, 4) if useful_count else None,
         }
-    result["accounting_comparison_ready"] = all(result[a]["assigned"] > 0 and result[a]["labor_coverage"] == 1 for a in ARMS)
+    # A pooled comparison across disjoint merchants confounds merchant differences with arm.
+    paired_merchants = sum(arms == ARMS for arms in merchant_arms.values())
+    result["merchants_total"] = len(merchant_arms)
+    result["merchants_with_both_arms"] = paired_merchants
+    result["accounting_comparison_ready"] = (paired_merchants == len(merchant_arms) and paired_merchants > 0
+        and all(result[a]["assigned"] > 0 and result[a]["labor_coverage"] == 1 for a in ARMS))
     result["interpretation"] = "Descriptive feasibility accounting only; missing labor prevents per-useful labor estimate. No causal or revenue claims."
     return result
 

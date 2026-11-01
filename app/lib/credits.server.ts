@@ -22,7 +22,7 @@ export async function createCreditedJob(shop:string,topic:string){
  * No HTTP status after an attempted POST proves n8n did not begin paid work.
  * Callers must never invoke this function for an uncertain dispatch.
  */
-export async function failCreditedJob(shop:string,id:string,error:unknown){
+export async function failCreditedJob(shop:string,id:string,error:unknown, queuedOnly = false){
   return db.$transaction(async tx=>{
     // Lock the merchant row FIRST, matching article callbacks and Shopify
     // redaction. Reversing StoreConfig -> ContentJob would permit a PostgreSQL
@@ -33,7 +33,7 @@ export async function failCreditedJob(shop:string,id:string,error:unknown){
     });
     if(active.count!==1)return false;
     const result=await tx.contentJob.updateMany({
-      where:{id,shop,status:{in:["queued","running"]}},
+      where:{id,shop,status:queuedOnly ? "queued" : {in:["queued","running"]}},
       data:{status:"failed",error:safeGenerationFailureReason(error)}
     });
     if(result.count){

@@ -245,3 +245,28 @@ test("unexpected error after durable claim never refunds a possibly dispatched j
     assert.equal((await recoverQueuedJobs(now, async () => { throw new Error("duplicate"); })).candidates, 0);
   });
 });
+
+
+test("scheduled job unexpected post-claim exception retains credit and schedule slot", async () => {
+  await withStore(async shop => {
+    const snapshot = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
+    const claim = await claimDueScheduledDraft(snapshot, now);
+    assert.ok(claim);
+    await aged(claim.jobId);
+    const result = await recoverQueuedJobs(now, async (id, tenant) => {
+      await claimQueuedDispatch(tenant, id);
+      throw new Error("unclassified failure after durable dispatch claim");
+    });
+    assert.equal(result.blocked, 1);
+    assert.equal(result.rejected, 0);
+    const job = await db.contentJob.findUniqueOrThrow({ where: { id: claim.jobId } });
+    assert.equal(job.status, "running");
+    const after = await db.storeConfig.findUniqueOrThrow({ where: { shop } });
+    assert.equal(after.freeDraftsUsed, 1);
+    assert.equal(after.topicCursor, claim.previousCursor + 1);
+    assert.equal(after.nextRunAt?.toISOString(), claim.nextRunAt.toISOString());
+    assert.equal((await recoverQueuedJobs(now, async () => {
+      throw new Error("must not replay claimed scheduled job");
+    })).candidates, 0);
+  });
+});

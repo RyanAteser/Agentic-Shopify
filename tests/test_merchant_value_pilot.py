@@ -70,6 +70,29 @@ class PilotAccountingTests(unittest.TestCase):
         self.assertEqual(out["merchants_with_balanced_arms"], 2)
         self.assertTrue(out["accounting_comparison_ready"])
 
+    def test_merchant_weighted_difference_not_pooled(self):
+        # Merchant one has one pair, merchant two has three pairs.
+        # Equal merchant weighting gives (-20 + 10) / 2 = -5.
+        records = [
+            row(merchant="m1", brief="a", arm="ai", labor="10"),
+            row(merchant="m1", brief="b", arm="control", labor="30"),
+        ]
+        for i in range(3):
+            records.append(row(merchant="m2", brief=f"a{i}", arm="ai", labor="30"))
+            records.append(row(merchant="m2", brief=f"c{i}", arm="control", labor="20"))
+        out = analyze(records)
+        self.assertTrue(out["accounting_comparison_ready"])
+        self.assertEqual(out["merchant_weighted_labor_difference_minutes_per_assignment"], -5)
+        self.assertEqual(out["merchants_with_lower_ai_labor"], 1)
+
+    def test_missing_labor_suppresses_merchant_difference(self):
+        out = analyze([
+            row(brief="a", arm="ai", labor=""),
+            row(brief="b", arm="control", labor="20"),
+        ])
+        self.assertIsNone(out["merchant_weighted_labor_difference_minutes_per_assignment"])
+        self.assertIsNone(out["merchants_with_lower_ai_labor"])
+
     def test_missing_labor_not_zero(self):
         out = analyze([row(), row(brief="b2", labor="", useful="0")])
         self.assertEqual(out["ai"]["labor_coverage"], 0.5)

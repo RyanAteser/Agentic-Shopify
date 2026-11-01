@@ -6,7 +6,7 @@ Use the combined, read-only gate:
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_merchant*.py' -v
-python3 tools/merchant_pilot_gate.py frozen-manifest.csv observed-assignments.csv > pilot-report.json
+python3 -m tools.merchant_pilot_gate frozen-manifest.csv observed-assignments.csv > pilot-report.json
 ```
 
 The manifest requires `merchant_id,brief_id,arm`. The observed CSV additionally requires `status,labor_minutes,useful,provider_cost_usd`. Both use pseudonymous identifiers. A successful exit requires exact manifest reconciliation, balanced AI/control assignments for each merchant, and complete labor observations. On failure the tool exits 1 and suppresses the paired labor estimate; inspect the JSON report for missing, extra or switched assignments and coverage problems. Do not discard failures or reconstruct missing records as zeros.

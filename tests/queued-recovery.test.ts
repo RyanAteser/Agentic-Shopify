@@ -228,3 +228,20 @@ test("recovery fairly selects one oldest queued job per merchant, not three from
     await db.storeConfig.deleteMany({ where: { shop: { in: shops } } });
   }
 });
+
+test("unexpected error after durable claim never refunds a possibly dispatched job", async () => {
+  await withStore(async shop => {
+    const job = await createCreditedJob(shop, "Merchant guide");
+    await aged(job.id);
+    const result = await recoverQueuedJobs(now, async (id, tenant) => {
+      await claimQueuedDispatch(tenant, id);
+      // Simulates an unclassified exception after the irreversible claim.
+      throw new Error("unexpected post-claim failure");
+    });
+    assert.equal(result.blocked, 1);
+    assert.equal(result.rejected, 0);
+    assert.equal((await db.contentJob.findUniqueOrThrow({ where: { id: job.id } })).status, "running");
+    assert.equal((await db.storeConfig.findUniqueOrThrow({ where: { shop } })).freeDraftsUsed, 1);
+    assert.equal((await recoverQueuedJobs(now, async () => { throw new Error("duplicate"); })).candidates, 0);
+  });
+});

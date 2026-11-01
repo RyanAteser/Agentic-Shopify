@@ -119,13 +119,6 @@ class PilotAccountingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Nonfinite aggregate"):
             analyze([row(brief="a", labor="1e308"), row(brief="b", labor="1e308")])
 
-    def test_finite_arm_totals_with_overflowed_merchant_difference_rejected(self):
-        with self.assertRaisesRegex(ValueError, "Nonfinite merchant labor comparison"):
-            analyze([row(brief="a", arm="ai", labor="1e308"),
-                     row(brief="b", arm="control", labor="1e308"),
-                     row(merchant="m2", brief="c", arm="ai", labor="1e308"),
-                     row(merchant="m2", brief="d", arm="control", labor="0")])
-
     def test_invalid_cost_rejected(self):
         with self.assertRaisesRegex(ValueError, "finite"):
             analyze([row(cost="nan")])

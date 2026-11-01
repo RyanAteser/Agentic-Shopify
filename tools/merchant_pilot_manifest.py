@@ -8,6 +8,25 @@ from pathlib import Path
 KEYS = ("merchant_id", "brief_id", "arm")
 ARMS = {"ai", "control"}
 
+def load_csv(path, required_columns):
+    """Reject ambiguous CSV headers, malformed rows and oversized pilot inputs."""
+    if path.stat().st_size > 1024 * 1024:
+        raise ValueError("CSV exceeds 1 MiB limit")
+    with path.open(newline="", encoding="utf-8-sig") as stream:
+        reader = csv.DictReader(stream, strict=True)
+        headers = reader.fieldnames
+        if not headers or len(headers) != len(set(headers)):
+            raise ValueError("CSV missing or duplicate column headers")
+        if not set(required_columns).issubset(headers):
+            raise ValueError("CSV missing required columns")
+        rows = []
+        for line, row in enumerate(reader, 2):
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError(f"CSV malformed row {line}")
+            rows.append(row)
+        return rows
+
+
 def verify(manifest, observed):
     def index(rows, source):
         result = {}
@@ -41,12 +60,7 @@ def main():
     parser.add_argument("manifest", type=Path)
     parser.add_argument("observed", type=Path)
     args = parser.parse_args()
-    def load(path):
-        if path.stat().st_size > 1024 * 1024:
-            raise ValueError("CSV exceeds 1 MiB limit")
-        with path.open(newline="", encoding="utf-8-sig") as f:
-            return list(csv.DictReader(f))
-    result = verify(load(args.manifest), load(args.observed))
+    result = verify(load_csv(args.manifest, KEYS), load_csv(args.observed, KEYS))
     print(json.dumps(result, indent=2, sort_keys=True))
     if not result["manifest_matches"]:
         raise SystemExit(1)

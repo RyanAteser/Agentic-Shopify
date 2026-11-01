@@ -16,6 +16,7 @@ def analyze(rows):
     groups = defaultdict(list)
     merchant_arms = defaultdict(set)
     merchant_arm_counts = defaultdict(lambda: defaultdict(int))
+    merchant_labor = defaultdict(lambda: defaultdict(list))
     for line, row in enumerate(rows, 2):
         if not FIELDS.issubset(row):
             raise ValueError("Missing required columns")
@@ -43,6 +44,7 @@ def analyze(rows):
         groups[arm].append((minutes, dollars, useful, row["status"]))
         merchant_arms[merchant].add(arm)
         merchant_arm_counts[merchant][arm] += 1
+        merchant_labor[merchant][arm].append(minutes)
     result = {}
     for arm in sorted(ARMS):
         items = groups[arm]
@@ -77,6 +79,19 @@ def analyze(rows):
     result["merchants_with_balanced_arms"] = balanced_merchants
     result["accounting_comparison_ready"] = (balanced_merchants == len(merchant_arms) and balanced_merchants > 0
         and all(result[a]["assigned"] > 0 and result[a]["labor_coverage"] == 1 for a in ARMS))
+    # Equal merchant weighting avoids large merchants dominating the pilot summary.
+    # Suppress differences unless all assignments have observed labor and balanced arms.
+    if result["accounting_comparison_ready"]:
+        differences = [
+            sum(merchant_labor[m]["ai"]) / len(merchant_labor[m]["ai"])
+            - sum(merchant_labor[m]["control"]) / len(merchant_labor[m]["control"])
+            for m in sorted(merchant_labor)
+        ]
+        result["merchant_weighted_labor_difference_minutes_per_assignment"] = sum(differences) / len(differences)
+        result["merchants_with_lower_ai_labor"] = sum(d < 0 for d in differences)
+    else:
+        result["merchant_weighted_labor_difference_minutes_per_assignment"] = None
+        result["merchants_with_lower_ai_labor"] = None
     result["interpretation"] = "Descriptive feasibility accounting only; missing labor prevents per-useful labor estimate. No causal or revenue claims."
     return result
 

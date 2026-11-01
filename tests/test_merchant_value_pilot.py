@@ -31,6 +31,24 @@ class PilotAccountingTests(unittest.TestCase):
         self.assertFalse(out["accounting_comparison_ready"])
         self.assertIsNone(out["control"]["labor_minutes_per_assigned"])
 
+    def test_disjoint_merchants_do_not_qualify_for_comparison(self):
+        out = analyze([
+            row(merchant="merchant_a", brief="a", arm="ai"),
+            row(merchant="merchant_b", brief="b", arm="control"),
+        ])
+        self.assertEqual(out["merchants_total"], 2)
+        self.assertEqual(out["merchants_with_both_arms"], 0)
+        self.assertFalse(out["accounting_comparison_ready"])
+
+    def test_partial_merchant_crossover_does_not_qualify(self):
+        out = analyze([
+            row(merchant="m1", brief="a", arm="ai"),
+            row(merchant="m1", brief="b", arm="control"),
+            row(merchant="m2", brief="c", arm="ai"),
+        ])
+        self.assertEqual(out["merchants_with_both_arms"], 1)
+        self.assertFalse(out["accounting_comparison_ready"])
+
     def test_missing_labor_not_zero(self):
         out = analyze([row(), row(brief="b2", labor="", useful="0")])
         self.assertEqual(out["ai"]["labor_coverage"], 0.5)

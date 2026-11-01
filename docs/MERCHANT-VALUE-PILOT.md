@@ -55,3 +55,7 @@ The evaluator additionally reports `merchants_with_balanced_arms` and requires *
 ## Continuous integration enforcement (2026-11-01)
 
 The PR's SQLite app-check job now runs `python3 -m unittest discover -s tests -p 'test_merchant*.py' -v` after the Node test suite. This executes both the offline merchant accounting tests and frozen-manifest reconciliation tests. Previously, green Node/PostgreSQL/Docker checks did **not** establish that these Python tools passed: the pilot regressions were not included in CI. This closes that verification gap for code-level checks only; it does not validate a real pilot, randomization, consent, or merchant outcomes. If either Python test module fails, the PR check fails. The PostgreSQL and Docker jobs remain unchanged.
+
+## Fail-closed CSV input validation (2026-11-01)
+
+Both offline pilot commands now use the same 1 MiB bounded CSV reader. Duplicate/missing headers, extra/missing row fields and malformed CSV fail rather than being silently accepted by `csv.DictReader`. This reduces the chance that a malformed spreadsheet export changes the manifest reconciliation or the reported labor denominator. Inputs remain local and pseudonymous. Successful parsing does not establish consent, randomization or economic impact. CI includes `tests/test_merchant_csv_integrity.py` via the existing `test_merchant*.py` discovery pattern.

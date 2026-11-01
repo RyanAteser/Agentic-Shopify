@@ -99,8 +99,8 @@ export async function recoverQueuedJobs(
           continue;
         }
         const refunded = schedule
-          ? await failScheduledDraft(schedule, error)
-          : await failCreditedJob(job.shop, job.id, error);
+          ? await failScheduledDraft(schedule, error, true)
+          : await failCreditedJob(job.shop, job.id, error, true);
         if (refunded) rejected++;
         else raced++;
       } catch {

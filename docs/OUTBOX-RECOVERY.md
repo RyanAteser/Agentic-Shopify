@@ -180,3 +180,21 @@ Security context: [Shopify authenticate every request](https://shopify.dev/docs/
 **Regression plan:** For every previously refundable 4xx, use an isolated HTTP stub to assert exactly one POST, `dispatch_uncertain` state, no refund, and no retry. Verify a valid late callback after HTTP 400 still completes once. Run both SQLite and PostgreSQL CI. In authorized staging, inject a proxy 400 after webhook acceptance, confirm execution-history correlation, and measure false uncertain cases and time to reconcile. Do not deploy or activate workflows for this test without approval.
 
 **Impact hypothesis:** Lower risk of false credit refunds and duplicate model expenditure, with potentially higher manual reconciliation workload. No merchant-level incident reduction, retained revenue, draft acceptance or SEO lift has been measured. Reference: [n8n execution history](https://docs.n8n.io/workflows/executions/all-executions/), [n8n Webhook and Respond to Webhook behavior](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.respondtowebhook/).
+
+## Unexpected post-claim exception refund fence (2026-10-31)
+
+The recovery worker previously treated any generic dispatch exception as a definitive
+pre-POST failure. Although the current transport wraps attempted HTTP failures as
+`UncertainDispatchError`, an unexpected exception after the durable claim could
+otherwise invoke the generic refund path on a `running` job. That would
+misaccount a possibly accepted paid generation.
+
+Recovery now inspects the current job state before deciding to refund and
+uses an **atomic queued-only** status predicate in both manual and scheduled
+refund transactions. An unexpected exception after the job becomes `running`
+is blocked for operator reconciliation without refund or replay. The extra
+predicate matters because another sweeper can claim the job between the
+read-only status check and the refund transaction. Regression coverage injects
+an unclassified error immediately after a successful claim and checks that
+the credit and running state survive. No external dispatch or merchant
+impact was measured. This does not solve cross-system exactly-once delivery.

@@ -50,14 +50,18 @@ def analyze(rows):
         result[arm] = {
             "assigned": n,
             "completed": sum(x[3] == "completed" for x in items),
+            "completion_rate": sum(x[3] == "completed" for x in items) / n if n else None,
             "useful": useful_count,
+            "useful_rate_per_assigned": useful_count / n if n else None,
             "labor_observed": observed,
             "labor_coverage": observed / n if n else None,
             "known_labor_minutes_lower_bound": known_minutes,
+            "labor_minutes_per_assigned": known_minutes / n if n and observed == n else None,
             "labor_minutes_per_useful": known_minutes / useful_count if n and observed == n and useful_count else None,
             "provider_cost_usd": round(total_cost, 4),
             "provider_cost_per_useful_usd": round(total_cost / useful_count, 4) if useful_count else None,
         }
+    result["accounting_comparison_ready"] = all(result[a]["assigned"] > 0 and result[a]["labor_coverage"] == 1 for a in ARMS)
     result["interpretation"] = "Descriptive feasibility accounting only; missing labor prevents per-useful labor estimate. No causal or revenue claims."
     return result
 

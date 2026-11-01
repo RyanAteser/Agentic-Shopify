@@ -30,6 +30,22 @@ class CsvIntegrityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "malformed"):
             self.check("merchant_id,brief_id,arm\nm1,b1\n")
 
+    def test_blank_line_rejected_instead_of_skipped(self):
+        with self.assertRaisesRegex(ValueError, "blank physical line"):
+            self.check("merchant_id,brief_id,arm\nm1,b1,ai\n\nm2,b2,control\n")
+
+    def test_empty_header_rejected(self):
+        with self.assertRaisesRegex(ValueError, "headers"):
+            self.check("merchant_id,brief_id,arm,\nm1,b1,ai,x\n")
+
+    def test_whitespace_header_rejected(self):
+        with self.assertRaisesRegex(ValueError, "headers"):
+            self.check("merchant_id, brief_id,arm\nm1,b1,ai\n")
+
+    def test_nul_rejected(self):
+        with self.assertRaisesRegex(ValueError, "NUL"):
+            self.check("merchant_id,brief_id,arm\nm1,b1,ai\\x00\n")
+
     def test_unterminated_quote_rejected(self):
         with self.assertRaises(Exception):
             self.check('merchant_id,brief_id,arm\nm1,"b1,ai\n')

@@ -3,6 +3,7 @@
 import argparse
 import csv
 import json
+import math
 from collections import defaultdict
 from pathlib import Path
 from tools.merchant_pilot_manifest import load_csv
@@ -53,6 +54,8 @@ def analyze(rows):
         useful_count = sum(x[2] for x in items)
         known_minutes = sum(x[0] for x in items if x[0] is not None)
         total_cost = sum(x[1] for x in items)
+        if not math.isfinite(known_minutes) or not math.isfinite(total_cost):
+            raise ValueError("Nonfinite aggregate labor or provider cost")
         # Do not treat missing labor as zero or present a biased per-useful estimate.
         result[arm] = {
             "assigned": n,
@@ -87,6 +90,8 @@ def analyze(rows):
             - sum(merchant_labor[m]["control"]) / len(merchant_labor[m]["control"])
             for m in sorted(merchant_labor)
         ]
+        if not all(math.isfinite(d) for d in differences) or not math.isfinite(sum(differences)):
+            raise ValueError("Nonfinite merchant labor comparison")
         result["merchant_weighted_labor_difference_minutes_per_assignment"] = sum(differences) / len(differences)
         result["merchants_with_lower_ai_labor"] = sum(d < 0 for d in differences)
     else:

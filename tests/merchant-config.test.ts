@@ -93,7 +93,7 @@ test("disabling automation cancels only queued scheduled work and refunds its cr
   try {
     assert.equal(await saveMerchantConfig(shop, sessionId, preferences), true);
     const scheduled = await claimDueScheduledDraft(
-      (await db.storeConfig.findUniqueOrThrow({ where: { shop } })), new Date("2026-11-01T00:00:00Z")
+      (await db.storeConfig.findUniqueOrThrow({ where: { shop } })), new Date(Date.now() + 31 * 86_400_000)
     );
     assert.ok(scheduled);
     const manual = await createCreditedJob(shop, "Merchant-requested draft");
@@ -121,7 +121,7 @@ test("material editorial changes cancel queued scheduled work; unchanged setting
   try {
     assert.equal(await saveMerchantConfig(shop, sessionId, preferences), true);
     const scheduled = await claimDueScheduledDraft(
-      await db.storeConfig.findUniqueOrThrow({ where: { shop } }), new Date("2026-11-01T00:00:00Z")
+      await db.storeConfig.findUniqueOrThrow({ where: { shop } }), new Date(Date.now() + 31 * 86_400_000)
     );
     assert.ok(scheduled);
     assert.equal(await saveMerchantConfig(shop, sessionId, preferences), true);
@@ -151,7 +151,7 @@ test("PostgreSQL merchant disable and scheduled dispatch race cannot send cancel
   try {
     assert.equal(await saveMerchantConfig(shop, sessionId, preferences), true);
     const scheduled = await claimDueScheduledDraft(
-      await db.storeConfig.findUniqueOrThrow({ where: { shop } }), new Date("2026-11-01T00:00:00Z")
+      await db.storeConfig.findUniqueOrThrow({ where: { shop } }), new Date(Date.now() + 31 * 86_400_000)
     );
     assert.ok(scheduled);
     const outcomes = await Promise.allSettled([
@@ -179,7 +179,7 @@ test("disabling scheduling does not refund work already claimed for dispatch", a
   try {
     assert.equal(await saveMerchantConfig(shop, sessionId, preferences), true);
     const scheduled = await claimDueScheduledDraft(
-      await db.storeConfig.findUniqueOrThrow({ where: { shop } }), new Date("2026-11-01T00:00:00Z")
+      await db.storeConfig.findUniqueOrThrow({ where: { shop } }), new Date(Date.now() + 31 * 86_400_000)
     );
     assert.ok(scheduled);
     await claimQueuedDispatch(shop, scheduled.jobId);

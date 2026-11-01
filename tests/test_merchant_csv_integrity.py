@@ -44,7 +44,7 @@ class CsvIntegrityTests(unittest.TestCase):
 
     def test_nul_rejected(self):
         with self.assertRaisesRegex(ValueError, "NUL"):
-            self.check("merchant_id,brief_id,arm\nm1,b1,ai\\x00\n")
+            self.check("merchant_id,brief_id,arm\nm1,b1,ai\x00\n")
 
     def test_unterminated_quote_rejected(self):
         with self.assertRaises(Exception):

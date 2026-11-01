@@ -59,3 +59,7 @@ The PR's SQLite app-check job now runs `python3 -m unittest discover -s tests -p
 ## Fail-closed CSV input validation (2026-11-01)
 
 Both offline pilot commands now use the same 1 MiB bounded CSV reader. Duplicate/missing headers, extra/missing row fields and malformed CSV fail rather than being silently accepted by `csv.DictReader`. This reduces the chance that a malformed spreadsheet export changes the manifest reconciliation or the reported labor denominator. Inputs remain local and pseudonymous. Successful parsing does not establish consent, randomization or economic impact. CI includes `tests/test_merchant_csv_integrity.py` via the existing `test_merchant*.py` discovery pattern.
+
+## CSV row-preservation gate (2026-11-01)
+
+The shared CSV reader now refuses blank physical lines (which Python `DictReader` otherwise silently skips), NUL bytes, empty inputs, empty header names and header names with leading/trailing whitespace. This deliberately rejects multiline quoted fields containing blank physical lines: the pilot schema is scalar and does not require multiline values. Exporters must produce compact UTF-8 CSV with exact column names and no separator-only blank lines. These checks reduce silent assignment omission, but cannot prove the source export includes every preregistered assignment; always run frozen-manifest reconciliation separately.

@@ -14,6 +14,7 @@ def analyze(rows):
     seen = set()
     groups = defaultdict(list)
     merchant_arms = defaultdict(set)
+    merchant_arm_counts = defaultdict(lambda: defaultdict(int))
     for line, row in enumerate(rows, 2):
         if not FIELDS.issubset(row):
             raise ValueError("Missing required columns")
@@ -40,6 +41,7 @@ def analyze(rows):
             raise ValueError(f"Invalid nonnegative finite value on row {line}")
         groups[arm].append((minutes, dollars, useful, row["status"]))
         merchant_arms[merchant].add(arm)
+        merchant_arm_counts[merchant][arm] += 1
     result = {}
     for arm in sorted(ARMS):
         items = groups[arm]
@@ -67,7 +69,12 @@ def analyze(rows):
     paired_merchants = sum(arms == ARMS for arms in merchant_arms.values())
     result["merchants_total"] = len(merchant_arms)
     result["merchants_with_both_arms"] = paired_merchants
-    result["accounting_comparison_ready"] = (paired_merchants == len(merchant_arms) and paired_merchants > 0
+    # Each merchant must contribute equally to both arms before pooled arm
+    # descriptives can be treated as balanced assignment-level accounting.
+    balanced_merchants = sum(counts["ai"] > 0 and counts["ai"] == counts["control"]
+                             for counts in merchant_arm_counts.values())
+    result["merchants_with_balanced_arms"] = balanced_merchants
+    result["accounting_comparison_ready"] = (balanced_merchants == len(merchant_arms) and balanced_merchants > 0
         and all(result[a]["assigned"] > 0 and result[a]["labor_coverage"] == 1 for a in ARMS))
     result["interpretation"] = "Descriptive feasibility accounting only; missing labor prevents per-useful labor estimate. No causal or revenue claims."
     return result

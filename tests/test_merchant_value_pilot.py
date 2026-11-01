@@ -19,6 +19,7 @@ class PilotAccountingTests(unittest.TestCase):
             row(merchant="m1", brief="a", arm="ai", labor="12", useful="1"),
             row(merchant="m1", brief="b", arm="ai", status="abandoned", labor="8", useful="0"),
             row(merchant="m1", brief="c", arm="control", labor="30", useful="1", cost="0"),
+            row(merchant="m1", brief="d", arm="control", labor="30", useful="1", cost="0"),
         ])
         self.assertEqual(out["ai"]["completion_rate"], 0.5)
         self.assertEqual(out["ai"]["useful_rate_per_assigned"], 0.5)
@@ -48,6 +49,26 @@ class PilotAccountingTests(unittest.TestCase):
         ])
         self.assertEqual(out["merchants_with_both_arms"], 1)
         self.assertFalse(out["accounting_comparison_ready"])
+
+    def test_unequal_within_merchant_assignments_block_comparison(self):
+        out = analyze([
+            row(merchant="m1", brief="a", arm="ai"),
+            row(merchant="m1", brief="b", arm="ai"),
+            row(merchant="m1", brief="c", arm="control"),
+        ])
+        self.assertEqual(out["merchants_with_both_arms"], 1)
+        self.assertEqual(out["merchants_with_balanced_arms"], 0)
+        self.assertFalse(out["accounting_comparison_ready"])
+
+    def test_balanced_assignments_across_merchants(self):
+        out = analyze([
+            row(merchant="m1", brief="a", arm="ai"),
+            row(merchant="m1", brief="b", arm="control"),
+            row(merchant="m2", brief="c", arm="ai"),
+            row(merchant="m2", brief="d", arm="control"),
+        ])
+        self.assertEqual(out["merchants_with_balanced_arms"], 2)
+        self.assertTrue(out["accounting_comparison_ready"])
 
     def test_missing_labor_not_zero(self):
         out = analyze([row(), row(brief="b2", labor="", useful="0")])

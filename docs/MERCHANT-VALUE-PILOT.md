@@ -51,3 +51,7 @@ The offline accounting flag `accounting_comparison_ready` now requires every rep
 ## Per-merchant assignment balance guard (2026-11-01)
 
 The evaluator additionally reports `merchants_with_balanced_arms` and requires **equal numbers of assigned AI and control briefs for each represented merchant** before setting `accounting_comparison_ready`. Merely having at least one brief in each arm is insufficient: a merchant with two AI briefs and one control brief could distort pooled assignment-weighted comparisons. The guard counts failed and abandoned assignments, not just completed drafts. This does **not** establish matched topic complexity, random assignment, blinded evaluation, or causal effects. Unequal counts remain visible in descriptive summaries, but the comparison gate fails. Verify the frozen assignment sheet and strata independently.
+
+## Continuous integration enforcement (2026-11-01)
+
+The PR's SQLite app-check job now runs `python3 -m unittest discover -s tests -p 'test_merchant*.py' -v` after the Node test suite. This executes both the offline merchant accounting tests and frozen-manifest reconciliation tests. Previously, green Node/PostgreSQL/Docker checks did **not** establish that these Python tools passed: the pilot regressions were not included in CI. This closes that verification gap for code-level checks only; it does not validate a real pilot, randomization, consent, or merchant outcomes. If either Python test module fails, the PR check fails. The PostgreSQL and Docker jobs remain unchanged.

@@ -84,12 +84,20 @@ export async function recoverQueuedJobs(
         uncertain++; // n8n may already be processing the job.
         continue;
       }
-      // The production dispatch function throws a generic error only for
-      // known pre-POST failures. Every HTTP error after an attempted POST is
-      // uncertain, because a proxy/workflow may have already started work.
-      // Lock merchant first, then conditionally fail/refund; a callback that
-      // already completed cannot be undone.
+      // A generic exception is NOT proof of a pre-POST failure: an unexpected
+      // error may occur after the durable queued -> running claim. Refund only
+      // if the job is still queued. An already-claimed job needs reconciliation
+      // even when the exception class is not UncertainDispatchError.
       try {
+        const current = await db.contentJob.findFirst({
+          where: { id: job.id, shop: job.shop },
+          select: { status: true }
+        });
+        if (!current || current.status !== "queued") {
+          blocked++;
+          console.error("Queued recovery encountered a claimed job after an unexpected failure; reconcile without refund");
+          continue;
+        }
         const refunded = schedule
           ? await failScheduledDraft(schedule, error)
           : await failCreditedJob(job.shop, job.id, error);

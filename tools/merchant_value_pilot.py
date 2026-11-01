@@ -5,6 +5,7 @@ import csv
 import json
 from collections import defaultdict
 from pathlib import Path
+from tools.merchant_pilot_manifest import load_csv
 
 FIELDS = {"merchant_id", "brief_id", "arm", "status", "labor_minutes", "useful", "provider_cost_usd"}
 ARMS = {"ai", "control"}
@@ -83,8 +84,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv_path", type=Path)
     args = parser.parse_args()
-    with args.csv_path.open(newline="", encoding="utf-8") as stream:
-        result = analyze(csv.DictReader(stream))
+    result = analyze(load_csv(args.csv_path, FIELDS))
     print(json.dumps(result, indent=2, sort_keys=True))
 
 if __name__ == "__main__":

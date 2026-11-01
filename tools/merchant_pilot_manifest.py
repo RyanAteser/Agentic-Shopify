@@ -15,7 +15,7 @@ def load_csv(path, required_columns):
     with path.open(newline="", encoding="utf-8-sig") as stream:
         # DictReader silently skips blank physical lines; an assignment can vanish.
         raw = stream.read()
-        if "\\x00" in raw or not raw.strip():
+        if "\x00" in raw or not raw.strip():
             raise ValueError("CSV contains NUL or is empty")
         if any(not line.strip() for line in raw.splitlines()):
             raise ValueError("CSV contains blank physical line")

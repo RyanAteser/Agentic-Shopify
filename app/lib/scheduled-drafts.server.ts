@@ -162,7 +162,7 @@ export async function claimDueScheduledDraft(
  * claim the due slot, once the operator has fixed the integration.
  */
 export async function failScheduledDraft(
-  claim: ScheduledDraftClaim, error: unknown
+  claim: ScheduledDraftClaim, error: unknown, queuedOnly = false
 ): Promise<boolean> {
   return db.$transaction(async tx => {
     const active = await tx.storeConfig.updateMany({
@@ -170,7 +170,7 @@ export async function failScheduledDraft(
     });
     if (active.count !== 1) return false;
     const failed = await tx.contentJob.updateMany({
-      where: { id: claim.jobId, shop: claim.shop, status: { in: ["queued", "running"] } },
+      where: { id: claim.jobId, shop: claim.shop, status: queuedOnly ? "queued" : { in: ["queued", "running"] } },
       data: { status: "failed", error: safeGenerationFailureReason(error) }
     });
     if (failed.count !== 1) return false;

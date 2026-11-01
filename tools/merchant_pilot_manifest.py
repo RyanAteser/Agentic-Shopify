@@ -13,9 +13,15 @@ def load_csv(path, required_columns):
     if path.stat().st_size > 1024 * 1024:
         raise ValueError("CSV exceeds 1 MiB limit")
     with path.open(newline="", encoding="utf-8-sig") as stream:
-        reader = csv.DictReader(stream, strict=True)
+        # DictReader silently skips blank physical lines; an assignment can vanish.
+        raw = stream.read()
+        if "\\x00" in raw or not raw.strip():
+            raise ValueError("CSV contains NUL or is empty")
+        if any(not line.strip() for line in raw.splitlines()):
+            raise ValueError("CSV contains blank physical line")
+        reader = csv.DictReader(raw.splitlines(keepends=True), strict=True)
         headers = reader.fieldnames
-        if not headers or len(headers) != len(set(headers)):
+        if not headers or any(not h.strip() or h != h.strip() for h in headers) or len(headers) != len(set(headers)):
             raise ValueError("CSV missing or duplicate column headers")
         if not set(required_columns).issubset(headers):
             raise ValueError("CSV missing required columns")

@@ -11,7 +11,7 @@ The existing app's GSC OAuth flow is merchant-scoped and read-only. It should no
 
 ## Proposed randomized delayed-control design (not executed)
 
-The committed machine-readable plan, `MONIKA-BLUNDER-GSC-IMPACT-PLAN-2026-11-02.json`, freezes a reproducible, SHA-256-ordered 3/3 split of the six previously identified, long-description products:
+The revised prospective plan, `MONIKA-BLUNDER-GSC-IMPACT-PLAN-2026-11-02-v2.json`, preserves the **same reproducible, SHA-256-ordered 3/3 allocation** of the six previously identified, long-description products. The earlier `MONIKA-BLUNDER-GSC-IMPACT-PLAN-2026-11-02.json` is retained as the unmodified v1 archive. Version 2 strengthens predeclared falsification checks **before any authorized experiment or private GSC measurements exist**:
 
 | Proposed treatment (only after merchant approval) | Proposed delayed control (unchanged initially) |
 |---|---|
@@ -21,7 +21,7 @@ The committed machine-readable plan, `MONIKA-BLUNDER-GSC-IMPACT-PLAN-2026-11-02.
 
 All six products would remain unchanged until an authorized merchant approves the study and checks that proposed descriptions are accurate. Three would receive approved changes; three would be delayed controls for the first observation window, then could receive independent review. The fixed split guards against choosing winners after reviewing results, **but does not ensure the small set has equal query mixes or baseline traffic**. Changes to prices, pages, schema, catalog availability, navigation, or indexing during the comparison may invalidate it.
 
-The study uses **14 Pacific reporting days before** and **14 Pacific reporting days after**, excludes the change date, and requires at least a **three-day finalization buffer** before evaluating the last post-change day. Longer windows would be preferable for sparse traffic, but this is an initial gate. `500` impressions per arm per period is only a minimum data-quality screen, **not a statistical-power guarantee**.
+The study uses **14 Pacific reporting days before** and **14 Pacific reporting days after**, excludes the change date, and requires at least a **three-day finalization buffer** before evaluating the last post-change day. Longer windows would be preferable for sparse traffic, but this is an initial gate. `500` impressions per arm per period is only a minimum data-quality screen, **not a statistical-power guarantee**. Version 2 also requires at least **50 impressions per product in each period**, rejects a treated-vs-control baseline pretrend diverging by over **1 percentage point**, and withholds results when baseline-page-mix standardization and pooled CTR differences show a material opposite-sign change (at least **0.2 percentage points** in each). These are conservative, explicitly chosen screening thresholds, **not** statistical tests or proof of causal identification.
 
 ## Private Search Console evidence contract
 
@@ -37,7 +37,7 @@ Authorized offline input structure (values are **field descriptions**, not real 
 
 ```json
 {
-  "studyId": "monika-public-metadata-20261102-v1",
+  "studyId": "monika-public-metadata-20261102-v2",
   "authorization": {
     "merchantConsented": false,
     "propertyVerified": false,
@@ -84,13 +84,13 @@ Never commit GSC exports, shopper data, access tokens or authorization statement
 
 ## Output interpretation and rejection criteria
 
-If permission, actual approved changes, control stability, finalized dates, or complete page/day coverage are missing, or if any arm has fewer than 500 impressions in either period, the evaluator **withholds all effect numbers**. Missing dates are not imputed as zero.
+If permission, actual approved changes, control stability, finalized dates, or complete page/day coverage are missing, if an arm has fewer than 500 impressions in either period, if a product has fewer than 50 impressions in either period, or if the baseline pretrend or page-mix reversals trip their declared screens, the evaluator **withholds all effect numbers**. Missing dates are not imputed as zero.
 
 If every gate passes, the tool computes only a **descriptive percentage-point change in CTR differences**:
 
 `D = (CTR_treatment,after - CTR_treatment,before) - (CTR_control,after - CTR_control,before)`
 
-It also reports the treated-vs-control pretrend difference across the two seven-day halves of the baseline window. A nonzero result is **not causal proof**: page/query composition, rankings, device mix, SERP changes, promotions and the small 3/3 design remain confounders. The estimator does not calculate a valid statistical significance test or attributable revenue. If pretrends diverge materially, or exposure is too sparse to resolve meaningful effects, the next test should be a longer or higher-powered merchant-approved study rather than a performance claim.
+It also reports the treated-vs-control pretrend difference across the two seven-day halves of the baseline window and the **fixed-baseline-page-mix CTR contrast** for sensitivity. The latter holds each arm's relative pre-period product-impression weights fixed while comparing within-product pre/post CTR. If a product gains impressions at the expense of another, the pooled CTR can change without any true within-product improvement. Material opposite-sign effects are rejected as `exposure_mix_sign_reversal`. A pretrend divergence over 1 percentage point is rejected as `unstable_pre_intervention_trend`. A nonzero result is **not causal proof**: page/query composition, rankings, device mix, SERP changes, promotions and the small 3/3 design remain confounders. The estimator does not calculate a valid statistical significance test or attributable revenue. If pretrends diverge materially, or exposure is too sparse to resolve meaningful effects, the next test should be a longer or higher-powered merchant-approved study rather than a performance claim.
 
 The Google API can omit queries for privacy and is bounded to top rows; using page/day aggregates avoids exposing query strings, but cannot eliminate query-mix selection bias. Google normally reports finalized data after roughly 2–3 days. See [Search Analytics API](https://developers.google.com/webmaster-tools/v1/searchanalytics/query), [Getting your performance data](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data), and [Search Console data filtering](https://developers.google.com/search/blog/2022/10/performance-data-deep-dive).
 

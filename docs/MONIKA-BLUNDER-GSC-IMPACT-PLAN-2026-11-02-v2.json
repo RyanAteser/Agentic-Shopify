@@ -1,0 +1,40 @@
+{
+  "studyId": "monika-public-metadata-20261102-v2",
+  "property": "https://monikablunderbeauty.com/",
+  "status": "WITHHELD_NO_AUTHORIZED_INTERVENTION_OR_GSC_DATA",
+  "allocation": {
+    "method": "preregistered_deterministic_hash_order",
+    "hashSeedDescription": "AgenticShopify-public-review/Monika/2026-11-02/v1",
+    "treatmentUrls": [
+      "https://monikablunderbeauty.com/products/flawless-finish-essentials-kit",
+      "https://monikablunderbeauty.com/products/sweet-talk-lip-oil",
+      "https://monikablunderbeauty.com/products/skincare-essentials"
+    ],
+    "delayedControlUrls": [
+      "https://monikablunderbeauty.com/products/melt-down-cleansing-balm",
+      "https://monikablunderbeauty.com/products/point-taken-pencil-sharpener",
+      "https://monikablunderbeauty.com/products/architect-eyes-buildable-mascara"
+    ],
+    "interventionExecuted": false,
+    "merchantAuthorization": false
+  },
+  "preRegisteredWindow": {
+    "preDays": 14,
+    "postDays": 14,
+    "excludeChangeDate": true,
+    "gscFinalizationLagDays": 3,
+    "minArmImpressionsEachPeriod": 500,
+    "minPageImpressionsEachPeriod": 50,
+    "maxAbsPretrendPercentagePoints": 1.0,
+    "minMixReversalMagnitudePercentagePoints": 0.2,
+    "gscSearchType": "web",
+    "gscDimensions": [
+      "date",
+      "page"
+    ],
+    "gscAggregation": "byPage",
+    "gscDataState": "final"
+  },
+  "outcome": null,
+  "note": "Prospective allocation only. No third-party merchant approval, metadata edit or consented Search Console export. Do not claim an SEO effect."
+}

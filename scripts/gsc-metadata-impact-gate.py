@@ -19,11 +19,14 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 PROPOSALS = ROOT / "docs" / "MONIKA-BLUNDER-METADATA-CANDIDATES-2026-11-02.json"
 ORIGIN = "https://monikablunderbeauty.com"
-STUDY = "monika-public-metadata-20261102-v1"
+STUDY = "monika-public-metadata-20261102-v2"
 SALT = "AgenticShopify-public-review/Monika/2026-11-02/v1"
 WINDOW_DAYS = 14
 MIN_FINALIZATION_LAG_DAYS = 3
 MIN_ARM_IMPRESSIONS = 500
+MIN_PAGE_IMPRESSIONS = 50
+MAX_ABS_PRETREND_PP = 1.0
+MIN_MEANINGFUL_REVERSAL_PP = 0.2
 MAX_BYTES = 2_000_000
 
 
@@ -87,6 +90,9 @@ def plan(proposal_path: Path = PROPOSALS) -> dict:
             "excludeChangeDate": True,
             "gscFinalizationLagDays": MIN_FINALIZATION_LAG_DAYS,
             "minArmImpressionsEachPeriod": MIN_ARM_IMPRESSIONS,
+            "minPageImpressionsEachPeriod": MIN_PAGE_IMPRESSIONS,
+            "maxAbsPretrendPercentagePoints": MAX_ABS_PRETREND_PP,
+            "minMixReversalMagnitudePercentagePoints": MIN_MEANINGFUL_REVERSAL_PP,
             "gscSearchType": "web", "gscDimensions": ["date", "page"],
             "gscAggregation": "byPage", "gscDataState": "final",
         },
@@ -201,6 +207,15 @@ def evaluate(raw: object, planning: dict, now: datetime | None = None) -> dict:
         acc, aci = _sum(observed, control, post_start, post_end)
         if min(bti, ati, bci, aci) < MIN_ARM_IMPRESSIONS:
             return withheld("insufficient_impressions")
+        # A single high-volume product cannot stand in for all three pages.
+        # Reject zero/very low exposure rather than imputing zero CTR changes.
+        page_stats = {}
+        for url in sorted(all_urls):
+            bc, bi = _sum(observed, {url}, pre_start, pre_end)
+            ac, ai = _sum(observed, {url}, post_start, post_end)
+            if min(bi, ai) < MIN_PAGE_IMPRESSIONS:
+                return withheld("insufficient_page_exposure")
+            page_stats[url] = (bc, bi, ac, ai)
         before_t = btc / bti
         after_t = atc / ati
         before_c = bcc / bci
@@ -216,6 +231,27 @@ def evaluate(raw: object, planning: dict, now: datetime | None = None) -> dict:
         c2c, c2i = _sum(observed, control, second_start, pre_end)
         pretrend_pp = ((t2c / t2i - t1c / t1i) -
                        (c2c / c2i - c1c / c1i)) * 100 if min(t1i, t2i, c1i, c2i) else None
+        if pretrend_pp is None or abs(pretrend_pp) > MAX_ABS_PRETREND_PP:
+            return withheld("unstable_pre_intervention_trend")
+
+        # Simpson's paradox guard: compute within-page CTR changes using each
+        # arm's BASELINE page impression weights. Pooling all post impressions
+        # without this check can create apparent lift solely through a change
+        # in exposure mix among the three products.
+        def fixed_mix_change(urls: set[str]) -> float:
+            before_exposure = sum(page_stats[u][1] for u in urls)
+            return sum(
+                (page_stats[u][1] / before_exposure) *
+                (page_stats[u][2] / page_stats[u][3] -
+                 page_stats[u][0] / page_stats[u][1])
+                for u in urls
+            )
+        fixed_mix_did = fixed_mix_change(treatment) - fixed_mix_change(control)
+        raw_effect_pp = effect * 100
+        fixed_effect_pp = fixed_mix_did * 100
+        if (raw_effect_pp * fixed_effect_pp < 0 and
+            min(abs(raw_effect_pp), abs(fixed_effect_pp)) >= MIN_MEANINGFUL_REVERSAL_PP):
+            return withheld("exposure_mix_sign_reversal")
         return {
             "studyId": STUDY, "status": "descriptive_only",
             "authorization": "self_attested_not_independently_verified",
@@ -225,10 +261,13 @@ def evaluate(raw: object, planning: dict, now: datetime | None = None) -> dict:
                           "afterClicks": atc, "beforeImpressions": bti, "afterImpressions": ati},
             "control": {"beforeCtr": before_c, "afterCtr": after_c, "beforeClicks": bcc,
                         "afterClicks": acc, "beforeImpressions": bci, "afterImpressions": aci},
-            "differenceInDifferencesPercentagePoints": effect * 100,
+            "differenceInDifferencesPercentagePoints": raw_effect_pp,
+            "fixedBaselinePageMixDifferencePercentagePoints": fixed_effect_pp,
+            "pageMixDifferencePercentagePoints": raw_effect_pp - fixed_effect_pp,
+            "descriptiveOnly": True,
             "pretrendDifferencePercentagePoints": pretrend_pp,
             "causalImpactProven": False, "statisticalSignificanceEstablished": False,
-            "note": "Page-level descriptive difference only; query mix, selection, timing and SERP position are uncontrolled. No revenue or ranking effect established.",
+            "note": "Pooled and fixed-baseline-page-mix comparisons are descriptive only. Query/device mix within pages, SERP position, selection and timing remain confounded. No causal SEO effect, significance or revenue lift established.",
         }
     except (ValueError, TypeError, OverflowError, KeyError):
         return withheld("invalid_gsc_evidence")

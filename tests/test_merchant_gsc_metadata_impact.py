@@ -178,6 +178,64 @@ class MetadataGscGateTests(unittest.TestCase):
         self.assertEqual(result["treatment"]["beforeImpressions"], 840)
         self.assertEqual(result["control"]["afterImpressions"], 840)
 
+
+    def test_fixed_page_mix_agrees_with_pooled_change_when_exposure_stable(self):
+        report = self.assess(fixture())
+        self.assertEqual(report["status"], "descriptive_only")
+        self.assertAlmostEqual(report["differenceInDifferencesPercentagePoints"], 5)
+        self.assertAlmostEqual(report["fixedBaselinePageMixDifferencePercentagePoints"], 5)
+        self.assertAlmostEqual(report["pageMixDifferencePercentagePoints"], 0)
+        self.assertTrue(report["descriptiveOnly"])
+
+    def test_withholds_when_one_product_has_too_little_exposure(self):
+        x = fixture()
+        weak_url = PLANNING["allocation"]["treatmentUrls"][0]
+        for row in x["export"]["rows"]:
+            if row["keys"][1] == weak_url and row["keys"][0] < CHANGE_DATE.isoformat():
+                row["clicks"] = 0
+                row["impressions"] = 1
+        result = self.assess(x)
+        self.assertEqual(result["reason"], "insufficient_page_exposure")
+        self.assertIsNone(result["outcome"])
+
+    def test_pre_intervention_treated_trend_divergence_is_withheld(self):
+        x = fixture()
+        weak_url = PLANNING["allocation"]["treatmentUrls"][0]
+        midpoint = (CHANGE_DATE - timedelta(days=7)).isoformat()
+        for row in x["export"]["rows"]:
+            if row["keys"][1] == weak_url and row["keys"][0] < midpoint:
+                row["clicks"] = 0
+        result = self.assess(x)
+        self.assertEqual(result["reason"], "unstable_pre_intervention_trend")
+        self.assertNotIn("differenceInDifferencesPercentagePoints", result)
+
+    def test_simpsons_paradox_reverses_pooled_ctr_and_abstains(self):
+        x = fixture()
+        treat_urls = PLANNING["allocation"]["treatmentUrls"]
+        for row in x["export"]["rows"]:
+            url = row["keys"][1]
+            if url not in treat_urls:
+                continue
+            i = treat_urls.index(url)
+            day = row["keys"][0]
+            if day < CHANGE_DATE.isoformat():
+                row["clicks"] = (1, 2, 3)[i]
+            elif day > CHANGE_DATE.isoformat():
+                row["clicks"] = (1, 2, 8)[i]
+                row["impressions"] = (20, 20, 60)[i]
+        # Pooled treatment CTR rises from 10% to 11% while the
+        # baseline-weighted within-page treatment effect is NEGATIVE.
+        result = self.assess(x)
+        self.assertEqual(result["reason"], "exposure_mix_sign_reversal")
+        self.assertIsNone(result["outcome"])
+        self.assertNotIn("fixedBaselinePageMixDifferencePercentagePoints", result)
+
+    def test_plan_version_and_screens_are_precommitted(self):
+        self.assertEqual(gate.STUDY, "monika-public-metadata-20261102-v2")
+        self.assertEqual(PLANNING["preRegisteredWindow"]["minPageImpressionsEachPeriod"], 50)
+        self.assertEqual(PLANNING["preRegisteredWindow"]["maxAbsPretrendPercentagePoints"], 1.0)
+        self.assertEqual(PLANNING["preRegisteredWindow"]["minMixReversalMagnitudePercentagePoints"], 0.2)
+
     def test_missing_entire_change_day_is_allowed_but_not_fabricated(self):
         x = fixture()
         x["export"]["rows"] = [

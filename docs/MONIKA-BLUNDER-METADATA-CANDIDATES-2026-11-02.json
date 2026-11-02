@@ -1,0 +1,121 @@
+{
+  "report_type": "public_storefront_editorial_proposals",
+  "source_host": "monikablunderbeauty.com",
+  "captured_utc": "2026-11-02T17:51:11+00:00",
+  "source": "Public product page title, description, and editorial body",
+  "merchant_authorized": false,
+  "modified_store": false,
+  "seo_performance_improvement_proven": false,
+  "notes": [
+    "Candidates are editorial hypotheses only.",
+    "Avoid copying these into Artemis tenant records.",
+    "Original metadata content is SHA256-pinned so a later audit can flag drift.",
+    "Character count alone is not a ranking factor."
+  ],
+  "proposals": [
+    {
+      "product_slug": "architect-eyes-buildable-mascara",
+      "url": "https://monikablunderbeauty.com/products/architect-eyes-buildable-mascara",
+      "original_title": "Architect Eyes Buildable Mascara | Lengthening Mascara – Monika Blunder Beauty",
+      "original_meta_description_length": 257,
+      "original_meta_description_sha256": "c7a6f6cff386ac6c8c880e7ca64eb00e76777fa1ac9f5e955b36064bc62e3871",
+      "proposed_meta_description": "Architect Eyes Buildable Mascara combines algae extract, shea butter and a tapered silicone brush for smooth, defined lashes you can layer.",
+      "proposed_length": 139,
+      "claim_basis_on_public_product_page": [
+        "algae extract",
+        "shea butter",
+        "tapered silicone brush",
+        "layerable application"
+      ],
+      "status": "UNAPPROVED_PUBLIC_RESEARCH",
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+    },
+    {
+      "product_slug": "melt-down-cleansing-balm",
+      "url": "https://monikablunderbeauty.com/products/melt-down-cleansing-balm",
+      "original_title": "Melt Down Cleansing Balm | Gentle Makeup Remover – Monika Blunder Beauty",
+      "original_meta_description_length": 178,
+      "original_meta_description_sha256": "f00210fcc97ac8062804edd9b4932191181bcc5d5d0c9687be5b41c0c4b79489",
+      "proposed_meta_description": "Melt Down Cleansing Balm removes makeup with a creamy emulsion of sweet almond oil, squalane, arnica and edelweiss for dry or sensitive skin.",
+      "proposed_length": 141,
+      "claim_basis_on_public_product_page": [
+        "makeup-removing solid-to-cream formula",
+        "sweet almond oil",
+        "squalane",
+        "arnica",
+        "edelweiss",
+        "sensitive and dry skin"
+      ],
+      "status": "UNAPPROVED_PUBLIC_RESEARCH",
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+    },
+    {
+      "product_slug": "flawless-finish-essentials-kit",
+      "url": "https://monikablunderbeauty.com/products/flawless-finish-essentials-kit",
+      "original_title": "Flawless Finish Essentials Kit | Clean Makeup Set – Monika Blunder Beauty",
+      "original_meta_description_length": 176,
+      "original_meta_description_sha256": "cf89615165f9065f1db230ba69e82bc7ac267f89b396ebd79caf3cbd82f186ca",
+      "proposed_meta_description": "Flawless Finish Essentials Kit pairs Blunder Cover, Undercover Face Cr?me and Hybrid Cream Brush for a smooth, hydrated makeup base.",
+      "proposed_length": 132,
+      "claim_basis_on_public_product_page": [
+        "Blunder Cover",
+        "Undercover Face Cr?me",
+        "Hybrid Cream Brush",
+        "hydrating complexion prep"
+      ],
+      "status": "UNAPPROVED_PUBLIC_RESEARCH",
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+    },
+    {
+      "product_slug": "skincare-essentials",
+      "url": "https://monikablunderbeauty.com/products/skincare-essentials",
+      "original_title": "Skincare Essentials | Clean Botanical Skincare Set – Monika Blunder Beauty",
+      "original_meta_description_length": 174,
+      "original_meta_description_sha256": "49d4b480ced23a66c2a3e7835a1aef4a179be8fce1c7b426ac362b3653c9ebd1",
+      "proposed_meta_description": "Skincare Essentials combines Melt Down Cleansing Balm, Undercover Face Cr?me, Dew Better Face Oil and Body Language Body Oil in one set.",
+      "proposed_length": 136,
+      "claim_basis_on_public_product_page": [
+        "Melt Down Cleansing Balm",
+        "Undercover Face Cr?me",
+        "Dew Better Face Oil",
+        "Body Language Body Oil"
+      ],
+      "status": "UNAPPROVED_PUBLIC_RESEARCH",
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+    },
+    {
+      "product_slug": "sweet-talk-lip-oil",
+      "url": "https://monikablunderbeauty.com/products/sweet-talk-lip-oil",
+      "original_title": "Sweet Talk Lip Oil | Hydrating Botanical Gloss – Monika Blunder Beauty",
+      "original_meta_description_length": 167,
+      "original_meta_description_sha256": "a69c4d9e8457334d64743fbfd0cba38fa3020f16674a9cff72a95632d93dbb95",
+      "proposed_meta_description": "Sweet Talk Lip Oil blends fruit extracts, vitamin E and brown algae for non-sticky shine and a soft, glossy finish. Available in six shades.",
+      "proposed_length": 140,
+      "claim_basis_on_public_product_page": [
+        "fruit extracts",
+        "vitamin E",
+        "brown algae",
+        "non-sticky formula",
+        "six shades"
+      ],
+      "status": "UNAPPROVED_PUBLIC_RESEARCH",
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+    },
+    {
+      "product_slug": "point-taken-pencil-sharpener",
+      "url": "https://monikablunderbeauty.com/products/point-taken-pencil-sharpener",
+      "original_title": "Point Taken Pencil Sharpener | Makeup Pencil Sharpener – Monika Blunder Beauty",
+      "original_meta_description_length": 163,
+      "original_meta_description_sha256": "13ca78c1749f39ce270425590e52f8e51a882669f179183c1ce52e823a5e28d4",
+      "proposed_meta_description": "Point Taken Pencil Sharpener features a German stainless-steel blade for precise lip and eye pencils, plus a cover to catch shavings.",
+      "proposed_length": 133,
+      "claim_basis_on_public_product_page": [
+        "German stainless-steel blade",
+        "lip/eye liner pencils",
+        "shavings cover"
+      ],
+      "status": "UNAPPROVED_PUBLIC_RESEARCH",
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+    }
+  ]
+}

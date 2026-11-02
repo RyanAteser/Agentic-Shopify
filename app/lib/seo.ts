@@ -165,7 +165,7 @@ export function assertRankingTargetsForPrimaryDomain(records: SeoRanking[], prim
     }
     if (!record.targetUrl) throw new Error("Found ranking requires a result URL");
     const url = new URL(record.targetUrl);
-    if (url.protocol !== "https:" || url.hostname !== host || url.username || url.password) {
+    if (url.protocol !== "https:" || url.hostname !== host || url.username || url.password || url.port) {
       throw new Error("Ranking URL does not belong to the Shopify primary domain");
     }
   }

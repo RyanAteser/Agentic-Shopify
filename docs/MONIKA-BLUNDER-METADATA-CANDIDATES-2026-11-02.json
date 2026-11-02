@@ -28,7 +28,13 @@
         "layerable application"
       ],
       "status": "UNAPPROVED_PUBLIC_RESEARCH",
-      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied.",
+      "claim_evidence_phrases": [
+        "powered by algae",
+        "Precise silicone brush",
+        "Shea butter keeps it soft",
+        "Layer two or three"
+      ]
     },
     {
       "product_slug": "melt-down-cleansing-balm",
@@ -47,7 +53,13 @@
         "sensitive and dry skin"
       ],
       "status": "UNAPPROVED_PUBLIC_RESEARCH",
-      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied.",
+      "claim_evidence_phrases": [
+        "sweet almond oil, rose hip oil, squalane",
+        "arnica and edelweiss extracts",
+        "Ideal for sensitive and dry complexions",
+        "melt away makeup"
+      ]
     },
     {
       "product_slug": "flawless-finish-essentials-kit",
@@ -55,16 +67,20 @@
       "original_title": "Flawless Finish Essentials Kit | Clean Makeup Set – Monika Blunder Beauty",
       "original_meta_description_length": 176,
       "original_meta_description_sha256": "cf89615165f9065f1db230ba69e82bc7ac267f89b396ebd79caf3cbd82f186ca",
-      "proposed_meta_description": "Flawless Finish Essentials Kit pairs Blunder Cover, Undercover Face Cr?me and Hybrid Cream Brush for a smooth, hydrated makeup base.",
-      "proposed_length": 132,
+      "proposed_meta_description": "Flawless Finish Essentials Kit combines Blunder Cover, UnderCover Face Crème and Hybrid Cream Brush for a smooth, second-skin makeup finish.",
+      "proposed_length": 140,
       "claim_basis_on_public_product_page": [
         "Blunder Cover",
-        "Undercover Face Cr?me",
+        "UnderCover Face Crème",
         "Hybrid Cream Brush",
-        "hydrating complexion prep"
+        "second-skin finish"
       ],
       "status": "UNAPPROVED_PUBLIC_RESEARCH",
-      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied.",
+      "claim_evidence_phrases": [
+        "Blunder Cover + UnderCover Face Creme + Hybrid Cream Brush",
+        "second-skin base"
+      ]
     },
     {
       "product_slug": "skincare-essentials",
@@ -72,16 +88,22 @@
       "original_title": "Skincare Essentials | Clean Botanical Skincare Set – Monika Blunder Beauty",
       "original_meta_description_length": 174,
       "original_meta_description_sha256": "49d4b480ced23a66c2a3e7835a1aef4a179be8fce1c7b426ac362b3653c9ebd1",
-      "proposed_meta_description": "Skincare Essentials combines Melt Down Cleansing Balm, Undercover Face Cr?me, Dew Better Face Oil and Body Language Body Oil in one set.",
-      "proposed_length": 136,
+      "proposed_meta_description": "Skincare Essentials combines Melt Down Cleansing Balm, Under Cover Face Crème, Dew Better Face Oil and Body Language Body Oil in one set.",
+      "proposed_length": 137,
       "claim_basis_on_public_product_page": [
         "Melt Down Cleansing Balm",
-        "Undercover Face Cr?me",
+        "Under Cover Face Crème",
         "Dew Better Face Oil",
         "Body Language Body Oil"
       ],
       "status": "UNAPPROVED_PUBLIC_RESEARCH",
-      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied.",
+      "claim_evidence_phrases": [
+        "Melt Down Cleansing Balm",
+        "Under Cover Face Cr",
+        "Dew Better Face Oil",
+        "Body Language Body Oil"
+      ]
     },
     {
       "product_slug": "sweet-talk-lip-oil",
@@ -89,17 +111,23 @@
       "original_title": "Sweet Talk Lip Oil | Hydrating Botanical Gloss – Monika Blunder Beauty",
       "original_meta_description_length": 167,
       "original_meta_description_sha256": "a69c4d9e8457334d64743fbfd0cba38fa3020f16674a9cff72a95632d93dbb95",
-      "proposed_meta_description": "Sweet Talk Lip Oil blends fruit extracts, vitamin E and brown algae for non-sticky shine and a soft, glossy finish. Available in six shades.",
-      "proposed_length": 140,
+      "proposed_meta_description": "Sweet Talk Lip Oil adds glossy, non-sticky shine with vitamin E and brown algae oil. A citrus scent and fruit-inspired color complete the look.",
+      "proposed_length": 143,
       "claim_basis_on_public_product_page": [
-        "fruit extracts",
-        "vitamin E",
-        "brown algae",
-        "non-sticky formula",
-        "six shades"
+        "vitamin E oil",
+        "brown algae oil",
+        "non-sticky shine",
+        "citrus scent",
+        "fruit-inspired color"
       ],
       "status": "UNAPPROVED_PUBLIC_RESEARCH",
-      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied.",
+      "claim_evidence_phrases": [
+        "vitamin E oil and sustainably cultivated brown algae oil",
+        "Non-sticky shine",
+        "Aromatic citrus",
+        "fruit-inspired color"
+      ]
     },
     {
       "product_slug": "point-taken-pencil-sharpener",
@@ -115,7 +143,12 @@
         "shavings cover"
       ],
       "status": "UNAPPROVED_PUBLIC_RESEARCH",
-      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied."
+      "review_required": "Merchant must verify copy and approve independently; no authorization or live change implied.",
+      "claim_evidence_phrases": [
+        "German steel blade",
+        "High-grade stainless steel",
+        "cover catches the shavings"
+      ]
     }
   ]
 }

@@ -59,6 +59,26 @@ class PublicMetadataProposalsTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 self.check(sample)
 
+    def test_source_evidence_is_required_and_bounded(self):
+        for evidence in (None, [], ["too short"], ["same phrase", "same phrase"],
+                         ["valid evidence phrase", "another evidence phrase", "x" * 111]):
+            sample = copy.deepcopy(self.original)
+            sample["proposals"][0]["claim_evidence_phrases"] = evidence
+            with self.subTest(evidence=evidence), self.assertRaises(ValueError):
+                self.check(sample)
+
+    def test_visible_page_evidence_ignores_script_and_detects_drift(self):
+        html = ('<script>hidden ingredient</script><style>hidden ingredient</style>'
+                '<p>Visible ingredient with CRÈME.</p>')
+        self.assertEqual(
+            checker.missing_source_evidence(html, ["visible ingredient", "crème"]),
+            []
+        )
+        self.assertEqual(
+            checker.missing_source_evidence(html, ["hidden ingredient", "missing claim"]),
+            ["hidden ingredient", "missing claim"]
+        )
+
     def test_draft_length_and_price_unsafe_copy_fail(self):
         for copy_text in (
             "Short.",

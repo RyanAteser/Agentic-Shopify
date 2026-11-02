@@ -13,6 +13,8 @@ import json
 import re
 import sys
 import time
+import unicodedata
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.robotparser import RobotFileParser
 
@@ -27,6 +29,38 @@ SLUGS = {
     "sweet-talk-lip-oil",
     "point-taken-pencil-sharpener",
 }
+
+
+class PublicPageText(HTMLParser):
+    """Visible public page copy only; script/schema JSON is not claim evidence."""
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.hidden_tags: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style", "svg", "template", "noscript"):
+            self.hidden_tags.append(tag)
+
+    def handle_endtag(self, tag):
+        if self.hidden_tags and self.hidden_tags[-1] == tag:
+            self.hidden_tags.pop()
+
+    def handle_data(self, text):
+        if not self.hidden_tags and text.strip():
+            self.parts.append(text)
+
+
+def normalized_text(text: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
+
+
+def missing_source_evidence(html: str, phrases: list[str]) -> list[str]:
+    """Exact normalized phrase presence; not semantic/medical claim substantiation."""
+    parsed = PublicPageText()
+    parsed.feed(html)
+    visible = normalized_text(" ".join(parsed.parts))
+    return [phrase for phrase in phrases if normalized_text(phrase) not in visible]
 
 
 def load_and_validate(path: Path = DATA) -> list[dict]:
@@ -75,6 +109,15 @@ def load_and_validate(path: Path = DATA) -> list[dict]:
             isinstance(b, str) and b.strip() for b in basis
         ):
             raise ValueError("Proposal is missing product-specific claim provenance")
+        anchors = item.get("claim_evidence_phrases")
+        if not isinstance(anchors, list) or not 2 <= len(anchors) <= 8 or not all(
+            isinstance(a, str) and 8 <= len(a) <= 110 and
+            a == a.strip() and not any(ord(ch) < 32 for ch in a)
+            for a in anchors
+        ):
+            raise ValueError("Proposal is missing bounded source-evidence phrases")
+        if len({normalized_text(a) for a in anchors}) != len(anchors):
+            raise ValueError("Duplicate source-evidence phrases")
         if "approve" not in (item.get("review_required") or "").casefold():
             raise ValueError("Human approval must be explicit")
     return proposals
@@ -113,7 +156,13 @@ def recheck_live(proposals: list[dict]) -> None:
             raise RuntimeError("STALE proposal: source metadata changed for " + item["product_slug"])
         if parsed.canonical != url:
             raise RuntimeError("Source canonical changed for " + item["product_slug"])
-        print("SOURCE_UNCHANGED", item["product_slug"])
+        missing = missing_source_evidence(html, item["claim_evidence_phrases"])
+        if missing:
+            raise RuntimeError(
+                "SOURCE_CLAIM_EVIDENCE_MISSING: " + item["product_slug"] +
+                " (" + str(len(missing)) + " unmatched phrases)"
+            )
+        print("SOURCE_UNCHANGED_AND_EVIDENCE_PRESENT", item["product_slug"])
 
 
 def main() -> int:

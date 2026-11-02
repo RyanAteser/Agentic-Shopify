@@ -1,4 +1,7 @@
 name: App checks
+# Tests, migrations and Docker smoke never need repository write privileges.
+permissions:
+  contents: read
 on:
   pull_request:
   push:

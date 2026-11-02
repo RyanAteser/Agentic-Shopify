@@ -33,4 +33,22 @@ assert.equal(target.hostname, "admin.shopify.com");
 assert.match(target.pathname, /\/oauth\/install$/);
 assert.match(target.searchParams.get("client_id") ?? "", /^[a-f0-9]{32}$/);
 console.log("PASS: unauthenticated login redirects to Shopify managed installation");
+
+// Missing Shopify ID tokens must not expose merchant-only dashboard routes.
+// Shopify's embedded auth boundary currently returns 410 Gone for these requests.
+// Other explicit auth failures and Shopify redirects are acceptable too.
+const acceptableAuthFailures = new Set([302, 303, 307, 308, 400, 401, 403, 410]);
+for (const path of ["/app", "/app/team", "/app/manager", "/app/seo", "/app/growth"]) {
+  const url = new URL(path, origin);
+  url.searchParams.set("shop", shop);
+  const response = await fetch(url, {
+    redirect: "manual",
+    signal: AbortSignal.timeout(15000),
+  });
+  assert.ok(
+    acceptableAuthFailures.has(response.status),
+    `Unauthenticated ${path} must fail closed (received ${response.status})`,
+  );
+}
+console.log("PASS: all five protected dashboard routes reject requests without Shopify ID tokens");
 console.log("NOTE: full Shopify session/token exchange still requires an authenticated browser test.");

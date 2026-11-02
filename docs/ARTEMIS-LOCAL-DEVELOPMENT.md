@@ -36,7 +36,7 @@ Copy the **actual temporary tunnel URL** printed by `shopify app dev`:
 node scripts/smoke-artemis-dev.mjs https://YOUR-TUNNEL.trycloudflare.com
 ```
 
-This checks that `/health` reports an available database and that `/auth/login?shop=artemisti.myshopify.com` redirects to Shopify's installation endpoint for a valid app. It does **not** install the app, exchange a token, make billable AI requests, or write merchant content.
+This checks that `/health` reports an available database, that `/auth/login?shop=artemisti.myshopify.com` redirects to Shopify's installation endpoint, and that five protected dashboard routes (`/app`, `/app/team`, `/app/manager`, `/app/seo`, `/app/growth`) reject requests without a verified Shopify ID token. Shopify's current embedded authentication may return HTTP 410 for these tokenless requests. The smoke test accepts an explicit authentication rejection or managed redirect, not a 200 or a server error. It does **not** install the app, exchange a token, make billable AI requests, or write merchant content.
 
 Open the generated Shopify Admin preview URL **in a browser signed into the Artemis development store**. Complete Shopify's managed installation/login flow, then verify that `/app`, `/app/team`, and `/app/manager` render as authenticated pages. Verify session persistence in the isolated database. This is the manual end-to-end auth gate; a 302 redirect alone is not proof of OAuth completion.
 

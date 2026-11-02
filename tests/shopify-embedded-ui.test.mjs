@@ -30,3 +30,22 @@ test("public onboarding describes real features instead of scaffold placeholders
   assert.match(landing, /Store Manager/);
   assert.match(landing, /Verified Growth/);
 });
+
+test("embedded settings use scoped, accessible native form controls", () => {
+  const shell = read("app/routes/app.tsx");
+  const css = read("app/embedded-controls.css");
+  assert.match(shell, /import "\.\.\/embedded-controls\.css"/);
+  assert.match(css, /s-page s-section form label/);
+  assert.match(css, /:focus-visible/);
+  assert.match(css, /input\[type="checkbox"\]/);
+  assert.match(css, /button:disabled/);
+  assert.doesNotMatch(css, /^\s*(?:body|html)\s*\{/m);
+});
+
+test("Blog Agent setup does not duplicate the native sidebar navigation", () => {
+  const home = read("app/routes/app._index.tsx");
+  const setup = home.split('<s-section heading="Blog Agent setup">')[1];
+  assert.ok(setup, "Blog Agent setup section is missing");
+  const sectionStart = setup.split("<p>Connected store:")[0];
+  assert.doesNotMatch(sectionStart, /<a href="\/app\//);
+});

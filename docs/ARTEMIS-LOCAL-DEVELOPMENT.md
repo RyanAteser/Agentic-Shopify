@@ -36,10 +36,17 @@ Copy the **actual temporary tunnel URL** printed by `shopify app dev`:
 node scripts/smoke-artemis-dev.mjs https://YOUR-TUNNEL.trycloudflare.com
 ```
 
-This checks that `/health` reports an available database, that `/auth/login?shop=artemisti.myshopify.com` redirects to Shopify's installation endpoint, and that five protected dashboard routes (`/app`, `/app/team`, `/app/manager`, `/app/seo`, `/app/growth`) reject requests without a verified Shopify ID token. Shopify's current embedded authentication may return HTTP 410 for these tokenless requests. The smoke test accepts an explicit authentication rejection or managed redirect, not a 200 or a server error. It does **not** install the app, exchange a token, make billable AI requests, or write merchant content.
+The script checks database readiness, the Shopify-managed login redirect, and the distinction between **browser authentication bootstrap** and **bot rejection**. On this SDK, a Node-like bot user-agent receives HTTP 410 `Gone` before authentication. Therefore a 410 response **does not prove** that a protected dashboard route verified an ID token. With a normal Chrome user-agent and no ID token, the SDK returns a minimal HTTP 200 document containing the App Bridge session bootstrap; the test asserts that no merchant dashboard HTML is rendered and that the Shopify Admin framing policy is present. This bootstrap response is not a successful logged-in UI.
 
-Open the generated Shopify Admin preview URL **in a browser signed into the Artemis development store**. Complete Shopify's managed installation/login flow, then verify that `/app`, `/app/team`, and `/app/manager` render as authenticated pages. The embedded App Bridge navigation should show Blog Agent, Store Manager, AI Team, SEO Intelligence and Verified Growth. The Blog Agent home should show a store-specific overview with unapproved ready drafts, remaining free generations, and draft-scheduling state. Verify session persistence in the isolated database. This is the manual end-to-end auth gate; a 302 redirect alone is not proof of OAuth completion. A successful build and navigation-source test do not prove that Shopify Admin's iframe renders for a signed-in merchant. If the iframe is blank, inspect the browser Console and Network tab for the first failing script, Content Security Policy violation, or authenticated loader request before treating it as fixed.
+The script does **not** install the app, exchange a token, request paid AI generation, or write merchant content.
 
+### Verified embedded UI, Nov 2, 2026
+
+An existing **signed-in** Chrome window for `artemisti.myshopify.com` was inspected and its Artemis tab refreshed. The Blog Agent page rendered in the Shopify Admin iframe with sidebar navigation, the connected merchant, 0 drafts awaiting review, 3 remaining lifetime free generations, and draft scheduling off. Its settings form rendered correctly. The Store Manager sidebar destination loaded with its queue, decision audit trail and merchant context. This visual browser check supersedes earlier uncertainty based only on unauthenticated redirects and health probes.
+
+The Store Manager explicitly warned that the catalog sample was unavailable, so product-specific recommendations were not verified. Do not fill that gap with invented product evidence. Further gates: authenticated read-only Shopify Admin API round-trip, all workspace routes, separate staging infrastructure and production credentials.
+
+A blank iframe or incorrect UI after future changes should be debugged with the browser Console and Network tabs, App Bridge bootstrap, Content Security Policy, SDK logs and a real signed-in session. A healthy `/health`, a bot-only 410, and even a successful TypeScript build are insufficient on their own.
 ## Guardrails
 
 - Do not run `shopify app deploy` with the development configuration; production needs a stable hosted HTTPS URL and PostgreSQL.

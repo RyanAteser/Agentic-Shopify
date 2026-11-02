@@ -194,7 +194,6 @@ export default function BlogAgent() {
       <p><a href="/app/manager">Store Manager</a> | <a href="/app/team">AI Team</a> | <a href="/app/seo">SEO workspace</a> | <a href="/app/growth">Verified growth</a></p>
     </s-section>
     <s-section heading="Blog Agent setup">
-      <p><a href="/app/manager">Store Manager</a> · <a href="/app/team">AI Store Team</a> · <a href="/app/seo">SEO Intelligence</a> · <a href="/app/growth">Verified Growth</a></p>
       <p>Connected store: <strong>{shop}</strong></p>
       <p>n8n researches and writes a draft; you inspect the content before publishing. Automatic generation creates drafts only.</p>
       {result && <p role="status"><strong>{result.ok ? "Success:" : "Attention:"}</strong> {result.message}</p>}

@@ -1,0 +1,124 @@
+/* Native controls and readable content within the embedded Shopify app.
+ * Shopify App Bridge and Polaris web components own the surrounding admin chrome.
+ * These rules intentionally do not style the public login page or Shopify's sidebar.
+ */
+s-page {
+  color: #21312c;
+}
+
+s-page s-section p {
+  line-height: 1.55;
+}
+
+s-page s-section form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  color: #273b31;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+s-page s-section form label:has(> input[type="checkbox"]),
+s-page s-section form label:has(> input[type="radio"]) {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.7rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+s-page s-section :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #bac9c2;
+  border-radius: 8px;
+  background: #fff;
+  color: #183228;
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+s-page s-section textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+s-page s-section :is(input, textarea, select):focus-visible {
+  outline: 3px solid rgba(26, 117, 81, 0.25);
+  outline-offset: 1px;
+  border-color: #29815c;
+}
+
+s-page s-section :is(input[type="checkbox"], input[type="radio"]) {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  accent-color: #176341;
+}
+
+s-page s-section button {
+  min-height: 42px;
+  padding: 0.65rem 1.05rem;
+  border: 1px solid #176341;
+  border-radius: 9px;
+  color: #fff;
+  background: #176341;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+s-page s-section button:hover:not(:disabled) {
+  background: #115033;
+}
+
+s-page s-section button:focus-visible {
+  outline: 3px solid rgba(26, 117, 81, 0.3);
+  outline-offset: 2px;
+}
+
+s-page s-section button:disabled {
+  cursor: not-allowed;
+  background: #eef1ef;
+  border-color: #d3ded8;
+  color: #667c71;
+}
+
+s-page s-section a {
+  color: #176341;
+  text-underline-offset: 3px;
+}
+
+s-page s-section details {
+  padding: 0.9rem 1rem;
+  margin-block: 0.7rem;
+  border: 1px solid #e2e8e4;
+  border-radius: 10px;
+}
+
+s-page s-section summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+s-page s-section :is(h2, h3) {
+  color: #21372b;
+}
+
+@media (max-width: 650px) {
+  s-page s-section form {
+    max-width: 100%;
+  }
+
+  s-page s-section button {
+    max-width: 100%;
+  }
+}

@@ -320,3 +320,7 @@ Source: Bright Data's [SERP API parsed JSON reference](https://github.com/bright
 ### Primary-origin rank selection (2026-11-02)
 
 The Bright Data organic adapter now excludes HTTPS results on nonstandard ports (for example `https://shop.example:8443/`) **before** selecting the merchant's best organic rank. Previously a rank-1 custom-port URL could displace a legitimate rank-2 storefront URL, causing the downstream domain gate to reject the entire batch instead of retaining the valid observation. The canonical final domain gate still independently rejects custom ports. A standard HTTPS URL, including an explicitly written `:443` that URL parsing normalizes, remains eligible. This is a synthetic regression check, not proof of an actual SERP incident or merchant traffic lift. No source export has been validated against a live Bright Data account.
+
+### Google SERP personalization provenance (2026-11-02)
+
+Bright Data ranking imports require the original Google search request URL to contain exactly one `pws=0` parameter. Omitting it is not evidence that personalized results were disabled, even if the parsed response reports the expected keyword, country and device. Duplicate `pws` parameters are rejected rather than guessing which value Google used. This is a conservative comparability rule, not proof that Google served an unpersonalized result; validate against authorized raw exports before interpreting rank changes. No live merchant search data was used to establish an outcome.

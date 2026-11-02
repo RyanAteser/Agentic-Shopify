@@ -30,6 +30,28 @@ class PilotGateTests(unittest.TestCase):
             result["accounting"]["merchant_weighted_labor_difference_minutes_per_assignment"], -6
         )
 
+    def test_zero_useful_ai_output_blocks_decision_even_with_lower_labor(self):
+        observed = [dict(r) for r in self.observed]
+        observed[0]["useful"] = "0"
+        result = evaluate(self.manifest, observed)
+        self.assertFalse(result["comparison_ready"])
+        self.assertEqual(result["accounting"]["ai"]["useful"], 0)
+        self.assertIsNone(result["accounting"]["merchant_weighted_labor_difference_minutes_per_assignment"])
+
+    def test_zero_useful_control_output_blocks_decision(self):
+        observed = [dict(r) for r in self.observed]
+        observed[1]["useful"] = "0"
+        result = evaluate(self.manifest, observed)
+        self.assertFalse(result["comparison_ready"])
+        self.assertIsNone(result["accounting"]["merchant_weighted_labor_difference_minutes_per_assignment"])
+
+    def test_both_arms_zero_useful_blocks_decision(self):
+        observed = [dict(r) for r in self.observed]
+        for record in observed:
+            record["useful"] = "0"
+        result = evaluate(self.manifest, observed)
+        self.assertFalse(result["comparison_ready"])
+
     def test_missing_balanced_pair_suppresses_estimate(self):
         manifest = self.manifest + [
             {"merchant_id": "m1", "brief_id": "c", "arm": "ai"},

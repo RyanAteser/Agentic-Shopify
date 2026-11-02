@@ -74,6 +74,10 @@ The Growth dashboard now reports the median and nearest-rank 90th percentile of 
 
 The new 80%-coverage/at-least-five-time-reports gate deliberately suppresses an average from only three self-reported time samples among five reviews. Hosted CI on commit `a4a809e` failed in both SQLite and PostgreSQL because an older integration test still asserted that this under-covered example should report a 15-minute average. The failing assertion was a **test expectation**, not evidence that missing reports should be interpreted as zero. Commit `72eabcf` corrects that test to require a null average, `insufficient-time-reports`, 60% coverage and two missing reports. The new CI must pass before the branch is considered green; no merchant-facing data or runtime policy was changed by the correction.
 
+## CI token least privilege (2026-11-01)
+
+The pull-request CI workflow now declares `permissions: contents: read` at workflow scope. Its checkout, npm/Prisma checks, isolated PostgreSQL tests and Docker smoke need repository reads but do not need to write commits, issues, packages, deployments or pull requests. This reduces the blast radius if a dependency or test script is compromised. The setting applies to the automatic `GITHUB_TOKEN`, not third-party credentials or any secrets configured elsewhere. It is **not** a substitute for dependency review, runner isolation or branch protection. Verify the new head's hosted CI before treating this change as passed. No live store or deployment was touched.
+
 ## Hard go/no-go gates
 
 | Gate | Current status | Completion proof required |

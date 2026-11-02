@@ -1,6 +1,9 @@
 import db from "../db.server";
 import {decryptToken,encryptToken} from "./gsc-crypto.server";
 import {assertPropertyAggregation,gscReportingWindow,isExactHttpsStorefrontProperty,matchesPrimaryDomain,parseSearchConsoleRows} from "./growth";
+import {readShopifySeoCatalog} from "./shopify-product-sample";
+import {primaryDomainForShop} from "./ranking-ingest.server";
+import {gscPageQuery,parseGscPageResponse,selectGscProductUrls,type GscProductDay} from "./gsc-page-metrics";
 
 const SCOPE="https://www.googleapis.com/auth/webmasters.readonly";
 const GOOGLE_AUTHORIZE="https://accounts.google.com/o/oauth2/v2/auth";
@@ -143,9 +146,10 @@ export async function storeGoogleConnection(shop:string,property:string,refreshT
       where:{shop},
       create:{shop,property,encryptedRefresh,status:"active",connectedAt},
       update:{property,encryptedRefresh,status:"active",connectedAt,
-        lastSyncedAt:null,lastSyncStartedAt:null}
+        lastSyncedAt:null,lastSyncStartedAt:null,lastPageSyncedAt:null,lastPageSyncStartedAt:null}
     });
     await tx.organicDailyMetric.deleteMany({where:{shop}});
+    await tx.gscProductDailyMetric.deleteMany({where:{shop}});
   });
 }
 async function googleRefresh(refreshToken:string){
@@ -231,6 +235,83 @@ export async function syncOrganicMetrics(shop:string,now=new Date()){
     throw error;
   }
 }
+/**
+ * Merchant-triggered READ-ONLY Google page/day sync, for products returned by
+ * this authenticated Shopify Admin session only.
+ *
+ * Separate lease from property-wide metrics. No store writes, paid AI or
+ * external competitor URL imports. A failed GSC page response rolls back the
+ * entire snapshot and never claims zero-traffic days for omitted dates.
+ */
+export async function syncGscProductPages(
+  shop:string,admin:{graphql:(query:string,options?:any)=>Promise<{json:()=>Promise<any>}>},
+  now=new Date()
+):Promise<{pages:number;observedRows:number;property:string;hasMore:boolean}> {
+  // Ask Shopify to attest its primary domain; no caller-supplied host or URLs.
+  const primaryHost=await primaryDomainForShop(admin,shop);
+  const catalog=await readShopifySeoCatalog(admin);
+  const selected=selectGscProductUrls(catalog.products,primaryHost);
+  if(!selected.length)throw new Error("No usable HTTPS product URLs from this store; page sync not possible");
+  const stale=new Date(now.getTime()-20*60000);
+  const rateLimit=new Date(now.getTime()-60*60000);
+  const claimed=await db.searchConsoleConnection.updateMany({
+    where:{
+      shop,status:"active",
+      property:"https://"+primaryHost+"/",
+      OR:[{lastPageSyncStartedAt:null},{lastPageSyncStartedAt:{lt:stale}}],
+      AND:[{OR:[{lastPageSyncedAt:null},{lastPageSyncedAt:{lt:rateLimit}}]}]
+    },
+    data:{lastPageSyncStartedAt:now}
+  });
+  if(claimed.count!==1)throw new Error("GSC page reporting requires current verified consent and an available hourly sync lease");
+  try {
+    const connection=await db.searchConsoleConnection.findUniqueOrThrow({where:{shop}});
+    if(connection.status!=="active"||connection.property!=="https://"+primaryHost+"/"||
+       !isExactHttpsStorefrontProperty(connection.property)){
+      throw new Error("GSC page scope no longer matches authenticated merchant");
+    }
+    const token=await googleRefresh(decryptToken(connection.encryptedRefresh));
+    const {startDate,endDate}=gscReportingWindow(now);
+    const allRows:GscProductDay[]=[];
+    for(const pageUrl of selected){
+      const payload=await googleFetch(
+        GSC_BASE+"/sites/"+encodeURIComponent(connection.property)+"/searchAnalytics/query",
+        {method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},
+          body:JSON.stringify(gscPageQuery(pageUrl,startDate,endDate))}
+      );
+      allRows.push(...parseGscPageResponse(payload,pageUrl,startDate,endDate));
+    }
+    await db.$transaction(async tx=>{
+      // The conditional UPDATE takes the connection lock on PostgreSQL and
+      // fences off Disconnect, re-consent, revocation and stale import leases.
+      const active=await tx.searchConsoleConnection.updateMany({
+        where:{
+          shop,status:"active",property:connection.property,
+          encryptedRefresh:connection.encryptedRefresh,lastPageSyncStartedAt:now
+        },
+        data:{lastPageSyncedAt:now,lastPageSyncStartedAt:null}
+      });
+      if(active.count!==1)throw new Error("GSC consent or page sync lease changed during import");
+      // Atomically replace the previous merchant-scoped sample. A later Google
+      // snapshot may omit prior rows, so retaining them would fake coverage.
+      await tx.gscProductDailyMetric.deleteMany({where:{shop}});
+      if(allRows.length)await tx.gscProductDailyMetric.createMany({
+        data:allRows.map(row=>({
+          shop,property:connection.property,pageUrl:row.pageUrl,date:row.date,
+          clicks:row.clicks,impressions:row.impressions,ctr:row.ctr,position:row.position
+        }))
+      });
+    });
+    return {pages:selected.length,observedRows:allRows.length,property:connection.property,
+      hasMore:catalog.hasMore||catalog.products.length>selected.length};
+  } catch(error){
+    await db.searchConsoleConnection.updateMany({
+      where:{shop,lastPageSyncStartedAt:now},data:{lastPageSyncStartedAt:null}
+    }).catch(()=>{});
+    throw error;
+  }
+}
+
 export async function disconnectGoogle(shop:string){
   // Capture the credential under the same merchant lock that serializes
   // re-consent. Reading before the transaction could revoke an obsolete token
@@ -277,6 +358,7 @@ export async function disconnectGoogle(shop:string){
     await tx.googleAuthState.deleteMany({where:{shop}});
     await tx.searchConsoleConnection.deleteMany({where:{shop}});
     await tx.organicDailyMetric.deleteMany({where:{shop}});
+    await tx.gscProductDailyMetric.deleteMany({where:{shop}});
     return current?.encryptedRefresh??null;
   });
   if(encryptedRefresh){

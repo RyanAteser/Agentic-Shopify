@@ -14,13 +14,15 @@ export type SeoMeasurementInput = {
   usableProductUrls: number;
   hasCatalogCoverageWarning: boolean;
   primaryHost: string | null;
-  connection: { property: string; status: string; lastSyncedAt: Date | null } | null;
+  connection: { property: string; status: string; lastSyncedAt: Date | null;
+    lastPageSyncedAt?: Date | null } | null;
+  pageRows?: number;
 };
 
 export type SeoMeasurementStatus = {
   catalog: "unavailable" | "no_public_urls" | "sampled" | "partial_sample";
   gsc: "not_connected" | "inactive" | "host_unverified" | "property_mismatch" | "verified_no_page_data";
-  pageDailyEvidence: "not_collected";
+  pageDailyEvidence: "not_collected" | "no_observed_dates" | "sampled_observations";
   approvedIntervention: "not_recorded";
   impact: "not_measured";
   readyToEvaluate: false;
@@ -44,7 +46,9 @@ export function assessSeoMeasurementReadiness(input: SeoMeasurementInput): SeoMe
   return {
     catalog,
     gsc,
-    pageDailyEvidence: "not_collected",
+    pageDailyEvidence: gsc==="verified_no_page_data" && input.connection?.lastPageSyncedAt
+      ? (input.pageRows && input.pageRows > 0 ? "sampled_observations" : "no_observed_dates")
+      : "not_collected",
     approvedIntervention: "not_recorded",
     impact: "not_measured",
     readyToEvaluate: false,

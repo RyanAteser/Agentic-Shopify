@@ -87,6 +87,25 @@ test("exact active GSC scope does not imply experiment, product or page data", (
   });
 });
 
+test("page-level sync distinguishes absent rows from missing data without claiming impact", () => {
+  const connection={...exact,lastPageSyncedAt:new Date("2026-11-02T18:00:00Z")};
+  const noRows=assessSeoMeasurementReadiness({
+    ...base,primaryHost:"artemisti.myshopify.com",connection,pageRows:0
+  });
+  assert.equal(noRows.pageDailyEvidence,"no_observed_dates");
+  assert.equal(noRows.impact,"not_measured");
+  assert.equal(noRows.readyToEvaluate,false);
+  const observed=assessSeoMeasurementReadiness({
+    ...base,primaryHost:"artemisti.myshopify.com",connection,pageRows:14
+  });
+  assert.equal(observed.pageDailyEvidence,"sampled_observations");
+  assert.equal(observed.impact,"not_measured");
+  const foreign=assessSeoMeasurementReadiness({
+    ...base,primaryHost:"another-shop.myshopify.com",connection,pageRows:14
+  });
+  assert.equal(foreign.pageDailyEvidence,"not_collected");
+});
+
 test("malformed Shopify counts must not produce progress cards", () => {
   for(const data of [
     {...base,sampledProducts:-1},
@@ -99,10 +118,13 @@ test("malformed Shopify counts must not produce progress cards", () => {
 test("SEO route is authenticated and scoped to current shop without experiment writes", () => {
   const route=readFileSync(new URL("../app/routes/app.seo.tsx",import.meta.url),"utf8");
   assert.match(route,/authenticate\.admin\(request\)/);
-  assert.match(route,/where:\{shop\},select:\{property:true,status:true,lastSyncedAt:true\}/);
+  assert.match(route,/where:\{shop\},select:\{property:true,status:true,lastSyncedAt:true,lastPageSyncedAt:true\}/);
   assert.match(route,/primaryDomainForShop\(admin,shop\)/);
   assert.match(route,/heading="SEO measurement readiness"/);
   assert.match(route,/Impact status: Not measured/);
   assert.doesNotMatch(route,/monikablunderbeauty|UNAPPROVED_PUBLIC_RESEARCH/i);
-  assert.doesNotMatch(route,/export const action\s*=/);
+  assert.match(route,/export const action\s*=/);
+  assert.match(route,/form.get\("intent"\)!=="sync_gsc_product_pages"/);
+  assert.match(route,/syncGscProductPages\(session.shop,admin\)/);
+  assert.doesNotMatch(route,/publishApprovedArticle|articleCreate|monikablunderbeauty/i);
 });

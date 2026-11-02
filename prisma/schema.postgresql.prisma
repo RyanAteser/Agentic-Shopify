@@ -173,6 +173,8 @@ model SearchConsoleConnection {
   updatedAt          DateTime @updatedAt
   lastSyncedAt       DateTime?
   lastSyncStartedAt  DateTime?
+  lastPageSyncedAt      DateTime?
+  lastPageSyncStartedAt DateTime?
 }
 
 model OrganicDailyMetric {
@@ -187,6 +189,25 @@ model OrganicDailyMetric {
   importedAt     DateTime @default(now())
   @@unique([shop, property, date])
   @@index([shop, date])
+}
+
+
+
+/// Read-only Google Search Console metrics for merchant-verified product URLs.
+/// Missing page/date rows are unobserved, never invented as zero traffic.
+model GscProductDailyMetric {
+  id          String   @id @default(cuid())
+  shop        String
+  property    String
+  pageUrl     String
+  date        String
+  clicks      Float
+  impressions Float
+  ctr         Float
+  position    Float
+  importedAt  DateTime @default(now())
+  @@unique([shop, property, pageUrl, date])
+  @@index([shop, property, date])
 }
 
 

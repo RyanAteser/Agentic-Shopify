@@ -22,6 +22,7 @@ export async function eraseMerchantData(shop: string): Promise<void> {
     db.googleAuthState.deleteMany({ where: { shop } }),
     db.searchConsoleConnection.deleteMany({ where: { shop } }),
     db.organicDailyMetric.deleteMany({ where: { shop } }),
+    db.gscProductDailyMetric.deleteMany({ where: { shop } }),
     db.storeActivity.deleteMany({ where: { shop } }),
     db.storeRecommendation.deleteMany({ where: { shop } }),
     db.editorialReview.deleteMany({ where: { shop } }),

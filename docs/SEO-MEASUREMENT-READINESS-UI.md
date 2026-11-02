@@ -8,10 +8,10 @@ The authenticated `/app/seo` dashboard now displays **SEO measurement readiness*
 |---|---|---|
 | Storefront product URLs | Shopify product API sample (bounded to 100 records) with valid HTTPS `onlineStoreUrl` values | Null URLs or a failed/partial sample are not clean SEO findings; even usable URLs do not prove indexing. |
 | Store-specific GSC connection | A connection row queried using `where:{shop}` and, when active, read-only Shopify Admin primary-domain attestation. The saved URL-prefix property must match the attested primary host exactly. | Connection existence and matched host **do not** establish that a page-level GSC experiment was run. |
-| Page/day outcomes | **Not collected** by the current site-level GSC importer. | Existing `OrganicDailyMetric` is `shop + property + date`, not `shop + page + date`. Site totals must not be passed into product-level difference-in-differences calculations. |
+| Page/day outcomes | **Available after a new, explicit merchant-triggered page-level GSC import**. The site-level GSC importer still contains only property/date totals. | Existing `OrganicDailyMetric` remains `shop + property + date`; the new `GscProductDailyMetric` is `shop + property + product URL + date`, kept separate. Only Shopify-attested product URLs can be imported and omitted Google days are unobserved. Neither aggregate demonstrates SEO attribution. |
 | Controlled intervention | **Not recorded** in the current application. | An SEO suggestion or edited product does not establish a merchant-approved treatment/control split, timestamp, or finalized follow-up cohort. |
 
-The status is returned by `assessSeoMeasurementReadiness` from `app/lib/seo-measurement-readiness.ts`. The function always reports `impact: "not_measured"` and `readyToEvaluate: false` because these last two evidence stages are unavailable. This conservative behavior is intentional and prevents both the lack of a GSC connection and a mismatched/legacy property from looking green.
+The status is returned by `assessSeoMeasurementReadiness` from `app/lib/seo-measurement-readiness.ts`. The helper always reports `impact: "not_measured"` and `readyToEvaluate: false`, even after a page/day import, because approved intervention history and controlled comparison evidence are still unavailable. This conservative behavior is intentional and prevents both the lack of a GSC connection and a mismatched/legacy property from looking green.
 
 ## Store isolation
 
@@ -32,10 +32,10 @@ npm run typecheck
 npm run build
 ```
 
-The route does not define a mutation action. This component adds no new permission scopes and does not change the existing optional Google OAuth consent flow. The test suite covers absent/mismatched/inactive GSC connections, null product URLs, partial/failed catalogs, and the inability to infer measurable SEO impact from exact GSC site scope alone.
+The SEO route now defines **one** authenticated POST action, `sync_gsc_product_pages`. It reads Google Search Analytics using the existing explicit read-only merchant consent and writes only merchant-scoped imported observations to the application's own database; it does **not** edit Shopify, Google settings or product metadata. This adds no new scopes and does not initiate Google OAuth automatically. The test suite covers absent/mismatched/inactive GSC connections, null product URLs, partial/failed catalogs, and the inability to infer measurable SEO impact from exact GSC site scope alone.
 
 ## Current development-store evidence (2026-11-02)
 
 The Artemis development SQLite database has no `SearchConsoleConnection` row and no `OrganicDailyMetric` rows for `artemisti.myshopify.com`. The separately verified Shopify product sample returned 13 active Online Store-published products, all with null storefront URLs while the development storefront served a password form. The page must therefore show **no usable public product pages, no linked GSC property, and no measured SEO outcome**.
 
-The following step requires an actual merchant to opt into a verified **read-only** Google Search Console property and, later, authorize any real intervention. Page-level metrics, independent consent verification and a proper experiment timeline still need development. This page must not imply those features already work.
+The next real-data step requires the merchant to opt into a verified **read-only** Google Search Console property, plus usable public product URLs. The new bounded page/day importer will then be available from the SEO UI on an explicit button click. An approved intervention, independent consent verification and a proper controlled experiment still require separate work. This page must not claim proven impact. See `docs/GSC-PRODUCT-PAGE-REPORTING.md`.

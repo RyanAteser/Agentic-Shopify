@@ -59,7 +59,7 @@ function assertRequestedGoogleSerp(context: BrightDataOrganicContext): void {
   if (request.searchParams.has("start") && exactlyOne("start") !== "0") {
     throw new Error("Bright Data request must be the first results page");
   }
-  if (request.searchParams.has("pws") && exactlyOne("pws") !== "0") {
+  if (exactlyOne("pws") !== "0") {
     throw new Error("Bright Data personalization must be disabled");
   }
   const mobile = request.searchParams.getAll("brd_mobile");

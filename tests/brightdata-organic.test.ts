@@ -93,3 +93,22 @@ test("mislabeled or unsupported Google request dimensions fail closed", () => {
   assert.throws(() => normalizeBrightDataOrganicGoogle(sample,
     {...context, device: "mobile"}, now), /Bright Data/);
 });
+
+test("custom-port lookalike cannot displace the actual merchant organic result", () => {
+  const withPort = {...sample, organic: [
+    {rank: 1, link: "https://shop.example:8443/boots"},
+    {rank: 2, link: "https://shop.example/products/boots"},
+    {rank: 3, link: "https://competitor.example/boots"}
+  ]};
+  const rows = normalizeBrightDataOrganicGoogle(withPort, context, now);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].position, 2);
+  assert.equal(rows[0].targetUrl, "https://shop.example/products/boots");
+  assert.deepEqual(normalizeBrightDataOrganicGoogle(
+    {...withPort, organic: [withPort.organic[0]]}, context, now), []);
+  // Explicit default HTTPS port is normalized by URL and remains standard HTTPS.
+  const defaultPort = {...sample, organic: [
+    {rank: 1, link: "https://shop.example:443/boots"}
+  ]};
+  assert.equal(normalizeBrightDataOrganicGoogle(defaultPort, context, now)[0].position, 1);
+});

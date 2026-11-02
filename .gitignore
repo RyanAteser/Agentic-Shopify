@@ -7,6 +7,10 @@ node_modules
 __pycache__/
 *.py[cod]
 
+# Private, merchant-authorized Search Console evidence never belongs in Git
+*.gsc-private.json
+gsc-evidence-private/
+
 /.cache
 /build
 /app/build

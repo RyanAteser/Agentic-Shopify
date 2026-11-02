@@ -6,6 +6,8 @@ import db from "../db.server";
 import { auditProductSeo, type SeoProduct } from "../lib/seo";
 import { readShopifySeoCatalog, summarizeShopifySeoSample } from "../lib/shopify-product-sample";
 import { sameRankTarget } from "../lib/manager";
+import { primaryDomainForShop } from "../lib/ranking-ingest.server";
+import { assessSeoMeasurementReadiness } from "../lib/seo-measurement-readiness";
 
 export const loader=async ({request}:LoaderFunctionArgs) => {
   const {admin,session}=await authenticate.admin(request);
@@ -42,11 +44,30 @@ export const loader=async ({request}:LoaderFunctionArgs) => {
     }
   }
   const rankingRows=Array.from(seen.values()).slice(0,40);
-  return {shop,productCount:products.length,sampleCount,coverageWarning,findings,findingCount:allFindings.length,catalogError,rankingRows,rankingCount:observations.length};
+  // This page may inspect only its authenticated Shopify merchant's GSC state.
+  // Do not merge public competitor research or offer a mutation from this view.
+  const connection=await db.searchConsoleConnection.findUnique({
+    where:{shop},select:{property:true,status:true,lastSyncedAt:true}
+  });
+  let primaryHost:string|null=null;
+  if(connection?.status==="active"){
+    try {
+      primaryHost=await primaryDomainForShop(admin,shop);
+    }catch {
+      // Domain attestation is a hard prerequisite for claiming exact GSC scope.
+      // The catalog and ranking audit should still render on Shopify API errors.
+    }
+  }
+  const measurement=assessSeoMeasurementReadiness({
+    catalogError:!!catalogError,sampledProducts:sampleCount,
+    usableProductUrls:products.length,hasCatalogCoverageWarning:!!coverageWarning,
+    primaryHost,connection,
+  });
+  return {shop,productCount:products.length,sampleCount,coverageWarning,findings,findingCount:allFindings.length,catalogError,rankingRows,rankingCount:observations.length,measurement,connectionProperty:connection?.property??null};
 };
 
 export default function SeoDashboard(){
-  const {shop,productCount,sampleCount,coverageWarning,findings,findingCount,catalogError,rankingRows,rankingCount}=useLoaderData<typeof loader>();
+  const {shop,productCount,sampleCount,coverageWarning,findings,findingCount,catalogError,rankingRows,rankingCount,measurement,connectionProperty}=useLoaderData<typeof loader>();
   return <s-page heading="Agentic Shopify · SEO Intelligence">
     <s-section heading="SEO agents">
       <p>This dashboard connects product-page checks with your Bright Data ranking workflow. All detected issues are recommendations; nothing on this page edits your store.</p>
@@ -69,6 +90,40 @@ export default function SeoDashboard(){
         </table>
       </div>}
     </s-section>
+    <s-section heading="SEO measurement readiness">
+      <p><strong>Impact status: Not measured.</strong> Product metadata checks and isolated ranking observations cannot establish an increase in search traffic, clicks, or revenue. No controlled metadata experiment is recorded in this workspace.</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(210px, 1fr))",gap:12}}>
+        <div style={{padding:14,border:"1px solid #e2e8e4",borderRadius:10}}>
+          <strong>1. Public product URLs</strong>
+          {measurement.catalog==="unavailable"?
+            <p role="status">Catalog request failed. Storefront coverage is unknown.</p>:
+            measurement.catalog==="no_public_urls"?
+            <p role="status">No usable HTTPS product URLs in the current Shopify sample ({sampleCount} records). An empty audit is not proof of good SEO.</p>:
+            <p>{productCount} usable URL(s) in a {sampleCount}-product sample. {measurement.catalog==="partial_sample"?"Coverage is incomplete.":"This is a sample, not a crawl."}</p>}
+        </div>
+        <div style={{padding:14,border:"1px solid #e2e8e4",borderRadius:10}}>
+          <strong>2. Store-specific Search Console</strong>
+          {measurement.gsc==="not_connected"?
+            <p>Not connected. <Link to="/app/growth">Open the read-only Google consent workflow</Link>.</p>:
+            measurement.gsc==="inactive"?
+            <p role="status">The recorded Search Console connection is inactive. Reconnect from <Link to="/app/growth">Verified Growth</Link>.</p>:
+            measurement.gsc==="host_unverified"?
+            <p role="status">Shopify primary-domain attestation is unavailable. GSC scope cannot be confirmed.</p>:
+            measurement.gsc==="property_mismatch"?
+            <p role="status">The saved Google property does not match this Shopify store's current primary HTTPS host. Reconnect a matching URL-prefix property.</p>:
+            <p>The recorded Google property matches the current Shopify primary host: <strong>{connectionProperty}</strong>. This does not supply page-level experiment data.</p>}
+        </div>
+        <div style={{padding:14,border:"1px solid #e2e8e4",borderRadius:10}}>
+          <strong>3. Page/day performance evidence</strong>
+          <p>Not collected. The current <Link to="/app/growth">Growth</Link> importer stores property-level daily totals, not individual product-page experiment cohorts. Do not infer per-product lift from site totals.</p>
+        </div>
+        <div style={{padding:14,border:"1px solid #e2e8e4",borderRadius:10}}>
+          <strong>4. Approved controlled change</strong>
+          <p>Not recorded. No merchant-approved treatment, unchanged comparison pages, intervention date, or finalized follow-up window is documented for this store.</p>
+        </div>
+      </div>
+      <p><strong>Next safe step:</strong> Verify this store's public product URLs and, if desired, connect its own read-only Search Console property. A future page-level experiment requires separate merchant approval and explicit evidence collection. This page cannot import public research from another store or publish content.</p>
+    </s-section>
     <s-section heading="Keyword rankings · Bright Data SERP">
       <p>Recorded observations: {rankingCount}. Results are tied to keyword, country, search engine and device. Previous rank and change are shown only when consecutive snapshots refer to the same HTTPS result URL; a change of ranking page is not treated as a page-level ranking loss. A SERP observation is not equivalent to Search Console average position. Store Manager requires three consecutive same-page observations before recommending investigation of a repeated rank decline; this is a heuristic, not proof of lost traffic.</p>
       {!rankingRows.length && <p>No ranking observations imported yet. Your existing n8n Bright Data workflow can POST verified observations to the private ingestion endpoint described in docs/SEO-AGENTS.md.</p>}
@@ -89,7 +144,7 @@ export default function SeoDashboard(){
       </div>}
     </s-section>
     <s-section heading="Next integrations">
-      <p>Connect verified Google Search Console impressions, clicks, and page-query performance before treating SEO suggestions as measurable growth. Amazon Listing SEO will be a separate opt-in connector requiring Selling Partner API approval.</p>
+      <p>Verified Growth currently tracks Google Search Console property-level daily totals. Page/day comparisons, signed merchant approval records and controlled metadata experiments are not yet collected. Do not describe metadata suggestions as traffic or revenue gains. Amazon Listing SEO will be a separate opt-in connector requiring Selling Partner API approval.</p>
     </s-section>
   </s-page>;
 }

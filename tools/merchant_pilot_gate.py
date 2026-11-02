@@ -11,7 +11,9 @@ from tools.merchant_value_pilot import FIELDS, analyze
 def evaluate(manifest_rows, observed_rows):
     reconciliation = verify(manifest_rows, observed_rows)
     accounting = analyze(observed_rows)
-    ready = reconciliation["manifest_matches"] and accounting["accounting_comparison_ready"]
+    ready = (reconciliation["manifest_matches"] and accounting["accounting_comparison_ready"]
+             and all(accounting[arm]["useful"] > 0 for arm in ("ai", "control")))
+    # Lower labor with zero useful output is not a merchant productivity win.
     # An apparently balanced export can omit both sides of an assignment pair.
     # Never expose a comparison estimate unless the frozen manifest reconciles.
     if not ready:

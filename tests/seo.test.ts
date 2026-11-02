@@ -97,6 +97,14 @@ test("SERP target URLs must belong to Shopify's verified primary domain", () => 
   }
   assert.throws(() => parseRanking({...context,keyword:"boots",position:5,observedAt:now.toISOString(),
     targetUrl:"https://www.store.example@attacker.test/products/boots"},now), /credentials/);
+  // A caller may pass already-parsed SeoRanking objects directly, bypassing
+  // parseRanking's URL validation. The domain trust boundary must stand alone.
+  assert.throws(() => assertRankingTargetsForPrimaryDomain([
+    {...found,targetUrl:"https://www.store.example:8443/products/boots"}
+  ],"www.store.example"), /primary domain/);
+  assert.doesNotThrow(() => assertRankingTargetsForPrimaryDomain([
+    {...found,targetUrl:"https://www.store.example:443/products/boots"}
+  ],"www.store.example"));
   assert.throws(() => assertRankingTargetsForPrimaryDomain([{...found,targetUrl:""}],"www.store.example"));
   assert.throws(() => assertRankingTargetsForPrimaryDomain([{...absent,targetUrl:found.targetUrl}],"www.store.example"));
   assert.throws(() => assertRankingTargetsForPrimaryDomain([found],"https://www.store.example"));

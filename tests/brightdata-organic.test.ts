@@ -85,6 +85,8 @@ test("mislabeled or unsupported Google request dimensions fail closed", () => {
     context.requestUrl + "&brd_mobile=1",
     context.requestUrl.replace("q=Leather+boots", "q=Leather+shoes"),
     context.requestUrl.replace("pws=0", "pws=1"),
+    context.requestUrl.replace("&pws=0", ""),
+    context.requestUrl + "&pws=0",
   ];
   for (const requestUrl of invalid) {
     assert.throws(() => normalizeBrightDataOrganicGoogle(sample, {...context, requestUrl}, now),

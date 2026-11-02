@@ -316,3 +316,7 @@ commits, logs or issues. Validate with an authorized export and keep the
 existing connector key, tenant isolation, rate limits and human approval gates.
 
 Source: Bright Data's [SERP API parsed JSON reference](https://github.com/brightdata/skills/blob/main/skills/bright-data-best-practices/references/serp-api.md).
+
+### Primary-origin rank selection (2026-11-02)
+
+The Bright Data organic adapter now excludes HTTPS results on nonstandard ports (for example `https://shop.example:8443/`) **before** selecting the merchant's best organic rank. Previously a rank-1 custom-port URL could displace a legitimate rank-2 storefront URL, causing the downstream domain gate to reject the entire batch instead of retaining the valid observation. The canonical final domain gate still independently rejects custom ports. A standard HTTPS URL, including an explicitly written `:443` that URL parsing normalizes, remains eligible. This is a synthetic regression check, not proof of an actual SERP incident or merchant traffic lift. No source export has been validated against a live Bright Data account.

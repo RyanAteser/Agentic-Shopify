@@ -8,7 +8,8 @@ type ReadOnlyAdmin = { graphql: (query: string) => Promise<{ json: () => Promise
  * the n8n payload. A shared connector key alone cannot attest a storefront.
  */
 export async function primaryDomainForShop(admin: ReadOnlyAdmin, shop: string): Promise<string> {
-  const response = await admin.graphql(`#graphql query RankingStorefrontDomain {
+  const response = await admin.graphql(`#graphql
+query RankingStorefrontDomain {
     shop { myshopifyDomain primaryDomain { host } }
   }`);
   const result = await response.json();

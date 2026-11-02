@@ -47,6 +47,11 @@ An existing **signed-in** Chrome window for `artemisti.myshopify.com` was inspec
 The Store Manager explicitly warned that the catalog sample was unavailable, so product-specific recommendations were not verified. Do not fill that gap with invented product evidence. Further gates: authenticated read-only Shopify Admin API round-trip, all workspace routes, separate staging infrastructure and production credentials.
 
 A blank iframe or incorrect UI after future changes should be debugged with the browser Console and Network tabs, App Bridge bootstrap, Content Security Policy, SDK logs and a real signed-in session. A healthy `/health`, a bot-only 410, and even a successful TypeScript build are insufficient on their own.
+## Catalog query regression (November 2, 2026)
+
+The original SEO, product-context, ranking-domain, and future article publishing GraphQL documents used the invalid form `#graphql query ...` or `#graphql mutation ...` on one line. GraphQL treats the rest of a `#` line as a comment, causing syntax errors or missing operations. The Google Search Console shop-domain query had the same bug. Operation declarations now start on the **next** line; `tests/shopify-graphql-syntax.test.mjs` parses all five documents to prevent recurrence.
+
+Read-only live verification in the selected Artemis development store: before the fix, SEO Intelligence displayed `syntax error, unexpected IDENTIFIER ("products")`; after the fix, its authenticated product query returned **13** active products filtered as published to Online Store. Every returned `onlineStoreUrl` was `null`, so **zero** product pages were eligible for SEO inspection. This is not a clean SEO audit and must not be represented as 13 successfully checked pages, evidence of indexing, or proof that products lack publication. Verify the Online Store/publication configuration and storefront availability separately. No product data was changed.
 ## Guardrails
 
 - Do not run `shopify app deploy` with the development configuration; production needs a stable hosted HTTPS URL and PostgreSQL.

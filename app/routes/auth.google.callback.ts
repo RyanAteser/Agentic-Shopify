@@ -20,7 +20,7 @@ export const loader=async ({request}:LoaderFunctionArgs)=>{
   try{
     // Trust authenticated Shopify offline admin, NEVER a Google callback shop parameter.
     const {admin}=await unauthenticated.admin(record.shop);
-    const response=await admin.graphql("#graphql query GrowthShopDomain { shop { primaryDomain { host } } }");
+    const response=await admin.graphql("#graphql\nquery GrowthShopDomain { shop { primaryDomain { host } } }");
     const data:any=await response.json();
     if(data.errors?.length||!data.data?.shop?.primaryDomain?.host){
       throw new Error("Shopify primary domain not available");

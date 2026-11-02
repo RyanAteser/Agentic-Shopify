@@ -90,7 +90,8 @@ export function summarizeShopifySeoSample(products: SeoProduct[], hasMore = fals
 export async function readShopifySeoCatalog(admin: {graphql: Function}): Promise<{
   products: SeoProduct[]; hasMore: boolean; pagesFetched: number;
 }> {
-  const query = `#graphql query ShopifySeoCatalog($after: String) {
+  const query = `#graphql
+query ShopifySeoCatalog($after: String) {
     products(first: 50, after: $after, query: "status:active published_status:published") {
       nodes { id title description onlineStoreUrl seo { title description } }
       pageInfo { hasNextPage endCursor }

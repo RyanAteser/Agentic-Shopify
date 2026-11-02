@@ -62,7 +62,8 @@ export async function publishApprovedArticle(shop:string,draftId:string,admin:Ad
   if(!claimed)return {ok:false,message:"A connected destination blog, current usable editorial review and ready unpublished draft are required."};
   try{
     const response=await admin.graphql(
-      `#graphql mutation ManagerPublishArticle($article:ArticleCreateInput!) {
+      `#graphql
+mutation ManagerPublishArticle($article:ArticleCreateInput!) {
         articleCreate(article:$article) { article { id title isPublished blog { id } } userErrors { field message } }
       }`,
       {variables:{article:{

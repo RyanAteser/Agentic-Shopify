@@ -103,7 +103,8 @@ export async function fetchVerifiedPublishedProducts(
   shop: string, admin: ReadOnlyAdmin
 ): Promise<VerifiedProductSample> {
   try {
-    const response = await admin.graphql(`#graphql query AgenticProductContext {
+    const response = await admin.graphql(`#graphql
+query AgenticProductContext {
       shop { myshopifyDomain }
       products(first: 20, query: "status:active published_status:published") {
         nodes { title description onlineStoreUrl }

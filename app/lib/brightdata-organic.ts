@@ -130,7 +130,7 @@ export function normalizeBrightDataOrganicGoogle(
     if (!(["http:", "https:"].includes(url.protocol)) || !url.hostname || url.username || url.password) {
       throw new Error("Invalid Bright Data organic link");
     }
-    if (url.protocol === "https:" && url.hostname === host && (!best || rank < best.rank)) {
+    if (url.protocol === "https:" && url.hostname === host && !url.port && (!best || rank < best.rank)) {
       best = {rank, url: row.link};
     }
   }

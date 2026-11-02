@@ -165,6 +165,8 @@ export function assertRankingTargetsForPrimaryDomain(records: SeoRanking[], prim
     }
     if (!record.targetUrl) throw new Error("Found ranking requires a result URL");
     const url = new URL(record.targetUrl);
+    // Revalidate here even for pre-parsed SeoRanking objects: callers may bypass
+    // parseRanking. Nonstandard ports are not the verified storefront origin.
     if (url.protocol !== "https:" || url.hostname !== host || url.username || url.password || url.port) {
       throw new Error("Ranking URL does not belong to the Shopify primary domain");
     }

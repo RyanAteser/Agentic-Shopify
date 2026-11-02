@@ -39,16 +39,16 @@ export default function App() {
         )}
         <ul className={styles.list}>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Blog Agent.</strong> Prepare content drafts with a merchant
+            review step before anything is published.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Store Manager.</strong> Review actionable store tasks and
+            approve changes individually.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Verified Growth.</strong> See real Search Console performance
+            after connecting your own verified property.
           </li>
         </ul>
       </div>

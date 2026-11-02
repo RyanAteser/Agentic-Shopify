@@ -168,8 +168,32 @@ export default function BlogAgent() {
   const result = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
-  return <s-page heading="Agentic Shopify · Blog Agent">
-    <s-section heading="Content automation">
+  const draftsAwaitingReview = drafts.filter(d => d.status === "ready" &&
+    !(reviewMap.get(d.id)?.decision === "usable" && reviewMap.get(d.id)?.current)).length;
+  const remainingGenerations = Math.max(0, FREE_LIFETIME_GENERATIONS - config.freeDraftsUsed);
+  return <s-page heading="Agentic Shopify">
+    <s-section heading="Store overview">
+      <p>Connected to <strong>{shop}</strong>. Manage content and review store opportunities from one workspace. Nothing is published without your approval.</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:12,margin:"16px 0"}}>
+        <div style={{background:"#f7f8fa",border:"1px solid #e2e5e9",borderRadius:12,padding:16}}>
+          <p style={{margin:"0 0 8px",color:"#4a5565",fontSize:13}}>Drafts awaiting review</p>
+          <p style={{fontSize:30,fontWeight:700,margin:0}}>{draftsAwaitingReview}</p>
+          <p style={{margin:"8px 0 0",fontSize:12}}>Review before publishing</p>
+        </div>
+        <div style={{background:"#f7f8fa",border:"1px solid #e2e5e9",borderRadius:12,padding:16}}>
+          <p style={{margin:"0 0 8px",color:"#4a5565",fontSize:13}}>Free generations left</p>
+          <p style={{fontSize:30,fontWeight:700,margin:0}}>{remainingGenerations}</p>
+          <p style={{margin:"8px 0 0",fontSize:12}}>Paid plans are not active</p>
+        </div>
+        <div style={{background:"#f7f8fa",border:"1px solid #e2e5e9",borderRadius:12,padding:16}}>
+          <p style={{margin:"0 0 8px",color:"#4a5565",fontSize:13}}>Automatic draft scheduling</p>
+          <p style={{fontSize:20,fontWeight:700,margin:"4px 0"}}>{config.enabled ? "Enabled" : "Off"}</p>
+          <p style={{margin:"8px 0 0",fontSize:12}}>Drafts only, never auto-publication</p>
+        </div>
+      </div>
+      <p><a href="/app/manager">Store Manager</a> | <a href="/app/team">AI Team</a> | <a href="/app/seo">SEO workspace</a> | <a href="/app/growth">Verified growth</a></p>
+    </s-section>
+    <s-section heading="Blog Agent setup">
       <p><a href="/app/manager">Store Manager</a> · <a href="/app/team">AI Store Team</a> · <a href="/app/seo">SEO Intelligence</a> · <a href="/app/growth">Verified Growth</a></p>
       <p>Connected store: <strong>{shop}</strong></p>
       <p>n8n researches and writes a draft; you inspect the content before publishing. Automatic generation creates drafts only.</p>

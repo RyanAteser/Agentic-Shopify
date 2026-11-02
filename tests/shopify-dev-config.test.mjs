@@ -23,3 +23,17 @@ test("Artemis preview updates only the selected dev-store URL", () => {
   assert.match(config, /uri = "\/webhooks\/app\/scopes_update"/);
   assert.doesNotMatch(config, /ngrok-free\.app|trycloudflare\.com/);
 });
+
+test("embedded dashboard exposes Shopify App Bridge navigation and merchant-scoped overview", () => {
+  const shell = read("app/routes/app.tsx");
+  const home = read("app/routes/app._index.tsx");
+  assert.match(shell, /import \{ NavMenu \} from "@shopify\/app-bridge-react"/);
+  assert.match(shell, /<NavMenu>/);
+  for (const path of ["/app", "/app/manager", "/app/team", "/app/seo", "/app/growth"]) {
+    assert.ok(shell.includes(`href="${path}"`), `missing embedded nav link ${path}`);
+  }
+  assert.match(home, /heading="Store overview"/);
+  assert.match(home, /drafts\.filter\(d => d\.status === "ready"/);
+  assert.match(home, /FREE_LIFETIME_GENERATIONS - config\.freeDraftsUsed/);
+  assert.match(home, /Nothing is published without your approval/);
+});

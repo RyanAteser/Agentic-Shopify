@@ -3,6 +3,10 @@ node_modules
 # macOS
 .DS_Store
 
+# Python test/import bytecode
+__pycache__/
+*.py[cod]
+
 /.cache
 /build
 /app/build

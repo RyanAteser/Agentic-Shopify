@@ -175,7 +175,7 @@ def main() -> int:
         print(f"PASS: {len(records)} unapproved public SEO proposals satisfy review constraints")
         if opts.check_live:
             recheck_live(records)
-            print("PASS: public source metadata fingerprints and canonicals unchanged")
+            print("PASS: metadata hashes, canonicals and public-page evidence phrases unchanged")
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"REVIEW_CHECK_FAILED: {exc}", file=sys.stderr)
         return 1

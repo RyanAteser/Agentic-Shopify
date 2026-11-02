@@ -69,9 +69,9 @@ class PublicMetadataProposalsTests(unittest.TestCase):
 
     def test_visible_page_evidence_ignores_script_and_detects_drift(self):
         html = ('<script>hidden ingredient</script><style>hidden ingredient</style>'
-                '<p>Visible ingredient with CRÈME.</p>')
+                '<p>Visible ingredient with a creamy texture.</p>')
         self.assertEqual(
-            checker.missing_source_evidence(html, ["visible ingredient", "crème"]),
+            checker.missing_source_evidence(html, ["VISIBLE INGREDIENT", "creamy texture"]),
             []
         )
         self.assertEqual(

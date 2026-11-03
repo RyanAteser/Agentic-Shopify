@@ -28,6 +28,23 @@ class PilotCostTests(unittest.TestCase):
         self.assertTrue(result["all_merchants_observed_net_positive"])
         self.assertFalse(result["launch_or_revenue_claim_supported"])
 
+    def test_positive_observed_but_negative_under_cost_overrun(self):
+        result = summarize_costs([row("a", "1", manual="10", ai="8", provider="0.5")])
+        self.assertAlmostEqual(result["observed_net_usd_saved"], 1.5)
+        self.assertAlmostEqual(result["stressed_net_usd_saved"], -0.625)
+        self.assertTrue(result["all_merchants_observed_net_positive"])
+        self.assertFalse(result["all_merchants_stressed_net_positive"])
+
+    def test_stress_pass_requires_every_merchant_complete(self):
+        result = summarize_costs([row("a", "1", manual="20", ai="5"),
+                                  row("b", "1", provider="")])
+        self.assertFalse(result["all_merchants_stressed_net_positive"])
+
+    def test_strong_savings_survive_stress(self):
+        result = summarize_costs([row("a", "1", manual="20", ai="5"),
+                                  row("b", "1", manual="20", ai="5")])
+        self.assertTrue(result["all_merchants_stressed_net_positive"])
+
     def test_duplicate_pair_rejected(self):
         with self.assertRaises(ValueError):
             summarize_costs([row("a", "1"), row("a", "1")])

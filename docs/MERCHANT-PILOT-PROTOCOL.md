@@ -81,3 +81,7 @@ Pilot ID and window; consent and design; assignment counts by arm; completed/rej
 ### Merchant-level measurement coverage safeguard (2026-11-03)
 
 The multi-merchant pilot gate now requires the existing 80% time-measurement and complete-pair coverage threshold **within every assigned merchant**, not only in the pooled dataset. A small merchant with substantial missing observations must not disappear behind complete observations from larger merchants, even when that small merchant has one positive measured pair. The estimator reports `merchants_failing_measurement_coverage` and holds `multi_merchant_pilot_gate_pass` false pending review. This remains a descriptive labor feasibility screen, not a causal result or production authorization.
+
+### Zero-baseline labor regression diagnostic
+
+Percentage savings are undefined when the manual task takes zero active minutes. A complete pair with `manual=0` and `ai>0` nevertheless demonstrates strictly worse absolute labor for that assignment. The offline estimator now reports `zero_manual_ai_labor_loss_pairs` by merchant and `merchants_with_zero_manual_ai_labor_losses` overall; any such observation requires review and blocks `multi_merchant_pilot_gate_pass`. A `manual=0, ai=0` pair does not trigger this flag. This conservative diagnostic does not estimate a percentage, does not change the original pooled percentage gate, and does not establish causal or production readiness. Review whether the zero-minute baseline is a valid timed observation before interpreting it.

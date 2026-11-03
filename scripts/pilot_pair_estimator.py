@@ -52,7 +52,12 @@ def summarize(rows):
         # are assigned 0% savings. This prevents favorable complete-case-only
         # results from silently passing the narrow feasibility screen.
         missing = n - len(complete)
-        neutral_missing_median = statistics.median(percents + [0.0] * missing) if percents or missing else None
+        # Zero-baseline pairs have undefined percentage savings, but should
+        # not disappear from the scenario denominator. Treat as neutral
+        # here; positive AI labor is separately flagged as an absolute loss.
+        zero_baseline = len(complete) - len(eligible)
+        neutral_count = missing + zero_baseline
+        neutral_missing_median = statistics.median(percents + [0.0] * neutral_count) if percents or neutral_count else None
         coverage = ai_seen / n >= .8 and manual_seen / n >= .8 and len(complete) / n >= .8
         return {
             "assigned_pairs": n,

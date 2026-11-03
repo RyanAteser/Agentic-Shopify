@@ -57,6 +57,28 @@ class PilotPairEstimatorTests(unittest.TestCase):
         result = summarize(rows)
         self.assertTrue(result["feasibility_percent_gate_pass"])
 
+    def test_missing_pair_sensitivity_can_block_favorable_complete_cases(self):
+        rows = []
+        for i in range(20):
+            rows += pair("a", str(i), 8, 10)  # exactly 20% observed
+        for i in range(5):
+            rows += pair("a", f"missing-{i}", None, 10)
+        result = summarize(rows)
+        self.assertTrue(result["measurement_gate_pass"])
+        self.assertEqual(result["median_percent_saved"], 20)
+        self.assertEqual(result["missing_pair_zero_savings_scenario_median_percent"], 20)
+        self.assertTrue(result["feasibility_percent_gate_pass"])
+
+    def test_missing_pair_sensitivity_is_reported_not_claimed_as_bound(self):
+        rows = []
+        for i in range(20):
+            rows += pair("a", str(i), 5, 10)
+        for i in range(5):
+            rows += pair("a", f"missing-{i}", None, 10)
+        result = summarize(rows)
+        self.assertEqual(result["missing_pair_zero_savings_scenario_median_percent"], 50)
+        self.assertIn("not a statistical bound", result["missing_pair_zero_savings_scenario_assumption"])
+
     def test_duplicate_rejected(self):
         with self.assertRaises(ValueError):
             summarize(pair("a", "1", 5, 10) + pair("a", "1", 4, 10))

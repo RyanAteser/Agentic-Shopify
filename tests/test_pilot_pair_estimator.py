@@ -191,6 +191,32 @@ class PilotPairEstimatorTests(unittest.TestCase):
         self.assertEqual(result["merchants_below_replication_floor"], [])
         self.assertTrue(result["multi_merchant_pilot_gate_pass"])
 
+    def test_pooled_target_cannot_hide_low_savings_merchant(self):
+        rows = []
+        for i in range(20):
+            rows += pair("strong", str(i), 5, 10)
+        for i in range(5):
+            rows += pair("weak", str(i), 9, 10)
+        result = summarize(rows)
+        self.assertTrue(result["feasibility_percent_gate_pass"])
+        self.assertEqual(result["merchants_below_sensitivity_savings_target"], ["weak"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
+
+    def test_merchant_missingness_sensitivity_can_fail_despite_positive_observed_median(self):
+        rows = []
+        for i in range(20):
+            rows += pair("strong", str(i), 5, 10)
+        for i in range(8):
+            rows += pair("fragile", str(i), 5 if i < 4 else 9, 10)
+        for i in range(2):
+            rows += pair("fragile", f"missing-{i}", None, 10)
+        result = summarize(rows)
+        self.assertTrue(result["measurement_gate_pass"])
+        self.assertEqual(result["merchant_strata"]["fragile"]["median_percent_saved"], 30)
+        self.assertEqual(result["merchant_strata"]["fragile"]["missing_pair_zero_savings_scenario_median_percent"], 10)
+        self.assertEqual(result["merchants_below_sensitivity_savings_target"], ["fragile"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
+
     def test_duplicate_rejected(self):
         with self.assertRaises(ValueError):
             summarize(pair("a", "1", 5, 10) + pair("a", "1", 4, 10))

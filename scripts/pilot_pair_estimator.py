@@ -50,6 +50,7 @@ def summarize(rows):
             "complete_pairs": len(complete),
             "complete_pair_coverage": len(complete) / n,
             "zero_manual_pairs": len(complete) - len(eligible),
+            "zero_manual_ai_labor_loss_pairs": sum(p["manual"] == 0 and p["ai"] > 0 for p in complete),
             "percent_eligible_pairs": len(eligible),
             "median_minutes_saved": statistics.median(differences) if differences else None,
             "median_percent_saved": statistics.median(percents) if percents else None,
@@ -85,11 +86,18 @@ def summarize(rows):
         m for m, s in overall["merchant_strata"].items()
         if not s["measurement_gate_pass"]
     )
+    # Percentage estimates omit zero-baseline pairs. A positive AI duration
+    # against zero manual minutes is an observed absolute labor regression.
+    overall["merchants_with_zero_manual_ai_labor_losses"] = sorted(
+        m for m, s in overall["merchant_strata"].items()
+        if s["zero_manual_ai_labor_loss_pairs"] > 0
+    )
     overall["merchant_heterogeneity_review_required"] = (
         len(eligible_strata) < 2 or
         bool(overall["merchants_without_percent_observations"]) or
         bool(overall["merchants_failing_measurement_coverage"]) or
-        bool(overall["merchants_with_nonpositive_median_percent_saved"])
+        bool(overall["merchants_with_nonpositive_median_percent_saved"]) or
+        bool(overall["merchants_with_zero_manual_ai_labor_losses"])
     )
     # A favorable pooled estimate is not sufficient for a multi-merchant pilot.
     # Keep the original feasibility diagnostic for backwards compatibility.

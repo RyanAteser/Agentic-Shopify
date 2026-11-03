@@ -80,7 +80,7 @@ def summarize(rows):
         len(eligible_strata) < 2 or
         bool(overall["merchants_with_nonpositive_median_percent_saved"])
     )
-    overall["causal_or_revenue_claim_supported"] = False
+    # A favorable pooled estimate is not sufficient for a multi-merchant pilot.\n    # Keep the original feasibility diagnostic for backwards compatibility.\n    overall["multi_merchant_pilot_gate_pass"] = (\n        overall["feasibility_percent_gate_pass"] and\n        not overall["merchant_heterogeneity_review_required"]\n    )\n    overall["multi_merchant_pilot_gate_scope"] = (\n        "Descriptive labor feasibility only; not a launch, causal, quality, safety, or revenue gate"\n    )\n    overall["causal_or_revenue_claim_supported"] = False
     return overall
 
 

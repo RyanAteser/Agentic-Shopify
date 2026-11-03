@@ -1,0 +1,117 @@
+# Merchant pilot: falsifiable value and safety protocol
+
+**Status:** Proposed protocol only. No merchant consent, live install, publication, traffic, revenue or time-saving evidence is implied. This is a companion to [EDITORIAL-METRICS.md](EDITORIAL-METRICS.md) and [PRODUCTION-READINESS.md](PRODUCTION-READINESS.md), not a replacement for launch gates.
+
+## Decision being tested
+
+For a consenting merchant, does the human-reviewed Blog Agent produce *usable, factually accurate, merchant-specific drafts* at lower **total human labor plus provider cost** than a comparable manual workflow, without increasing unsafe claims or publication incidents? SEO clicks and revenue are secondary, observational outcomes until a controlled design and sufficient follow-up exist. Generating more drafts is not success.
+
+## Preregister before first eligible draft
+
+Record pilot ID, merchant consent timestamp and revocation contact, store's internal pseudonymous ID, product/category scope, dates, selected Shopify blog, manual-workflow comparator, AI model and prompt versions, n8n workflow revision, per-draft provider-cost method, and who independently reviews quality. Store no buyer/order data or API tokens in research exports. Assign eligible topics **before** seeing generated outputs. Include failures, rejected drafts and unfinished reviews in the analysis population.
+
+Recommended small feasibility pilot: 2–3 consenting merchants, at least 10 paired topic briefs per merchant (one AI-assisted and one manual draft per comparable brief, with order counterbalanced). This is **not powered** to detect traffic or revenue lift. Avoid publishing duplicate versions of a topic. Keep all drafts unpublished unless the merchant separately approves each exact payload. If paired production is infeasible, label the design observational and do not infer causality.
+
+## Assignment and analysis safeguards (preregistered)
+
+**Unit of assignment:** the eligible topic brief, not the generated draft. Construct topic pairs within each merchant using predeclared difficulty, product category, expected word count and research burden. Randomize one brief in each matched pair to AI-assisted drafting and the other to manual drafting *before* generation. Do not let one writer see the other arm's draft or supporting notes. Counterbalance author/reviewer and sequence where possible. A single topic drafted twice is a useful blinded quality comparison but **not** an independent paired labor-saving observation: shared research, practice and contamination can bias the second attempt. Report such duplicate-topic observations separately.
+
+**Intention-to-treat denominator:** every assigned brief stays in its original arm, including model failures, no-shows, rejected drafts and abandonment. Track time from initial research through factual verification, edits and final decision; capture the human time spent on unsuccessful work. Record the assignment timestamp, exclusions fixed before randomization, deviations and missingness by arm. Do not silently omit unresolved or failed tasks from the median. Where active time is unobserved, report bounds or sensitivity analyses rather than imputing zero or a favorable duration.
+
+**Primary comparison:** calculate each matched pair's AI-minus-manual active-minute difference, then report the median of differences alongside per-arm distributions, sample sizes and merchant-stratified results. For the separately stated **20% reduction gate**, preregister a dimensionless estimator: for each complete matched pair with strictly positive manual minutes, compute `100 × (manual_minutes − AI_minutes) / manual_minutes`, then take the median of those pair-level percentages. Report the paired absolute-minute median alongside it. A zero-minute manual task makes its percentage undefined and must remain in the assigned-brief accounting, with its exclusion from percentage calculations disclosed; do not add an arbitrary denominator or silently omit it from cost, quality or safety outcomes. Missing minutes in either arm make that pair's percentage unobserved, not zero. Report percent-gate coverage by merchant and arm, plus conservative sensitivity bounds for missing pairs. With very small or imbalanced merchant samples, show merchant-level estimates and do not let one merchant's topic volume silently dominate a claimed general result. The difference between two group medians is **not** the median paired difference. Predeclare a simple uncertainty interval (e.g. merchant-cluster bootstrap when enough merchants exist); with only 2–3 merchants, avoid precision claims or conventional significance tests. Separate reviewer blinding from authorship: reviewers can score redacted drafts blind, but authors necessarily know which tool they used. Report provider charges, hourly labor rate and cost per *assigned* brief, not only accepted drafts.
+
+**Publication and attribution:** only one merchant-approved final article per topic may be published through a separately authorized workflow. Record indexing eligibility, baseline demand, seasonal promotions and concurrent site edits before interpreting Search Console movement. This feasibility pilot cannot isolate search ranking, revenue or conversion effects.
+
+## Operational dry-run gate (development store, no publication)
+
+Run with test-only content, isolated credentials and a merchant-authorized development store. Capture timestamped sanitized request IDs, HTTP status and expected vs observed state; never log tokens or article body.
+
+| Scenario | Expected observable | Stop condition |
+| --- | --- | --- |
+| Fresh embedded install, reload and expired session | Correct shop-scoped authentication or explicit reauth; no blank iframe | Session loop, wrong-shop data or silent empty screen |
+| Two concurrent merchant sessions edit the same draft | One edit succeeds, stale version conflicts; current review invalidated | Lost update or publishable stale approval |
+| Wrong-shop request for draft, recommendation or GSC data | Denied with no cross-tenant read/write | Any tenant data disclosure |
+| Valid review then title/body/blog change | Publication blocked until new explicit review | Changed payload remains publishable |
+| Stale Publish browser tab after another review | Stale fingerprint rejected; no Shopify write | Any stale-tab publication |
+| n8n POST timeout after ambiguous acceptance | Uncertain state, no automatic resend/credit refund | Duplicate generation or unbounded retry |
+| Crash after outbox dispatch claim | Operator reconciliation required; no automatic replay | Blind duplicate delivery |
+| Forged Shopify webhook and replayed valid webhook | Forgery rejected; valid replay idempotent | Forgery accepted or cross-shop deletion |
+| Uninstall and data redaction | Tokens, merchant records and metrics erased as documented | Residual scoped data or late write |
+| Google consent revoked / missing property | Read-only metrics stop; no fabricated zeros | Continued access or fabricated results |
+
+Do not enable the n8n scheduler, live billing, store publishing, app-scope changes or deployment as part of this dry run. Record failed cases as actionable issues with minimal redacted reproductions.
+
+## Outcome capture per eligible topic
+
+Record: assignment ID; cohort/merchant; topic brief and difficulty band; assigned workflow; start/end of **active human work** (not elapsed queue time); factual-check minutes; editing minutes; external provider cost; completion/abandonment; reviewer blind score (1–5) for factual support, originality, product-link correctness, usefulness and brand fit; material-claim error count; merchant decision (accepted, edited, rejected, unresolved); and any privacy/publishing incident. For AI, include prompt/model version and generation failures. Do not replace missing minutes with zero. Distinguish self-report from timed observation.
+
+Primary endpoint: median total human active minutes **per eligible brief**, including time spent on rejected or failed drafts; report missing-time coverage and merchant-level paired differences. Cost endpoint: human minutes valued at a predeclared hourly rate plus measured provider charges per eligible brief. Quality guardrail: independently audited unsupported material claims per reviewed draft and severe errors per eligible brief. Secondary: usable-draft rate, time-to-decision (not active labor), return usage after 28 days, and opt-in GSC page/query observations after indexing. Do not interpret GSC position, clicks or CTR changes as causal effects without comparable controls, stable page eligibility and sufficient coverage.
+
+## Precommitted decision gates
+
+- **Safety gate:** any cross-tenant leak, unauthorized Shopify write, bypassed review, duplicate charge or privacy-erasure failure blocks pilot expansion immediately, regardless of average quality.
+- **Measurement gate:** if active-time coverage is below 80% of eligible briefs in either arm, do not claim time savings. Publish counts and missingness instead.
+- **Quality gate:** if an AI-assisted arm has any uncorrected high-severity product/medical/legal claim or demonstrably worse independent factual accuracy, do not recommend scaling content production.
+- **Feasibility signal (not proof of lift):** at least 20 paired eligible briefs overall, 80% time coverage, no safety incidents, non-inferior blinded quality, and a median paired reduction of at least 20% in active human minutes, with merchant-level results shown separately. Treat this as a *go to a larger controlled pilot*, not a validated merchant benefit.
+- **No-go / inconclusive:** sparse samples, high rejection, selective missingness, large merchant heterogeneity or poor review adoption require a revised workflow and another preregistered test, not cherry-picking published successes.
+
+## Offline paired accounting implementation
+
+Use `python scripts/pilot_pair_estimator.py path/to/consented-pilot.csv` with columns `merchant_id,pair_id,arm,active_minutes`; each matched pair requires one `ai` and one `manual` row. Empty minutes mean missing, **not zero**. CI also runs this test suite explicitly (the existing `test_merchant*.py` glob does not include it). Run `python -m unittest discover -s tests -p 'test_pilot_pair_estimator.py' -v` to exercise zero denominators, incomplete pairs, duplicate assignments, nonfinite durations and merchant stratification.
+
+The estimator returns paired absolute-minute and percentage medians, coverage by arm, merchant-specific estimates and a narrow percentage/measurement gate requiring at least 20 positive-denominator complete pairs and at least 80% complete-pair coverage, in addition to 80% coverage in each arm. The estimator additionally reports a **missing-pair zero-savings scenario**: it assigns 0% savings to each incomplete pair when calculating an alternative median and requires this scenario to meet the 20% feasibility screen. This is an explicit stress-test assumption, **not a mathematical lower bound**: when manual time is missing, the actual percentage may be arbitrarily negative. A passing scenario cannot establish robustness to missing-not-at-random observations. Zero-manual complete pairs remain excluded from percentage estimates and are disclosed separately.
+
+The report also exposes `merchant_count`, `merchants_with_percent_observations`, the unweighted median of merchant-specific median percentage savings, and merchant IDs with nonpositive median savings. `merchant_heterogeneity_review_required` is true when fewer than two merchants have percentage observations, any assigned merchant lacks usable percentage observations, or any observed merchant has nonpositive median savings. This is a descriptive escalation flag, **not** a powered heterogeneity test or a replacement for the precommitted safety and quality gates. A pooled pass with this flag requires further merchant-level replication before expansion. The explicit `multi_merchant_pilot_gate_pass` field is false unless the narrow pooled percentage feasibility gate passes **and** the heterogeneity review flag is clear. This does not validate causal effects or replace safety, editorial quality, cost, consent or retention gates.
+
+It deliberately **does not** certify the full pilot: independent factual quality, safety incidents, minimum sample, consent, missingness sensitivity, provider costs and merchant adoption still require separate review. A passing percentage gate alone is not authorization to scale, publish or claim savings. Use only pseudonymous merchant IDs; never export tokens, customer data or article text.
+
+## Reporting template
+
+Pilot ID and window; consent and design; assignment counts by arm; completed/rejected/unresolved counts; missing-time coverage; median and distribution of active minutes; provider cost per eligible brief; blinded quality scores and severity; merchant-level differences; all incidents and reconciliations; GSC availability and indexing caveats; deviations from protocol; next decision. Explicitly state **no observed revenue/conversion/SEO lift** unless separately verified.
+
+## Sources and constraints
+
+- [Google Search Central: helpful, reliable, people-first content](https://developers.google.com/search/docs/fundamentals/creating-helpful-content). AI-generated volume is not a quality outcome.
+- [Google Search Console performance report documentation](https://support.google.com/webmasters/answer/7576553). Search observations are subject to aggregation and filtering.
+- [Shopify app authentication](https://shopify.dev/docs/apps/build/authentication-authorization) and [privacy compliance](https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance).
+- [n8n Sustainable Use License](https://docs.n8n.io/sustainable-use-license/). Obtain written commercial licensing clearance for the intended merchant-configurable offering before activation.
+
+**Boundary:** This document does not authorize store access, publishing, sending messages, purchases, deployment, billing or any external integration. Merchant approval and the release checklist remain independent requirements.
+
+### Merchant-level measurement coverage safeguard (2026-11-03)
+
+The multi-merchant pilot gate now requires the existing 80% time-measurement and complete-pair coverage threshold **within every assigned merchant**, not only in the pooled dataset. A small merchant with substantial missing observations must not disappear behind complete observations from larger merchants, even when that small merchant has one positive measured pair. The estimator reports `merchants_failing_measurement_coverage` and holds `multi_merchant_pilot_gate_pass` false pending review. This remains a descriptive labor feasibility screen, not a causal result or production authorization.
+
+### Zero-baseline labor regression diagnostic
+
+Percentage savings are undefined when the manual task takes zero active minutes. A complete pair with `manual=0` and `ai>0` nevertheless demonstrates strictly worse absolute labor for that assignment. The offline estimator now reports `zero_manual_ai_labor_loss_pairs` by merchant and `merchants_with_zero_manual_ai_labor_losses` overall; any such observation requires review and blocks `multi_merchant_pilot_gate_pass`. A `manual=0, ai=0` pair does not trigger this flag. This conservative diagnostic does not estimate a percentage, does not change the original pooled percentage gate, and does not establish causal or production readiness. Review whether the zero-minute baseline is a valid timed observation before interpreting it.
+
+### Exploratory merchant replication floor (2026-11-03)
+
+The offline estimator now flags any assigned merchant with fewer than five complete, positive-manual-baseline pairs (`merchants_below_replication_floor`) and blocks the *multi-merchant* feasibility screen. Five is an operational minimum to avoid treating a single favorable task as merchant replication, **not** a statistical power calculation, evidence of causal lift, or a launch threshold. The pooled 20-pair minimum remains unchanged. Prospective merchant pilots must still satisfy quality, safety, cost, consent and external validation gates. No merchant observations were used to choose this heuristic.
+
+### Merchant-specific savings sensitivity screen (2026-11-03)
+
+A pooled 20% median savings result can hide a merchant with only 10% savings, even if every merchant has adequate observation coverage and at least five eligible pairs. The multi-merchant feasibility screen now requires each assigned merchant's `missing_pair_zero_savings_scenario_median_percent` to reach 20%, and reports failing merchants under `merchants_below_sensitivity_savings_target`. This also catches an individual merchant whose observed median looks favorable but drops below 20% after assigning zero savings to incomplete pairs. This scenario is **not** a statistical lower bound, and actual missing outcomes may be worse. The original pooled feasibility field remains unchanged for backward compatibility. The new condition is descriptive and cannot authorize publication, merchant rollout, or claims of causal savings or revenue growth.
+\n### Net observed labor safeguard (2026-11-03)\n\nA positive median percentage can hide a rare, extremely costly AI-assisted task. The estimator now reports `net_observed_minutes_saved` and `net_observed_labor_regression` for pooled and merchant-specific complete pairs. Any merchant with negative net observed minutes is listed in `merchants_with_net_observed_labor_regression` and blocks the multi-merchant feasibility screen. This is an **observed-sample sum**, not an estimate for missing observations: incomplete pairs are excluded, not assigned zero savings. A nonnegative sum cannot establish that the workflow saves total labor or money in production. This screen supplements, but does not replace, quality, provider-cost, safety, and consent gates.\n
+
+### Zero-baseline labor accounting (November 3, 2026)
+
+The offline paired percentage estimator excludes zero-manual-minute tasks from
+percentage ratios because division by zero is undefined. Its **descriptive
+zero-savings scenario** now assigns these tasks 0% savings, alongside incomplete
+pairs, instead of silently omitting them from the sensitivity denominator.
+A zero-manual/positive-AI task additionally triggers the existing absolute labor
+loss review. This prevents a large collection of zero-baseline tasks from
+disappearing while a small favorable subset drives a positive median.
+
+This is an operational screening convention, **not** a mathematical bound or
+a causal estimate. Zero-zero tasks can represent genuinely unnecessary work,
+instrumentation errors, or unsuitable task definitions. Investigate them before
+any pilot decision. The estimator's 20% threshold and other gates do not
+establish merchant growth or production readiness.
+
+
+### Net labor break-even safeguard (November 3, 2026)
+
+The multi-merchant feasibility screen now requires **strictly positive observed net human minutes saved for every merchant**, not merely a positive median percentage. A merchant with twenty five-minute gains and one 100-minute loss has zero net benefit and must not pass. This check is descriptive, excludes incomplete pair durations, and does not account for provider costs, output quality, or statistical uncertainty. A passing result is **not** evidence of profitability or launch readiness. Tests include a break-even case and a positive control.

@@ -12,6 +12,16 @@ Record pilot ID, merchant consent timestamp and revocation contact, store's inte
 
 Recommended small feasibility pilot: 2–3 consenting merchants, at least 10 paired topic briefs per merchant (one AI-assisted and one manual draft per comparable brief, with order counterbalanced). This is **not powered** to detect traffic or revenue lift. Avoid publishing duplicate versions of a topic. Keep all drafts unpublished unless the merchant separately approves each exact payload. If paired production is infeasible, label the design observational and do not infer causality.
 
+## Assignment and analysis safeguards (preregistered)
+
+**Unit of assignment:** the eligible topic brief, not the generated draft. Construct topic pairs within each merchant using predeclared difficulty, product category, expected word count and research burden. Randomize one brief in each matched pair to AI-assisted drafting and the other to manual drafting *before* generation. Do not let one writer see the other arm's draft or supporting notes. Counterbalance author/reviewer and sequence where possible. A single topic drafted twice is a useful blinded quality comparison but **not** an independent paired labor-saving observation: shared research, practice and contamination can bias the second attempt. Report such duplicate-topic observations separately.
+
+**Intention-to-treat denominator:** every assigned brief stays in its original arm, including model failures, no-shows, rejected drafts and abandonment. Track time from initial research through factual verification, edits and final decision; capture the human time spent on unsuccessful work. Record the assignment timestamp, exclusions fixed before randomization, deviations and missingness by arm. Do not silently omit unresolved or failed tasks from the median. Where active time is unobserved, report bounds or sensitivity analyses rather than imputing zero or a favorable duration.
+
+**Primary comparison:** calculate each matched pair's AI-minus-manual active-minute difference, then report the median of differences alongside per-arm distributions, sample sizes and merchant-stratified results. The difference between two group medians is **not** the median paired difference. Predeclare a simple uncertainty interval (e.g. merchant-cluster bootstrap when enough merchants exist); with only 2–3 merchants, avoid precision claims or conventional significance tests. Separate reviewer blinding from authorship: reviewers can score redacted drafts blind, but authors necessarily know which tool they used. Report provider charges, hourly labor rate and cost per *assigned* brief, not only accepted drafts.
+
+**Publication and attribution:** only one merchant-approved final article per topic may be published through a separately authorized workflow. Record indexing eligibility, baseline demand, seasonal promotions and concurrent site edits before interpreting Search Console movement. This feasibility pilot cannot isolate search ranking, revenue or conversion effects.
+
 ## Operational dry-run gate (development store, no publication)
 
 Run with test-only content, isolated credentials and a merchant-authorized development store. Capture timestamped sanitized request IDs, HTTP status and expected vs observed state; never log tokens or article body.

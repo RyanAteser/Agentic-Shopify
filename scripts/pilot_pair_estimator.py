@@ -53,6 +53,8 @@ def summarize(rows):
             "zero_manual_ai_labor_loss_pairs": sum(p["manual"] == 0 and p["ai"] > 0 for p in complete),
             "percent_eligible_pairs": len(eligible),
             "median_minutes_saved": statistics.median(differences) if differences else None,
+            "net_observed_minutes_saved": sum(differences),
+            "net_observed_labor_regression": sum(differences) < 0,
             "median_percent_saved": statistics.median(percents) if percents else None,
             "missing_pair_zero_savings_scenario_median_percent": neutral_missing_median,
             "missing_pair_zero_savings_scenario_assumption": "Each incomplete pair assigned 0% savings; not a statistical bound",
@@ -102,6 +104,12 @@ def summarize(rows):
     )
     # Percentage estimates omit zero-baseline pairs. A positive AI duration
     # against zero manual minutes is an observed absolute labor regression.
+    # A positive median can conceal one catastrophic, high-duration loss.
+    # Observed net labor is descriptive and excludes missing durations.
+    overall["merchants_with_net_observed_labor_regression"] = sorted(
+        m for m, s in overall["merchant_strata"].items()
+        if s["net_observed_labor_regression"]
+    )
     overall["merchants_with_zero_manual_ai_labor_losses"] = sorted(
         m for m, s in overall["merchant_strata"].items()
         if s["zero_manual_ai_labor_loss_pairs"] > 0
@@ -113,7 +121,8 @@ def summarize(rows):
         bool(overall["merchants_below_sensitivity_savings_target"]) or
         bool(overall["merchants_failing_measurement_coverage"]) or
         bool(overall["merchants_with_nonpositive_median_percent_saved"]) or
-        bool(overall["merchants_with_zero_manual_ai_labor_losses"])
+        bool(overall["merchants_with_zero_manual_ai_labor_losses"]) or
+        bool(overall["merchants_with_net_observed_labor_regression"])
     )
     # A favorable pooled estimate is not sufficient for a multi-merchant pilot.
     # Keep the original feasibility diagnostic for backwards compatibility.

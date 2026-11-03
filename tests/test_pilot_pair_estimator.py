@@ -109,6 +109,28 @@ class PilotPairEstimatorTests(unittest.TestCase):
         self.assertFalse(result["merchant_heterogeneity_review_required"])
         self.assertTrue(result["multi_merchant_pilot_gate_pass"])
 
+    def test_unmeasured_merchant_cannot_disappear_from_multi_merchant_gate(self):
+        rows = []
+        for merchant in ("a", "b"):
+            for i in range(20):
+                rows += pair(merchant, str(i), 5, 10)
+        rows += pair("c", "missing", None, None)
+        result = summarize(rows)
+        self.assertTrue(result["feasibility_percent_gate_pass"])
+        self.assertEqual(result["merchants_without_percent_observations"], ["c"])
+        self.assertTrue(result["merchant_heterogeneity_review_required"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
+
+    def test_zero_manual_merchant_requires_review(self):
+        rows = []
+        for merchant in ("a", "b"):
+            for i in range(20):
+                rows += pair(merchant, str(i), 5, 10)
+        rows += pair("c", "zero", 0, 0)
+        result = summarize(rows)
+        self.assertEqual(result["merchants_without_percent_observations"], ["c"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
+
     def test_duplicate_rejected(self):
         with self.assertRaises(ValueError):
             summarize(pair("a", "1", 5, 10) + pair("a", "1", 4, 10))

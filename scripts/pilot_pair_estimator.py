@@ -36,7 +36,15 @@ def summarize(rows):
         complete = [p for p in group if p["ai"] is not None and p["manual"] is not None]
         eligible = [p for p in complete if p["manual"] > 0]
         differences = [p["manual"] - p["ai"] for p in complete]
-        percents = [100 * (p["manual"] - p["ai"]) / p["manual"] for p in eligible]
+        percents = [100 * ((p["manual"] - p["ai"]) / p["manual"]) for p in eligible]
+        # Individually finite durations can still overflow aggregate totals or
+        # percentage ratios (especially with tiny positive manual baselines).
+        # Never emit Infinity/NaN as apparently meaningful merchant evidence.
+        if any(not math.isfinite(v) for v in differences + percents):
+            raise ValueError("derived labor savings must be finite")
+        net_minutes = math.fsum(differences)
+        if not math.isfinite(net_minutes):
+            raise ValueError("aggregate labor savings must be finite")
         # Scenario analysis, NOT a mathematical bound: missing pair percentages
         # are assigned 0% savings. This prevents favorable complete-case-only
         # results from silently passing the narrow feasibility screen.
@@ -53,8 +61,8 @@ def summarize(rows):
             "zero_manual_ai_labor_loss_pairs": sum(p["manual"] == 0 and p["ai"] > 0 for p in complete),
             "percent_eligible_pairs": len(eligible),
             "median_minutes_saved": statistics.median(differences) if differences else None,
-            "net_observed_minutes_saved": sum(differences),
-            "net_observed_labor_regression": sum(differences) < 0,
+            "net_observed_minutes_saved": net_minutes,
+            "net_observed_labor_regression": net_minutes < 0,
             "median_percent_saved": statistics.median(percents) if percents else None,
             "missing_pair_zero_savings_scenario_median_percent": neutral_missing_median,
             "missing_pair_zero_savings_scenario_assumption": "Each incomplete pair assigned 0% savings; not a statistical bound",

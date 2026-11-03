@@ -37,18 +37,19 @@ def summarize(rows):
         eligible = [p for p in complete if p["manual"] > 0]
         differences = [p["manual"] - p["ai"] for p in complete]
         percents = [100 * (p["manual"] - p["ai"]) / p["manual"] for p in eligible]
-        coverage = ai_seen / n >= .8 and manual_seen / n >= .8
+        coverage = ai_seen / n >= .8 and manual_seen / n >= .8 and len(complete) / n >= .8
         return {
             "assigned_pairs": n,
             "ai_time_coverage": ai_seen / n,
             "manual_time_coverage": manual_seen / n,
             "complete_pairs": len(complete),
+            "complete_pair_coverage": len(complete) / n,
             "zero_manual_pairs": len(complete) - len(eligible),
             "percent_eligible_pairs": len(eligible),
             "median_minutes_saved": statistics.median(differences) if differences else None,
             "median_percent_saved": statistics.median(percents) if percents else None,
             "measurement_gate_pass": coverage,
-            "feasibility_percent_gate_pass": bool(eligible) and coverage and statistics.median(percents) >= 20,
+            "feasibility_percent_gate_pass": len(eligible) >= 20 and coverage and statistics.median(percents) >= 20,
         }
 
     overall = stats([p for group in by_merchant.values() for p in group])

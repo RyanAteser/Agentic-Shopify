@@ -42,7 +42,10 @@ def summarize(rows):
         # Never emit Infinity/NaN as apparently meaningful merchant evidence.
         if any(not math.isfinite(v) for v in differences + percents):
             raise ValueError("derived labor savings must be finite")
-        net_minutes = math.fsum(differences)
+        try:
+            net_minutes = math.fsum(differences)
+        except OverflowError as exc:
+            raise ValueError("aggregate labor savings must be finite") from exc
         if not math.isfinite(net_minutes):
             raise ValueError("aggregate labor savings must be finite")
         # Scenario analysis, NOT a mathematical bound: missing pair percentages

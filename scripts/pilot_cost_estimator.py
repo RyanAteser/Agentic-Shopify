@@ -113,4 +113,8 @@ if __name__ == "__main__":
         if not isinstance(fixed, dict):
             raise ValueError("fixed costs JSON must map merchant IDs to USD amounts")
     with open(sys.argv[1], newline="", encoding="utf-8-sig") as stream:
-        print(json.dumps(summarize_costs(csv.DictReader(stream), fixed), indent=2))
+        reader = csv.DictReader(stream)
+        expected = {"merchant_id", "pair_id", "manual_minutes", "ai_minutes", "ai_provider_usd", "hourly_labor_usd"}
+        if reader.fieldnames is None or len(reader.fieldnames) != len(expected) or set(reader.fieldnames) != expected:
+            raise ValueError("cost CSV header must contain exactly six unique required columns")
+        print(json.dumps(summarize_costs(reader, fixed), indent=2))

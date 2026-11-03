@@ -147,6 +147,31 @@ class PilotPairEstimatorTests(unittest.TestCase):
         self.assertEqual(result["merchants_without_percent_observations"], ["c"])
         self.assertFalse(result["multi_merchant_pilot_gate_pass"])
 
+    def test_zero_baseline_labor_loss_cannot_hide_behind_positive_percentages(self):
+        rows = []
+        for merchant in ("a", "b"):
+            for i in range(20):
+                rows += pair(merchant, str(i), 5, 10)
+        # Merchant b's additional task has zero manual time but positive AI time.
+        # Percentage median omits it, so the absolute regression must be visible.
+        rows += pair("b", "zero-baseline-loss", 4, 0)
+        result = summarize(rows)
+        self.assertTrue(result["feasibility_percent_gate_pass"])
+        self.assertEqual(result["merchant_strata"]["b"]["zero_manual_ai_labor_loss_pairs"], 1)
+        self.assertEqual(result["merchants_with_zero_manual_ai_labor_losses"], ["b"])
+        self.assertTrue(result["merchant_heterogeneity_review_required"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
+
+    def test_zero_baseline_without_ai_labor_does_not_trigger_loss_flag(self):
+        rows = []
+        for merchant in ("a", "b"):
+            for i in range(20):
+                rows += pair(merchant, str(i), 5, 10)
+        rows += pair("b", "zero-both", 0, 0)
+        result = summarize(rows)
+        self.assertEqual(result["merchants_with_zero_manual_ai_labor_losses"], [])
+        self.assertTrue(result["multi_merchant_pilot_gate_pass"])
+
     def test_duplicate_rejected(self):
         with self.assertRaises(ValueError):
             summarize(pair("a", "1", 5, 10) + pair("a", "1", 4, 10))

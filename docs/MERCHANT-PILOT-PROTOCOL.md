@@ -85,3 +85,7 @@ The multi-merchant pilot gate now requires the existing 80% time-measurement and
 ### Zero-baseline labor regression diagnostic
 
 Percentage savings are undefined when the manual task takes zero active minutes. A complete pair with `manual=0` and `ai>0` nevertheless demonstrates strictly worse absolute labor for that assignment. The offline estimator now reports `zero_manual_ai_labor_loss_pairs` by merchant and `merchants_with_zero_manual_ai_labor_losses` overall; any such observation requires review and blocks `multi_merchant_pilot_gate_pass`. A `manual=0, ai=0` pair does not trigger this flag. This conservative diagnostic does not estimate a percentage, does not change the original pooled percentage gate, and does not establish causal or production readiness. Review whether the zero-minute baseline is a valid timed observation before interpreting it.
+
+### Exploratory merchant replication floor (2026-11-03)
+
+The offline estimator now flags any assigned merchant with fewer than five complete, positive-manual-baseline pairs (`merchants_below_replication_floor`) and blocks the *multi-merchant* feasibility screen. Five is an operational minimum to avoid treating a single favorable task as merchant replication, **not** a statistical power calculation, evidence of causal lift, or a launch threshold. The pooled 20-pair minimum remains unchanged. Prospective merchant pilots must still satisfy quality, safety, cost, consent and external validation gates. No merchant observations were used to choose this heuristic.

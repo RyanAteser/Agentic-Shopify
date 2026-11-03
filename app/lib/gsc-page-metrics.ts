@@ -41,6 +41,29 @@ export function selectGscProductUrls(
 }
 
 export function gscPageQuery(url: string, startDate: string, endDate: string) {
+  // This function is also a boundary for future callers: never allow an
+  // unbounded GSC request or an arbitrary URL supplied by a browser.
+  let parsed: URL;
+  try { parsed = new URL(url); }
+  catch { throw new Error("Invalid GSC product URL"); }
+  if (parsed.protocol !== "https:" || !parsed.hostname.includes(".") ||
+      parsed.username || parsed.password || parsed.port || parsed.search ||
+      parsed.hash || !/^\\/products\\/[a-z0-9-]+\\/?$/.test(parsed.pathname) ||
+      parsed.href !== url) {
+    throw new Error("Invalid GSC product URL");
+  }
+  const parseDay = (value: string): number => {
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) throw new Error("Invalid GSC date");
+    const day = Date.parse(value + "T00:00:00.000Z");
+    if (!Number.isFinite(day) || new Date(day).toISOString().slice(0, 10) !== value) {
+      throw new Error("Invalid GSC date");
+    }
+    return day;
+  };
+  const from = parseDay(startDate), to = parseDay(endDate);
+  if (to < from || (to - from) / 86400000 >= MAX_GSC_DATE_ROWS) {
+    throw new Error("GSC page query exceeds bounded date window");
+  }
   return {
     startDate, endDate,
     dimensions: ["date", "page"],

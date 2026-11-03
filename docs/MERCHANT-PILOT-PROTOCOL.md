@@ -55,6 +55,12 @@ Primary endpoint: median total human active minutes **per eligible brief**, incl
 - **Feasibility signal (not proof of lift):** at least 20 paired eligible briefs overall, 80% time coverage, no safety incidents, non-inferior blinded quality, and a median paired reduction of at least 20% in active human minutes, with merchant-level results shown separately. Treat this as a *go to a larger controlled pilot*, not a validated merchant benefit.
 - **No-go / inconclusive:** sparse samples, high rejection, selective missingness, large merchant heterogeneity or poor review adoption require a revised workflow and another preregistered test, not cherry-picking published successes.
 
+## Offline paired accounting implementation
+
+Use `python scripts/pilot_pair_estimator.py path/to/consented-pilot.csv` with columns `merchant_id,pair_id,arm,active_minutes`; each matched pair requires one `ai` and one `manual` row. Empty minutes mean missing, **not zero**. Run `python -m unittest discover -s tests -p 'test_pilot_pair_estimator.py' -v` to exercise zero denominators, incomplete pairs, duplicate assignments, nonfinite durations and merchant stratification.
+
+The estimator returns paired absolute-minute and percentage medians, coverage by arm, merchant-specific estimates and a narrow percentage/measurement gate. It deliberately **does not** certify the full pilot: independent factual quality, safety incidents, minimum sample, consent, missingness sensitivity, provider costs and merchant adoption still require separate review. A passing percentage gate alone is not authorization to scale, publish or claim savings. Use only pseudonymous merchant IDs; never export tokens, customer data or article text.
+
 ## Reporting template
 
 Pilot ID and window; consent and design; assignment counts by arm; completed/rejected/unresolved counts; missing-time coverage; median and distribution of active minutes; provider cost per eligible brief; blinded quality scores and severity; merchant-level differences; all incidents and reconciliations; GSC availability and indexing caveats; deviations from protocol; next decision. Explicitly state **no observed revenue/conversion/SEO lift** unless separately verified.

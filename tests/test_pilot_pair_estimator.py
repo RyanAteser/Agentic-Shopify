@@ -67,7 +67,7 @@ class PilotPairEstimatorTests(unittest.TestCase):
         self.assertTrue(result["measurement_gate_pass"])
         self.assertEqual(result["median_percent_saved"], 30)
         self.assertEqual(result["missing_pair_zero_savings_scenario_median_percent"], 10)
-        self.assertTrue(result["feasibility_percent_gate_pass"])
+        self.assertFalse(result["feasibility_percent_gate_pass"])
 
     def test_missing_pair_sensitivity_is_reported_not_claimed_as_bound(self):
         rows = []

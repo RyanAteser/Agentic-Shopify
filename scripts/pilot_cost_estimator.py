@@ -62,6 +62,10 @@ def summarize_costs(rows, fixed_costs_usd=None):
             raise ValueError("aggregate cost must be finite") from exc
         if not all(math.isfinite(v) for v in (total, stressed_total)):
             raise ValueError("aggregate cost must be finite")
+        net_fixed = None if fixed_cost is None else total - fixed_cost
+        stressed_fixed = None if fixed_cost is None else stressed_total - fixed_cost
+        if not all(math.isfinite(v) for v in (net_fixed, stressed_fixed) if v is not None):
+            raise ValueError("fixed-cost adjusted total must be finite")
         return {
             "assigned_pairs": len(items),
             "complete_cost_pairs": len(complete),
@@ -72,8 +76,8 @@ def summarize_costs(rows, fixed_costs_usd=None):
             "stressed_net_positive": stressed_total > 0,
             "cost_evidence_sufficient": len(complete) == len(items),
             "fixed_cost_usd": fixed_cost,
-            "net_after_fixed_usd": None if fixed_cost is None else total - fixed_cost,
-            "stressed_net_after_fixed_usd": None if fixed_cost is None else stressed_total - fixed_cost,
+            "net_after_fixed_usd": net_fixed,
+            "stressed_net_after_fixed_usd": stressed_fixed,
         }
 
     strata = {merchant: calculate(items, None if fixed_costs_usd is None else fixed_costs_usd[merchant])

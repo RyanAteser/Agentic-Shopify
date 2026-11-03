@@ -45,6 +45,26 @@ class PilotCostTests(unittest.TestCase):
                                   row("b", "1", manual="20", ai="5")])
         self.assertTrue(result["all_merchants_stressed_net_positive"])
 
+    def test_fixed_overhead_reverses_variable_savings(self):
+        result = summarize_costs([row("a", "1", manual="20", ai="5")], {"a": 20})
+        self.assertTrue(result["all_merchants_stressed_net_positive"])
+        self.assertFalse(result["all_merchants_net_after_fixed_positive"])
+        self.assertLess(result["merchant_strata"]["a"]["net_after_fixed_usd"], 0)
+
+    def test_no_fixed_cost_evidence_does_not_pass_fixed_gate(self):
+        result = summarize_costs([row("a", "1", manual="20", ai="5")])
+        self.assertIsNone(result["merchant_strata"]["a"]["net_after_fixed_usd"])
+        self.assertFalse(result["all_merchants_net_after_fixed_positive"])
+
+    def test_fixed_costs_require_exact_merchant_coverage(self):
+        for costs in ({}, {"a": 0, "b": 0}, {"a": -1}, {"a": float("inf")}, {"a": True}):
+            with self.subTest(costs=costs), self.assertRaises(ValueError):
+                summarize_costs([row("a", "1")], costs)
+
+    def test_zero_fixed_cost_still_requires_complete_pairs(self):
+        result = summarize_costs([row("a", "1"), row("a", "2", provider="")], {"a": 0})
+        self.assertFalse(result["all_merchants_net_after_fixed_positive"])
+
     def test_duplicate_pair_rejected(self):
         with self.assertRaises(ValueError):
             summarize_costs([row("a", "1"), row("a", "1")])

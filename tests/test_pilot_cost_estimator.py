@@ -65,6 +65,30 @@ class PilotCostTests(unittest.TestCase):
         result = summarize_costs([row("a", "1"), row("a", "2", provider="")], {"a": 0})
         self.assertFalse(result["all_merchants_net_after_fixed_positive"])
 
+    def test_schema_drift_and_extra_csv_fields_fail_closed(self):
+        valid = row("a", "1")
+        for malformed in (
+            {**valid, "ai_provder_usd": "0.1"},
+            {key: value for key, value in valid.items() if key != "ai_provider_usd"},
+            {**valid, None: ["unexpected", "column"]},
+            {**valid, "ai_minutes": None},
+        ):
+            with self.subTest(malformed=malformed), self.assertRaises(ValueError):
+                summarize_costs([malformed])
+
+    def test_duplicate_csv_header_is_rejected(self):
+        import subprocess
+        import sys
+        import tempfile
+        from pathlib import Path
+        script = Path(__file__).resolve().parents[1] / "scripts" / "pilot_cost_estimator.py"
+        with tempfile.TemporaryDirectory() as directory:
+            csv_path = Path(directory) / "pilot.csv"
+            csv_path.write_text("merchant_id,pair_id,manual_minutes,ai_minutes,ai_provider_usd,ai_provider_usd\\na,1,10,5,0.1,0.1\\n", encoding="utf-8")
+            result = subprocess.run([sys.executable, str(script), str(csv_path)], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unique required columns", result.stderr)
+
     def test_duplicate_pair_rejected(self):
         with self.assertRaises(ValueError):
             summarize_costs([row("a", "1"), row("a", "1")])

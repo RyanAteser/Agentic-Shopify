@@ -24,6 +24,8 @@ jobs:
       - run: npm test
       - name: Verify offline merchant pilot accounting and frozen-manifest reconciliation
         run: python3 -m unittest discover -s tests -p 'test_merchant*.py' -v
+      - name: Verify paired pilot estimator regressions
+        run: python3 -m unittest discover -s tests -p 'test_pilot_pair_estimator.py' -v
       - run: npm run build
   postgres:
     runs-on: ubuntu-latest

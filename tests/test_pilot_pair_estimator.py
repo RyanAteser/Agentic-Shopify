@@ -60,13 +60,13 @@ class PilotPairEstimatorTests(unittest.TestCase):
     def test_missing_pair_sensitivity_can_block_favorable_complete_cases(self):
         rows = []
         for i in range(20):
-            rows += pair("a", str(i), 8, 10)  # exactly 20% observed
+            rows += pair("a", str(i), 5 if i < 10 else 9, 10)
         for i in range(5):
             rows += pair("a", f"missing-{i}", None, 10)
         result = summarize(rows)
         self.assertTrue(result["measurement_gate_pass"])
-        self.assertEqual(result["median_percent_saved"], 20)
-        self.assertEqual(result["missing_pair_zero_savings_scenario_median_percent"], 20)
+        self.assertEqual(result["median_percent_saved"], 30)
+        self.assertEqual(result["missing_pair_zero_savings_scenario_median_percent"], 10)
         self.assertTrue(result["feasibility_percent_gate_pass"])
 
     def test_missing_pair_sensitivity_is_reported_not_claimed_as_bound(self):

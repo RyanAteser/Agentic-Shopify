@@ -239,6 +239,25 @@ class PilotPairEstimatorTests(unittest.TestCase):
         self.assertEqual(result["complete_pairs"], 1)
         self.assertFalse(result["measurement_gate_pass"])
 
+    def test_zero_zero_pairs_cannot_disappear_from_sensitivity_denominator(self):
+        rows = []
+        for merchant in ("a", "b"):
+            for i in range(20):
+                rows += pair(merchant, str(i), 5, 10)
+            for i in range(30):
+                rows += pair(merchant, f"zero-{i}", 0, 0)
+        result = summarize(rows)
+        self.assertEqual(result["median_percent_saved"], 50)
+        self.assertEqual(result["missing_pair_zero_savings_scenario_median_percent"], 0)
+        self.assertFalse(result["feasibility_percent_gate_pass"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
+
+    def test_zero_baseline_pair_counted_neutral_without_false_labor_loss(self):
+        rows = pair("a", "saved", 5, 10) + pair("a", "zero", 0, 0)
+        result = summarize(rows)
+        self.assertEqual(result["missing_pair_zero_savings_scenario_median_percent"], 25)
+        self.assertEqual(result["zero_manual_ai_labor_loss_pairs"], 0)
+
     def test_duplicate_rejected(self):
         with self.assertRaises(ValueError):
             summarize(pair("a", "1", 5, 10) + pair("a", "1", 4, 10))

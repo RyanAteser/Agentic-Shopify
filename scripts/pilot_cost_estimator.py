@@ -10,7 +10,10 @@ def summarize_costs(rows, fixed_costs_usd=None):
     """One record per matched topic pair; amounts are USD and minutes."""
     groups = defaultdict(list)
     seen = set()
+    required_columns = {"merchant_id", "pair_id", "manual_minutes", "ai_minutes", "ai_provider_usd", "hourly_labor_usd"}
     for row in rows:
+        if not isinstance(row, dict) or set(row) != required_columns or any(not isinstance(value, str) for value in row.values()):
+            raise ValueError("cost row must contain exactly the six required string columns; reject malformed CSV or schema drift")
         merchant = row["merchant_id"].strip()
         pair = row["pair_id"].strip()
         if not merchant or not pair or (merchant, pair) in seen:

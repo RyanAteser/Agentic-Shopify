@@ -94,3 +94,19 @@ The offline estimator now flags any assigned merchant with fewer than five compl
 
 A pooled 20% median savings result can hide a merchant with only 10% savings, even if every merchant has adequate observation coverage and at least five eligible pairs. The multi-merchant feasibility screen now requires each assigned merchant's `missing_pair_zero_savings_scenario_median_percent` to reach 20%, and reports failing merchants under `merchants_below_sensitivity_savings_target`. This also catches an individual merchant whose observed median looks favorable but drops below 20% after assigning zero savings to incomplete pairs. This scenario is **not** a statistical lower bound, and actual missing outcomes may be worse. The original pooled feasibility field remains unchanged for backward compatibility. The new condition is descriptive and cannot authorize publication, merchant rollout, or claims of causal savings or revenue growth.
 \n### Net observed labor safeguard (2026-11-03)\n\nA positive median percentage can hide a rare, extremely costly AI-assisted task. The estimator now reports `net_observed_minutes_saved` and `net_observed_labor_regression` for pooled and merchant-specific complete pairs. Any merchant with negative net observed minutes is listed in `merchants_with_net_observed_labor_regression` and blocks the multi-merchant feasibility screen. This is an **observed-sample sum**, not an estimate for missing observations: incomplete pairs are excluded, not assigned zero savings. A nonnegative sum cannot establish that the workflow saves total labor or money in production. This screen supplements, but does not replace, quality, provider-cost, safety, and consent gates.\n
+
+### Zero-baseline labor accounting (November 3, 2026)
+
+The offline paired percentage estimator excludes zero-manual-minute tasks from
+percentage ratios because division by zero is undefined. Its **descriptive
+zero-savings scenario** now assigns these tasks 0% savings, alongside incomplete
+pairs, instead of silently omitting them from the sensitivity denominator.
+A zero-manual/positive-AI task additionally triggers the existing absolute labor
+loss review. This prevents a large collection of zero-baseline tasks from
+disappearing while a small favorable subset drives a positive median.
+
+This is an operational screening convention, **not** a mathematical bound or
+a causal estimate. Zero-zero tasks can represent genuinely unnecessary work,
+instrumentation errors, or unsuitable task definitions. Investigate them before
+any pilot decision. The estimator's 20% threshold and other gates do not
+establish merchant growth or production readiness.

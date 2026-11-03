@@ -77,3 +77,7 @@ Pilot ID and window; consent and design; assignment counts by arm; completed/rej
 - [n8n Sustainable Use License](https://docs.n8n.io/sustainable-use-license/). Obtain written commercial licensing clearance for the intended merchant-configurable offering before activation.
 
 **Boundary:** This document does not authorize store access, publishing, sending messages, purchases, deployment, billing or any external integration. Merchant approval and the release checklist remain independent requirements.
+
+### Merchant-level measurement coverage safeguard (2026-11-03)
+
+The multi-merchant pilot gate now requires the existing 80% time-measurement and complete-pair coverage threshold **within every assigned merchant**, not only in the pooled dataset. A small merchant with substantial missing observations must not disappear behind complete observations from larger merchants, even when that small merchant has one positive measured pair. The estimator reports `merchants_failing_measurement_coverage` and holds `multi_merchant_pilot_gate_pass` false pending review. This remains a descriptive labor feasibility screen, not a causal result or production authorization.

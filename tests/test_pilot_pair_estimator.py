@@ -34,6 +34,29 @@ class PilotPairEstimatorTests(unittest.TestCase):
         self.assertEqual(result["merchant_strata"]["a"]["median_percent_saved"], 50)
         self.assertEqual(result["merchant_strata"]["b"]["median_percent_saved"], 0)
 
+    def test_disjoint_missingness_does_not_pass_complete_pair_gate(self):
+        rows = []
+        for i in range(10):
+            rows += pair("a", str(i), None if i < 2 else 5,
+                         None if 2 <= i < 4 else 10)
+        result = summarize(rows)
+        self.assertEqual(result["ai_time_coverage"], .8)
+        self.assertEqual(result["manual_time_coverage"], .8)
+        self.assertEqual(result["complete_pair_coverage"], .6)
+        self.assertFalse(result["measurement_gate_pass"])
+
+    def test_small_sample_cannot_pass_feasibility_gate(self):
+        result = summarize(pair("a", "1", 1, 10))
+        self.assertTrue(result["measurement_gate_pass"])
+        self.assertFalse(result["feasibility_percent_gate_pass"])
+
+    def test_twenty_complete_pairs_can_pass_narrow_feasibility_gate(self):
+        rows = []
+        for i in range(20):
+            rows += pair("a", str(i), 5, 10)
+        result = summarize(rows)
+        self.assertTrue(result["feasibility_percent_gate_pass"])
+
     def test_duplicate_rejected(self):
         with self.assertRaises(ValueError):
             summarize(pair("a", "1", 5, 10) + pair("a", "1", 4, 10))

@@ -110,3 +110,8 @@ a causal estimate. Zero-zero tasks can represent genuinely unnecessary work,
 instrumentation errors, or unsuitable task definitions. Investigate them before
 any pilot decision. The estimator's 20% threshold and other gates do not
 establish merchant growth or production readiness.
+
+
+### Net labor break-even safeguard (November 3, 2026)
+
+The multi-merchant feasibility screen now requires **strictly positive observed net human minutes saved for every merchant**, not merely a positive median percentage. A merchant with twenty five-minute gains and one 100-minute loss has zero net benefit and must not pass. This check is descriptive, excludes incomplete pair durations, and does not account for provider costs, output quality, or statistical uncertainty. A passing result is **not** evidence of profitability or launch readiness. Tests include a break-even case and a positive control.

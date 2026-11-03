@@ -48,12 +48,12 @@ export function gscPageQuery(url: string, startDate: string, endDate: string) {
   catch { throw new Error("Invalid GSC product URL"); }
   if (parsed.protocol !== "https:" || !parsed.hostname.includes(".") ||
       parsed.username || parsed.password || parsed.port || parsed.search ||
-      parsed.hash || !/^\\/products\\/[a-z0-9-]+\\/?$/.test(parsed.pathname) ||
+      parsed.hash || !/^\/products\/[a-z0-9-]+\/?$/.test(parsed.pathname) ||
       parsed.href !== url) {
     throw new Error("Invalid GSC product URL");
   }
   const parseDay = (value: string): number => {
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) throw new Error("Invalid GSC date");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Invalid GSC date");
     const day = Date.parse(value + "T00:00:00.000Z");
     if (!Number.isFinite(day) || new Date(day).toISOString().slice(0, 10) !== value) {
       throw new Error("Invalid GSC date");

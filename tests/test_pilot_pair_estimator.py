@@ -217,6 +217,28 @@ class PilotPairEstimatorTests(unittest.TestCase):
         self.assertEqual(result["merchants_below_sensitivity_savings_target"], ["fragile"])
         self.assertFalse(result["multi_merchant_pilot_gate_pass"])
 
+    def test_outlier_labor_loss_blocks_multi_merchant_gate_despite_positive_medians(self):
+        rows = []
+        for merchant in ("a", "b"):
+            for i in range(20):
+                rows += pair(merchant, str(i), 5, 10)
+        # One extreme slow task overwhelms b\'s 20 five-minute savings.
+        rows += pair("b", "extreme", 250, 10)
+        result = summarize(rows)
+        self.assertTrue(result["feasibility_percent_gate_pass"])
+        self.assertEqual(result["merchant_strata"]["b"]["median_percent_saved"], 50)
+        self.assertEqual(result["merchant_strata"]["b"]["net_observed_minutes_saved"], -140)
+        self.assertEqual(result["merchants_with_net_observed_labor_regression"], ["b"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
+
+    def test_net_labor_diagnostic_ignores_missing_durations_not_as_zero(self):
+        rows = pair("a", "observed", 5, 10) + pair("a", "missing", None, 10)
+        result = summarize(rows)
+        self.assertEqual(result["net_observed_minutes_saved"], 5)
+        self.assertFalse(result["net_observed_labor_regression"])
+        self.assertEqual(result["complete_pairs"], 1)
+        self.assertFalse(result["measurement_gate_pass"])
+
     def test_duplicate_rejected(self):
         with self.assertRaises(ValueError):
             summarize(pair("a", "1", 5, 10) + pair("a", "1", 4, 10))

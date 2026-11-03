@@ -247,6 +247,15 @@ class PilotPairEstimatorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             summarize(pair("a", "1", "nan", 10))
 
+    def test_extreme_ratio_cannot_emit_infinite_savings(self):
+        with self.assertRaisesRegex(ValueError, "derived labor savings must be finite"):
+            summarize(pair("a", "tiny-baseline", 1e308, 1e-308))
+
+    def test_finite_durations_with_overflowing_total_rejected(self):
+        rows = pair("a", "one", 0, 1e308) + pair("a", "two", 0, 1e308)
+        with self.assertRaisesRegex(ValueError, "aggregate labor savings must be finite"):
+            summarize(rows)
+
     def test_unpaired_rejected(self):
         with self.assertRaises(ValueError):
             summarize(pair("a", "1", 5, 10)[:1])

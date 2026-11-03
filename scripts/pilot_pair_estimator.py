@@ -73,6 +73,12 @@ def summarize(rows):
         m for m in by_merchant if m not in eligible_strata
     )
     overall["merchants_with_percent_observations"] = len(eligible_strata)
+    # Exploratory replication floor, not a powered merchant-level effect test.
+    # A single favorable task cannot stand in for merchant-level evidence.
+    overall["merchants_below_replication_floor"] = sorted(
+        m for m, stratum in overall["merchant_strata"].items()
+        if stratum["percent_eligible_pairs"] < 5
+    )
     overall["merchant_median_percent_saved"] = (
         statistics.median(s["median_percent_saved"] for s in eligible_strata.values())
         if eligible_strata else None
@@ -95,6 +101,7 @@ def summarize(rows):
     overall["merchant_heterogeneity_review_required"] = (
         len(eligible_strata) < 2 or
         bool(overall["merchants_without_percent_observations"]) or
+        bool(overall["merchants_below_replication_floor"]) or
         bool(overall["merchants_failing_measurement_coverage"]) or
         bool(overall["merchants_with_nonpositive_median_percent_saved"]) or
         bool(overall["merchants_with_zero_manual_ai_labor_losses"])

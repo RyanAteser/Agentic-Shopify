@@ -37,6 +37,11 @@ def summarize(rows):
         eligible = [p for p in complete if p["manual"] > 0]
         differences = [p["manual"] - p["ai"] for p in complete]
         percents = [100 * (p["manual"] - p["ai"]) / p["manual"] for p in eligible]
+        # Scenario analysis, NOT a mathematical bound: missing pair percentages
+        # are assigned 0% savings. This prevents favorable complete-case-only
+        # results from silently passing the narrow feasibility screen.
+        missing = n - len(complete)
+        neutral_missing_median = statistics.median(percents + [0.0] * missing) if percents or missing else None
         coverage = ai_seen / n >= .8 and manual_seen / n >= .8 and len(complete) / n >= .8
         return {
             "assigned_pairs": n,
@@ -48,8 +53,10 @@ def summarize(rows):
             "percent_eligible_pairs": len(eligible),
             "median_minutes_saved": statistics.median(differences) if differences else None,
             "median_percent_saved": statistics.median(percents) if percents else None,
+            "missing_pair_zero_savings_scenario_median_percent": neutral_missing_median,
+            "missing_pair_zero_savings_scenario_assumption": "Each incomplete pair assigned 0% savings; not a statistical bound",
             "measurement_gate_pass": coverage,
-            "feasibility_percent_gate_pass": len(eligible) >= 20 and coverage and statistics.median(percents) >= 20,
+            "feasibility_percent_gate_pass": len(eligible) >= 20 and coverage and statistics.median(percents) >= 20 and neutral_missing_median >= 20,
         }
 
     overall = stats([p for group in by_merchant.values() for p in group])

@@ -83,6 +83,14 @@ def summarize(rows):
         statistics.median(s["median_percent_saved"] for s in eligible_strata.values())
         if eligible_strata else None
     )
+    # A positive merchant median is not enough: the pooled 20% screen can
+    # conceal a merchant whose own savings are materially below the target.
+    # Apply the same zero-savings missing-pair scenario within each merchant.
+    overall["merchants_below_sensitivity_savings_target"] = sorted(
+        m for m, s in overall["merchant_strata"].items()
+        if s["missing_pair_zero_savings_scenario_median_percent"] is None or
+        s["missing_pair_zero_savings_scenario_median_percent"] < 20
+    )
     overall["merchants_with_nonpositive_median_percent_saved"] = sorted(
         m for m, s in eligible_strata.items() if s["median_percent_saved"] <= 0
     )
@@ -102,6 +110,7 @@ def summarize(rows):
         len(eligible_strata) < 2 or
         bool(overall["merchants_without_percent_observations"]) or
         bool(overall["merchants_below_replication_floor"]) or
+        bool(overall["merchants_below_sensitivity_savings_target"]) or
         bool(overall["merchants_failing_measurement_coverage"]) or
         bool(overall["merchants_with_nonpositive_median_percent_saved"]) or
         bool(overall["merchants_with_zero_manual_ai_labor_losses"])

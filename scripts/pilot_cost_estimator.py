@@ -6,7 +6,7 @@ import sys
 from collections import defaultdict
 
 
-def summarize_costs(rows):
+def summarize_costs(rows, fixed_costs_usd=None):
     """One record per matched topic pair; amounts are USD and minutes."""
     groups = defaultdict(list)
     seen = set()
@@ -30,7 +30,14 @@ def summarize_costs(rows):
     if not seen:
         raise ValueError("no assigned pairs")
 
-    def calculate(items):
+    if fixed_costs_usd is not None:
+        if set(fixed_costs_usd) != set(groups):
+            raise ValueError("fixed costs must be provided for every assigned merchant, with no extras")
+        for merchant, amount in fixed_costs_usd.items():
+            if not isinstance(amount, (int, float)) or isinstance(amount, bool) or not math.isfinite(amount) or amount < 0:
+                raise ValueError(f"invalid fixed cost for merchant {merchant}")
+
+    def calculate(items, fixed_cost=None):
         complete = [r for r in items if all(v is not None for v in r.values())]
         savings = []
         stressed_savings = []
@@ -64,9 +71,13 @@ def summarize_costs(rows):
             "stressed_net_usd_saved": stressed_total,
             "stressed_net_positive": stressed_total > 0,
             "cost_evidence_sufficient": len(complete) == len(items),
+            "fixed_cost_usd": fixed_cost,
+            "net_after_fixed_usd": None if fixed_cost is None else total - fixed_cost,
+            "stressed_net_after_fixed_usd": None if fixed_cost is None else stressed_total - fixed_cost,
         }
 
-    strata = {merchant: calculate(items) for merchant, items in sorted(groups.items())}
+    strata = {merchant: calculate(items, None if fixed_costs_usd is None else fixed_costs_usd[merchant])
+              for merchant, items in sorted(groups.items())}
     overall = calculate([item for items in groups.values() for item in items])
     overall["merchant_strata"] = strata
     overall["all_merchants_observed_net_positive"] = all(
@@ -77,10 +88,22 @@ def summarize_costs(rows):
         s["stressed_net_positive"] and s["cost_evidence_sufficient"]
         for s in strata.values()
     )
+    overall["all_merchants_net_after_fixed_positive"] = fixed_costs_usd is not None and all(
+        s["cost_evidence_sufficient"] and s["net_after_fixed_usd"] > 0 for s in strata.values()
+    )
+    overall["all_merchants_stressed_after_fixed_positive"] = fixed_costs_usd is not None and all(
+        s["cost_evidence_sufficient"] and s["stressed_net_after_fixed_usd"] > 0 for s in strata.values()
+    )
     overall["launch_or_revenue_claim_supported"] = False
     return overall
 
 
 if __name__ == "__main__":
+    fixed = None
+    if len(sys.argv) > 2:
+        with open(sys.argv[2], encoding="utf-8") as costs:
+            fixed = json.load(costs)
+        if not isinstance(fixed, dict):
+            raise ValueError("fixed costs JSON must map merchant IDs to USD amounts")
     with open(sys.argv[1], newline="", encoding="utf-8-sig") as stream:
-        print(json.dumps(summarize_costs(csv.DictReader(stream)), indent=2))
+        print(json.dumps(summarize_costs(csv.DictReader(stream), fixed), indent=2))

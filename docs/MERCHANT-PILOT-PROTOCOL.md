@@ -57,9 +57,9 @@ Primary endpoint: median total human active minutes **per eligible brief**, incl
 
 ## Offline paired accounting implementation
 
-Use `python scripts/pilot_pair_estimator.py path/to/consented-pilot.csv` with columns `merchant_id,pair_id,arm,active_minutes`; each matched pair requires one `ai` and one `manual` row. Empty minutes mean missing, **not zero**. Run `python -m unittest discover -s tests -p 'test_pilot_pair_estimator.py' -v` to exercise zero denominators, incomplete pairs, duplicate assignments, nonfinite durations and merchant stratification.
+Use `python scripts/pilot_pair_estimator.py path/to/consented-pilot.csv` with columns `merchant_id,pair_id,arm,active_minutes`; each matched pair requires one `ai` and one `manual` row. Empty minutes mean missing, **not zero**. CI also runs this test suite explicitly (the existing `test_merchant*.py` glob does not include it). Run `python -m unittest discover -s tests -p 'test_pilot_pair_estimator.py' -v` to exercise zero denominators, incomplete pairs, duplicate assignments, nonfinite durations and merchant stratification.
 
-The estimator returns paired absolute-minute and percentage medians, coverage by arm, merchant-specific estimates and a narrow percentage/measurement gate. It deliberately **does not** certify the full pilot: independent factual quality, safety incidents, minimum sample, consent, missingness sensitivity, provider costs and merchant adoption still require separate review. A passing percentage gate alone is not authorization to scale, publish or claim savings. Use only pseudonymous merchant IDs; never export tokens, customer data or article text.
+The estimator returns paired absolute-minute and percentage medians, coverage by arm, merchant-specific estimates and a narrow percentage/measurement gate requiring at least 20 positive-denominator complete pairs and at least 80% complete-pair coverage, in addition to 80% coverage in each arm. It deliberately **does not** certify the full pilot: independent factual quality, safety incidents, minimum sample, consent, missingness sensitivity, provider costs and merchant adoption still require separate review. A passing percentage gate alone is not authorization to scale, publish or claim savings. Use only pseudonymous merchant IDs; never export tokens, customer data or article text.
 
 ## Reporting template
 

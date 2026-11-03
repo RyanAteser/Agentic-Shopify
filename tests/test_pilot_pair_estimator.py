@@ -88,7 +88,8 @@ class PilotPairEstimatorTests(unittest.TestCase):
         self.assertEqual(result["merchant_count"], 2)
         self.assertEqual(result["merchants_with_nonpositive_median_percent_saved"], ["small"])
         self.assertEqual(result["merchant_median_percent_saved"], 15)
-        self.assertTrue(result["merchant_heterogeneity_review_required"])\n        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
+        self.assertTrue(result["merchant_heterogeneity_review_required"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
 
     def test_single_merchant_requires_external_replication(self):
         rows = []
@@ -97,6 +98,7 @@ class PilotPairEstimatorTests(unittest.TestCase):
         result = summarize(rows)
         self.assertTrue(result["feasibility_percent_gate_pass"])
         self.assertTrue(result["merchant_heterogeneity_review_required"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
 
     def test_multiple_positive_merchants_clear_heterogeneity_flag(self):
         rows = []
@@ -104,7 +106,8 @@ class PilotPairEstimatorTests(unittest.TestCase):
             for i in range(20):
                 rows += pair(merchant, str(i), 5, 10)
         result = summarize(rows)
-        self.assertFalse(result["merchant_heterogeneity_review_required"])\n        self.assertTrue(result["multi_merchant_pilot_gate_pass"])
+        self.assertFalse(result["merchant_heterogeneity_review_required"])
+        self.assertTrue(result["multi_merchant_pilot_gate_pass"])
 
     def test_duplicate_rejected(self):
         with self.assertRaises(ValueError):

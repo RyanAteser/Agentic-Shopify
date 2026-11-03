@@ -121,6 +121,22 @@ class PilotPairEstimatorTests(unittest.TestCase):
         self.assertTrue(result["merchant_heterogeneity_review_required"])
         self.assertFalse(result["multi_merchant_pilot_gate_pass"])
 
+    def test_pooled_coverage_cannot_hide_merchant_missingness(self):
+        rows = []
+        for merchant in ("a", "b"):
+            for i in range(20):
+                rows += pair(merchant, str(i), 5, 10)
+        # Merchant c has 50% complete coverage, while pooled coverage
+        # remains above 80%; its single observed pair looks favorable.
+        rows += pair("c", "observed", 5, 10)
+        rows += pair("c", "missing", None, 10)
+        result = summarize(rows)
+        self.assertTrue(result["measurement_gate_pass"])
+        self.assertTrue(result["feasibility_percent_gate_pass"])
+        self.assertEqual(result["merchants_failing_measurement_coverage"], ["c"])
+        self.assertTrue(result["merchant_heterogeneity_review_required"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
+
     def test_zero_manual_merchant_requires_review(self):
         rows = []
         for merchant in ("a", "b"):

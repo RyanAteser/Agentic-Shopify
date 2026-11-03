@@ -71,6 +71,7 @@ def summarize(rows):
             "median_minutes_saved": statistics.median(differences) if differences else None,
             "net_observed_minutes_saved": net_minutes,
             "net_observed_labor_regression": net_minutes < 0,
+            "net_observed_labor_savings_positive": net_minutes > 0,
             "median_percent_saved": statistics.median(percents) if percents else None,
             "missing_pair_zero_savings_scenario_median_percent": neutral_missing_median,
             "missing_pair_zero_savings_scenario_assumption": "Each incomplete pair assigned 0% savings; not a statistical bound",
@@ -126,6 +127,12 @@ def summarize(rows):
         m for m, s in overall["merchant_strata"].items()
         if s["net_observed_labor_regression"]
     )
+    # A zero net gain is not evidence of labor savings even if the median
+    # percentage is favorable; the pilot must demonstrate positive net time.
+    overall["merchants_without_positive_net_observed_savings"] = sorted(
+        m for m, s in overall["merchant_strata"].items()
+        if not s["net_observed_labor_savings_positive"]
+    )
     overall["merchants_with_zero_manual_ai_labor_losses"] = sorted(
         m for m, s in overall["merchant_strata"].items()
         if s["zero_manual_ai_labor_loss_pairs"] > 0
@@ -138,7 +145,8 @@ def summarize(rows):
         bool(overall["merchants_failing_measurement_coverage"]) or
         bool(overall["merchants_with_nonpositive_median_percent_saved"]) or
         bool(overall["merchants_with_zero_manual_ai_labor_losses"]) or
-        bool(overall["merchants_with_net_observed_labor_regression"])
+        bool(overall["merchants_with_net_observed_labor_regression"]) or
+        bool(overall["merchants_without_positive_net_observed_savings"])
     )
     # A favorable pooled estimate is not sufficient for a multi-merchant pilot.
     # Keep the original feasibility diagnostic for backwards compatibility.

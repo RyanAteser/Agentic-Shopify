@@ -79,9 +79,16 @@ def summarize(rows):
     overall["merchants_with_nonpositive_median_percent_saved"] = sorted(
         m for m, s in eligible_strata.items() if s["median_percent_saved"] <= 0
     )
+    # Pooled coverage can mask severe missingness for a small merchant.
+    # Require the same predeclared measurement coverage within each stratum.
+    overall["merchants_failing_measurement_coverage"] = sorted(
+        m for m, s in overall["merchant_strata"].items()
+        if not s["measurement_gate_pass"]
+    )
     overall["merchant_heterogeneity_review_required"] = (
         len(eligible_strata) < 2 or
         bool(overall["merchants_without_percent_observations"]) or
+        bool(overall["merchants_failing_measurement_coverage"]) or
         bool(overall["merchants_with_nonpositive_median_percent_saved"])
     )
     # A favorable pooled estimate is not sufficient for a multi-merchant pilot.

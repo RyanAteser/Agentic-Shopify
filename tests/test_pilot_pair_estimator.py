@@ -172,6 +172,25 @@ class PilotPairEstimatorTests(unittest.TestCase):
         self.assertEqual(result["merchants_with_zero_manual_ai_labor_losses"], [])
         self.assertTrue(result["multi_merchant_pilot_gate_pass"])
 
+    def test_merchant_with_one_favorable_pair_cannot_pass_replication_floor(self):
+        rows = []
+        for i in range(25):
+            rows += pair("large", str(i), 5, 10)
+        rows += pair("tiny", "only", 5, 10)
+        result = summarize(rows)
+        self.assertTrue(result["feasibility_percent_gate_pass"])
+        self.assertEqual(result["merchants_below_replication_floor"], ["tiny"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
+
+    def test_five_eligible_pairs_each_clear_replication_floor(self):
+        rows = []
+        for merchant in ("a", "b"):
+            for i in range(10):
+                rows += pair(merchant, str(i), 5, 10)
+        result = summarize(rows)
+        self.assertEqual(result["merchants_below_replication_floor"], [])
+        self.assertTrue(result["multi_merchant_pilot_gate_pass"])
+
     def test_duplicate_rejected(self):
         with self.assertRaises(ValueError):
             summarize(pair("a", "1", 5, 10) + pair("a", "1", 4, 10))

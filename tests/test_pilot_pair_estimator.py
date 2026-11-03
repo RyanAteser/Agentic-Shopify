@@ -11,6 +11,29 @@ def pair(merchant, name, ai, manual):
 
 
 class PilotPairEstimatorTests(unittest.TestCase):
+    def test_zero_net_labor_savings_blocks_merchant_gate(self):
+        rows = []
+        for merchant in ("a", "b"):
+            for i in range(20):
+                rows += pair(merchant, str(i), 5, 10)
+        # Twenty five-minute gains are exactly canceled by one 100-minute loss.
+        rows += pair("b", "offset", 110, 10)
+        result = summarize(rows)
+        self.assertEqual(result["merchant_strata"]["b"]["median_percent_saved"], 50)
+        self.assertEqual(result["merchant_strata"]["b"]["net_observed_minutes_saved"], 0)
+        self.assertFalse(result["merchant_strata"]["b"]["net_observed_labor_regression"])
+        self.assertEqual(result["merchants_without_positive_net_observed_savings"], ["b"])
+        self.assertFalse(result["multi_merchant_pilot_gate_pass"])
+
+    def test_positive_net_labor_savings_remains_eligible(self):
+        rows = []
+        for merchant in ("a", "b"):
+            for i in range(20):
+                rows += pair(merchant, str(i), 5, 10)
+        result = summarize(rows)
+        self.assertEqual(result["merchants_without_positive_net_observed_savings"], [])
+        self.assertTrue(result["multi_merchant_pilot_gate_pass"])
+
     def test_paired_percentages_not_group_medians(self):
         result = summarize(pair("a", "1", 5, 10) + pair("a", "2", 90, 100))
         self.assertEqual(result["median_percent_saved"], 30)

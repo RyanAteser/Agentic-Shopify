@@ -61,6 +61,25 @@ def summarize(rows):
 
     overall = stats([p for group in by_merchant.values() for p in group])
     overall["merchant_strata"] = {m: stats(g) for m, g in sorted(by_merchant.items())}
+    # Pooled pair counts can hide a merchant whose workflow gets slower.
+    # This diagnostic is descriptive, not a new powered statistical test.
+    eligible_strata = {
+        m: s for m, s in overall["merchant_strata"].items()
+        if s["percent_eligible_pairs"] > 0
+    }
+    overall["merchant_count"] = len(by_merchant)
+    overall["merchants_with_percent_observations"] = len(eligible_strata)
+    overall["merchant_median_percent_saved"] = (
+        statistics.median(s["median_percent_saved"] for s in eligible_strata.values())
+        if eligible_strata else None
+    )
+    overall["merchants_with_nonpositive_median_percent_saved"] = sorted(
+        m for m, s in eligible_strata.items() if s["median_percent_saved"] <= 0
+    )
+    overall["merchant_heterogeneity_review_required"] = (
+        len(eligible_strata) < 2 or
+        bool(overall["merchants_with_nonpositive_median_percent_saved"])
+    )
     overall["causal_or_revenue_claim_supported"] = False
     return overall
 

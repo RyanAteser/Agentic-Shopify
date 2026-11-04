@@ -11,6 +11,8 @@ const pilot = {
   AGENTIC_PILOT_SHOP: "monika-test.myshopify.com",
   SCOPES: "read_products",
   SHOPIFY_API_KEY: "a".repeat(32),
+  SHOPIFY_API_SECRET: "ci-only-fake-secret-32-characters",
+  SHOPIFY_APP_URL: "https://pilot.example.invalid",
   AGENTIC_PILOT_CLIENT_ID: "a".repeat(32),
 };
 const req = (path: string, method = "GET") =>
@@ -51,6 +53,28 @@ test("pilot activation requires exact read-only scope and a canonical shop", () 
   assert.throws(() => assertPilotConfiguration({...pilot, AGENTIC_PILOT_SHOP:"example.com"}), status(503));
   assert.throws(() => assertPilotConfiguration({...pilot, AGENTIC_PILOT_SHOP:undefined}), status(503));
   assert.throws(() => assertPilotConfiguration({...pilot, AGENTIC_PILOT_MODE:"unsafe"}), status(503));
+});
+
+test("pilot readiness rejects missing credentials and malformed callback origins", () => {
+  // Shopify authenticates against these runtime settings. Readiness does not
+  // prove credentials match the Dev Dashboard; it must reject absent values.
+  for (const secret of [undefined, "", "short", "  ", " ci-only-fake-secret-32-characters "]) {
+    assert.throws(() => assertPilotConfiguration({...pilot, SHOPIFY_API_SECRET: secret}), status(503));
+  }
+  for (const appUrl of [
+    undefined, "", "http://pilot.example.invalid",
+    "https://localhost", "https://127.0.0.1",
+    "https://pilot.example.invalid:8443",
+    "https://user:pass@pilot.example.invalid",
+    "https://pilot.example.invalid/app/catalog",
+    "https://pilot.example.invalid/?shop=other",
+    "https://pilot.example.invalid/#fragment",
+    "https://pilot.example.invalid.evil.invalid/path",
+  ]) {
+    assert.throws(() => assertPilotConfiguration({...pilot, SHOPIFY_APP_URL: appUrl}), status(503));
+  }
+  assert.doesNotThrow(() => assertPilotConfiguration({...pilot, SHOPIFY_APP_URL: "https://pilot.example.invalid/"}));
+  assert.doesNotThrow(() => assertPilotRequest(req("/app/catalog"), pilot));
 });
 
 test("catalog-only route gate denies all other application reads and writes", () => {

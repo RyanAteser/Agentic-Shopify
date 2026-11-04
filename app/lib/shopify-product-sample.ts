@@ -123,9 +123,14 @@ query ShopifySeoCatalog($after: String) {
         (pageInfo.endCursor !== null && typeof pageInfo.endCursor !== "string")) {
       throw new Error("Shopify product pagination information is malformed");
     }
-    if (pageInfo.hasNextPage &&
-        (typeof pageInfo.endCursor !== "string" || !pageInfo.endCursor ||
-         !batch.length || cursors.has(pageInfo.endCursor))) {
+    // A nonempty connection must have a usable end cursor even on its
+    // final page. An empty completed connection must not claim an end cursor.
+    // Otherwise a truncated/mis-mapped pageInfo can appear complete.
+    if ((batch.length > 0 &&
+         (typeof pageInfo.endCursor !== "string" || !pageInfo.endCursor)) ||
+        (batch.length === 0 && pageInfo.endCursor !== null) ||
+        (pageInfo.hasNextPage &&
+         (!batch.length || cursors.has(pageInfo.endCursor as string)))) {
       throw new Error("Shopify product pagination cursor is invalid");
     }
     for (const product of batch) {

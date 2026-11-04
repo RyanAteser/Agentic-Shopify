@@ -4,7 +4,10 @@ import db from "../db.server";
 import {syncOrganicMetrics} from "../lib/gsc.server";
 
 /** Read-only Google data import: no publishing, customer orders, or store changes. */
+import { assertPilotServiceDisabled } from "../lib/pilot-readonly";
+
 export const action=async ({request}:ActionFunctionArgs)=>{
+  assertPilotServiceDisabled();
   if(request.method!=="POST")return Response.json({error:"Method not allowed"},{status:405});
   if(!authorizedBridge(request))return Response.json({error:"Unauthorized"},{status:401});
   const now=new Date();

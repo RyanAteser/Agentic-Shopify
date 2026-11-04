@@ -12,6 +12,7 @@ export function scopePilotCatalog(products: SeoProduct[], primaryHost: string) {
   }
   const host = primaryHost.toLowerCase();
   const eligible: SeoProduct[] = [];
+  const seenUrls = new Set<string>();
   let excludedForeign = 0;
   for (const product of products) {
     if (!product.url) continue;
@@ -25,6 +26,12 @@ export function scopePilotCatalog(products: SeoProduct[], primaryHost: string) {
     if (url.protocol !== "https:" || url.username || url.password ||
         url.port || url.search || url.hash ||
         url.href !== product.url) continue;
+    // Duplicate canonical URLs make the sample's page coverage and findings
+    // ambiguous. Abstain rather than count one page as multiple products.
+    if (seenUrls.has(url.href)) {
+      throw new Error("Duplicate Shopify primary-storefront product URL");
+    }
+    seenUrls.add(url.href);
     eligible.push(product);
   }
   return {eligible, excludedForeign};

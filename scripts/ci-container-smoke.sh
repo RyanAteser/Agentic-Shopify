@@ -7,9 +7,10 @@ suffix="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$$"
 network="agentic-smoke-${suffix}"
 database="agentic-smoke-db-${suffix}"
 application="agentic-smoke-app-${suffix}"
+pilot_application="agentic-smoke-pilot-${suffix}"
 
 cleanup() {
-  docker rm -f "$application" "$database" >/dev/null 2>&1 || true
+  docker rm -f "$pilot_application" "$application" "$database" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -71,6 +72,70 @@ if [[ "$ready" != true ]]; then
   exit 1
 fi
 echo "Container smoke: non-root image, migrations and DB-backed /health passed"
+
+# Start the SAME built image with an entirely synthetic, read-only
+# single-merchant configuration. This does not use Shopify tokens or contact a
+# live store. Routing/bridge denials must hold in the actual HTTP server, not
+# just unit tests of the guard helpers.
+pilot_key="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+docker run -d --name "$pilot_application" --network "$network" -p 127.0.0.1::3000 \
+  -e DATABASE_URL="$db_url" \
+  -e SHOPIFY_API_KEY="$pilot_key" \
+  -e SHOPIFY_API_SECRET=ci-only-inert-secret-not-for-any-store \
+  -e SHOPIFY_APP_URL=https://ci.example.invalid \
+  -e AGENTIC_PILOT_MODE=read_only \
+  -e AGENTIC_PILOT_SHOP=ci-only.myshopify.com \
+  -e AGENTIC_PILOT_CLIENT_ID="$pilot_key" \
+  -e SCOPES=read_products \
+  "$image" >/dev/null
+
+pilot_port="$(docker port "$pilot_application" 3000/tcp | head -n 1 | sed 's/.*://')"
+if [[ ! "$pilot_port" =~ ^[0-9]+$ ]]; then
+  echo "Could not resolve synthetic read-only pilot port" >&2
+  exit 1
+fi
+pilot_url="http://127.0.0.1:${pilot_port}"
+pilot_ready=false
+for _ in $(seq 1 40); do
+  pilot_body="$(curl --silent --max-time 2 "$pilot_url/health" || true)"
+  if [[ "$pilot_body" == '{"status":"ready"}' ]]; then
+    pilot_ready=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$pilot_ready" != true ]]; then
+  echo "Synthetic read-only pilot failed its DB-backed readiness check" >&2
+  docker logs "$pilot_application" >&2
+  exit 1
+fi
+
+for path in /app /app/manager /app/seo; do
+  status="$(curl --silent --max-time 5 --output /dev/null --write-out '%{http_code}' "$pilot_url$path" || true)"
+  if [[ "$status" != "403" ]]; then
+    echo "Read-only pilot permitted blocked GET $path (HTTP $status)" >&2
+    docker logs "$pilot_application" >&2
+    exit 1
+  fi
+done
+status="$(curl --silent --max-time 5 --request POST --output /dev/null --write-out '%{http_code}' "$pilot_url/api/agent/due" || true)"
+if [[ "$status" != "403" ]]; then
+  echo "Read-only pilot did not block background agent POST (HTTP $status)" >&2
+  docker logs "$pilot_application" >&2
+  exit 1
+fi
+# Without an authenticated Shopify session the allowed catalog route must not
+# reveal product data. A redirect to OAuth or explicit auth failure is fine.
+status="$(curl --silent --max-time 5 --output /dev/null --write-out '%{http_code}' "$pilot_url/app/catalog" || true)"
+case "$status" in
+  301|302|303|307|308|400|401|403) ;;
+  *)
+    echo "Anonymous pilot catalog did not require authentication (HTTP $status)" >&2
+    docker logs "$pilot_application" >&2
+    exit 1
+    ;;
+esac
+echo "Container smoke: read-only pilot starts and rejects unauthorized routes"
 
 # A dead database must not be reported as ready by the load-balancer endpoint.
 docker stop "$database" >/dev/null

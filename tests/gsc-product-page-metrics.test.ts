@@ -78,3 +78,35 @@ test("too many rows, malformed dates, and negative counts never become evidence"
     rows:[{...good.rows[0],impressions:-1}]
   },url,start,end));
 });
+
+test("GSC request builder rejects arbitrary URLs and invalid or unbounded date windows",()=> {
+  for (const badUrl of [
+    "http://store.example.test/products/item",
+    "https://store.example.test@evil.test/products/item",
+    "https://store.example.test/products/item?variant=1",
+    "https://store.example.test/collections/item",
+    "https://store.example.test/products/item#fragment",
+    "not-a-url",
+  ]) assert.throws(()=>gscPageQuery(badUrl,start,end),/URL/);
+  for (const [from,to] of [
+    ["2026-11-02","2026-11-01"],
+    ["2026-02-30","2026-03-01"],
+    ["2026-09-01","2026-11-01"],
+    ["2026-9-01","2026-10-01"],
+  ]) assert.throws(()=>gscPageQuery(url,from,to),/date|window/i);
+  assert.equal(gscPageQuery(url,"2026-10-01","2026-10-01").startDate,"2026-10-01");
+});
+
+
+test("response parser rejects invalid independent page and window context",()=>{
+  for (const invalidUrl of [
+    "https://other.test/products/other?ref=tracking",
+    "http://store.example.test/products/item",
+    "https://store.example.test@other.test/products/item",
+  ]) assert.throws(()=>parseGscPageResponse({responseAggregationType:"byPage"},invalidUrl,start,end),/URL/);
+  for (const [from,to] of [
+    ["2026-02-30","2026-03-01"],
+    ["2026-11-02","2026-11-01"],
+    ["2026-09-01","2026-11-01"],
+  ]) assert.throws(()=>parseGscPageResponse({responseAggregationType:"byPage"},url,from,to),/date|window/i);
+});

@@ -2,11 +2,19 @@ import type { LoaderFunctionArgs } from "react-router";
 import { redirect, Form, useLoaderData } from "react-router";
 
 import { login } from "../../shopify.server";
+import { readOnlyPilotEnabled, assertPilotConfiguration } from "../../lib/pilot-readonly";
 
 import styles from "./styles.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
+
+  if (readOnlyPilotEnabled()) {
+    assertPilotConfiguration();
+    // Shopify App Bridge supplies the signed host/shop context on first open.
+    // Preserve that context while avoiding the full Blog Agent landing page.
+    throw redirect(`/app/catalog?${url.searchParams.toString()}`);
+  }
 
   if (url.searchParams.get("shop")) {
     throw redirect(`/app?${url.searchParams.toString()}`);

@@ -28,6 +28,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       eligible: scoped.eligible.length,
       warning: [coverage.warning,
         scoped.excludedForeign ? `${scoped.excludedForeign} product URL(s) were on a different host from the Shopify-attested primary storefront and were excluded.` : "",
+        scoped.excludedNoncanonical ? `${scoped.excludedNoncanonical} product URL(s) did not match a canonical primary-storefront product page and were excluded.` : "",
         scoped.eligible.length < coverage.eligibleProducts.length ? "The eligible primary-domain sample is partial; excluded pages were not audited." : ""
       ].filter(Boolean).join(" "),
       findings: prioritizeCatalogFindings(findings).slice(0, findingDisplay.displayed).map((finding) => ({

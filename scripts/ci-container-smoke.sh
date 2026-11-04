@@ -119,12 +119,16 @@ for path in /app /app/manager /app/seo; do
     exit 1
   fi
 done
-status="$(curl --silent --max-time 5 --request POST --output /dev/null --write-out '%{http_code}' "$pilot_url/api/agent/due" || true)"
-if [[ "$status" != "403" ]]; then
-  echo "Read-only pilot did not block background agent POST (HTTP $status)" >&2
-  docker logs "$pilot_application" >&2
-  exit 1
-fi
+# Verify write-denial in the actual compiled HTTP server, not just unit
+# tests. A permitted GET catalog must never authorize a POST catalog.
+for path in /app/catalog /app /api/seo/rankings /api/agent/due; do
+  status="$(curl --silent --max-time 5 --request POST --output /dev/null --write-out '%{http_code}' "$pilot_url$path" || true)"
+  if [[ "$status" != "403" ]]; then
+    echo "Read-only pilot permitted blocked POST $path (HTTP $status)" >&2
+    docker logs "$pilot_application" >&2
+    exit 1
+  fi
+done
 # Without an authenticated Shopify session the allowed catalog route must not
 # reveal product data. The SDK returns 410 for a missing Shopify launch
 # context; explicit denial or redirect to auth are both safe.

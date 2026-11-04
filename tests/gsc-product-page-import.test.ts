@@ -27,7 +27,7 @@ function adminFor(shop:string,foreignUrl=false){
               "https://monikablunderbeauty.com/products/unrelated":url,
             seo:{title:null,description:null}
           })),
-          pageInfo:{hasNextPage:false,endCursor:null}
+          pageInfo:{hasNextPage:false,endCursor:"cursor-final-product"}
         }}})};
       }
       throw new Error("Unexpected Shopify Admin query");

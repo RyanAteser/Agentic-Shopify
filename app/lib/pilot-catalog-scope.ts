@@ -72,6 +72,20 @@ export function catalogAuditConclusion(input: {
     : "No issues detected among eligible sampled products. This is not proof of Google indexing, full-store SEO quality or growth.";
 }
 
+/**
+ * The first 25 observations must not depend on Shopify's pagination order:
+ * otherwise low-severity issues can crowd out higher-priority issues. Sort
+ * only existing observations; never invent a severity or an impact estimate.
+ * A stable product/id tie-break makes repeated reads reproducible.
+ */
+export function prioritizeCatalogFindings<T extends {
+  severity: "high" | "medium"; id: string;
+}>(findings: readonly T[]): T[] {
+  return [...findings].sort((a, b) =>
+    (a.severity === "high" ? 0 : 1) - (b.severity === "high" ? 0 : 1) ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 /** A bounded UI must disclose omitted findings rather than imply full review. */
 export function catalogFindingDisplay(total: number, limit = 25) {
   if (!Number.isSafeInteger(total) || total < 0 ||

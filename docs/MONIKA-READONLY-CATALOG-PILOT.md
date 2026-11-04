@@ -14,7 +14,7 @@ Status (November 3, 2026): **Shopify installation verified; backend NOT connecte
 
 ## Implementation added on the feature branch
 
-- `AGENTIC_PILOT_MODE=read_only` selects SDK `AppDistribution.SingleMerchant` instead of AppStore distribution.
+- `AGENTIC_PILOT_MODE=read_only` selects SDK `AppDistribution.SingleMerchant` instead of AppStore distribution. Pilot-specific environment markers (`AGENTIC_PILOT_SHOP`, `AGENTIC_PILOT_CLIENT_ID`, or even an empty `AGENTIC_PILOT_MODE`) without exactly `AGENTIC_PILOT_MODE=read_only` now fail closed (HTTP 503), rather than silently selecting the full application. This check runs during Shopify SDK initialization and on guarded requests/services.
 - All authenticated merchant app access is limited to **GET /app/catalog**, plus Shopify's authentication flow under `/auth`. Initial `/` opens redirect to the catalog route.
 - Background n8n callbacks, scheduled dispatch, manager/ranking imports and Google OAuth completion routes explicitly deny pilot mode before their service effects. Authenticated lifecycle/privacy webhooks remain enabled but verify tenant identity after Shopify HMAC authentication.
 - `AGENTIC_PILOT_SHOP` is checked against the **authenticated session shop**, never a browser query parameter, form field, or merchant-supplied URL.

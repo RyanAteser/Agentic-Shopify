@@ -10,6 +10,8 @@ const pilot = {
   AGENTIC_PILOT_MODE: "read_only",
   AGENTIC_PILOT_SHOP: "monika-test.myshopify.com",
   SCOPES: "read_products",
+  SHOPIFY_API_KEY: "a".repeat(32),
+  AGENTIC_PILOT_CLIENT_ID: "a".repeat(32),
 };
 const req = (path: string, method = "GET") =>
   ({ method, url: "https://pilot.example" + path });
@@ -21,6 +23,8 @@ test("pilot activation requires exact read-only scope and a canonical shop", () 
   assert.doesNotThrow(() => assertPilotConfiguration(pilot));
   assert.throws(() => assertPilotConfiguration({...pilot, SCOPES:"read_products,write_content"}), status(503));
   assert.throws(() => assertPilotConfiguration({...pilot, SCOPES:""}), status(503));
+  assert.throws(() => assertPilotConfiguration({...pilot, SHOPIFY_API_KEY:"b".repeat(32)}), status(503));
+  assert.throws(() => assertPilotConfiguration({...pilot, AGENTIC_PILOT_CLIENT_ID:undefined}), status(503));
   assert.throws(() => assertPilotConfiguration({...pilot, AGENTIC_PILOT_SHOP:"example.com"}), status(503));
   assert.throws(() => assertPilotConfiguration({...pilot, AGENTIC_PILOT_SHOP:undefined}), status(503));
   assert.throws(() => assertPilotConfiguration({...pilot, AGENTIC_PILOT_MODE:"unsafe"}), status(503));

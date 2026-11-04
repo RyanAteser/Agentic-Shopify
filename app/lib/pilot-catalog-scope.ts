@@ -29,3 +29,28 @@ export function scopePilotCatalog(products: SeoProduct[], primaryHost: string) {
   }
   return {eligible, excludedForeign};
 }
+
+/**
+ * An empty audited sample is not a clean SEO audit. A partial sample also
+ * cannot support a whole-catalog clean bill of health.
+ */
+export function catalogAuditConclusion(input: {
+  sampled: number; eligible: number; findings: number; hasMore: boolean;
+}): string {
+  const {sampled,eligible,findings,hasMore}=input;
+  if (![sampled,eligible,findings].every(n=>Number.isSafeInteger(n)&&n>=0) ||
+      eligible>sampled || typeof hasMore!=="boolean") {
+    throw new Error("Invalid catalog audit coverage");
+  }
+  if (eligible===0) {
+    return sampled===0
+      ? "No products were returned in the bounded Shopify sample. No SEO audit was performed."
+      : "No sampled product had a verified, eligible primary-storefront URL. No SEO audit was performed.";
+  }
+  if (findings>0) {
+    return `${findings} potential SEO issue(s) observed among ${eligible} eligible sampled products. Findings require merchant review.`;
+  }
+  return hasMore || eligible<sampled
+    ? "No issues detected among eligible sampled products. Excluded or unsampled pages were not audited."
+    : "No issues detected among eligible sampled products. This is not proof of Google indexing, full-store SEO quality or growth.";
+}

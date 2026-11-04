@@ -81,3 +81,7 @@ The read-only catalog pilot displays at most 25 individual SEO observations to a
 ### Bounded review priority and measurement
 
 The first 25 findings are now sorted by existing severity (`high` before `medium`) and then stable finding ID. This prevents the first 25 products returned by Shopify from hiding high-severity observations later in the bounded sample. The total and omitted counts remain visible; when more than 25 high-severity observations exist, even high-severity findings may be omitted. Severity is a review priority, **not** a measured conversion, traffic or revenue impact. No claim of complete issue coverage, Google indexing, ranking lift or a live merchant outcome is warranted. A consented pilot should track the fraction of reviewed high-priority findings and merchant-confirmed usefulness, rather than number of generated recommendations.
+
+### Canonical URL regression and CI gate (2026-11-04)
+
+CI run [#41804773693](https://github.com/RyanAteser/Agentic-Shopify/actions/runs/41804773693) failed in all three jobs because the strict product-path regex had escaped slash delimiters twice, producing TypeScript parse errors at `app/lib/pilot-catalog-scope.ts:36`. Commit `6c80d47` repairs the literal. The existing test matrix covers localized canonical product paths and malformed paths; a passing fresh CI run is required before considering the branch deployable. This fix changes no live merchant data and does not validate hosted OAuth.

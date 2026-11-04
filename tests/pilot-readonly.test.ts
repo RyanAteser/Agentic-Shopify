@@ -80,3 +80,17 @@ test("privileged background endpoints always refuse a catalog-only pilot", () =>
     assert.ok(gateAt-handlerAt<180, route+" service gate must precede effects");
   }
 });
+
+test("Shopify lifecycle webhooks verify signed tenant before state changes", () => {
+  for (const route of [
+    "webhooks.app.uninstalled.tsx", "webhooks.shop.redact.ts",
+    "webhooks.customers.data_request.ts", "webhooks.customers.redact.ts",
+    "webhooks.app.scopes_update.tsx"
+  ]) {
+    const source=readFileSync(new URL("../app/routes/"+route,import.meta.url),"utf8");
+    assert.match(source, /assertPilotShop\(shop\)/,route);
+    const auth=source.indexOf("await authenticate.webhook(request)");
+    const scope=source.indexOf("assertPilotShop(shop)",auth);
+    assert.ok(auth>=0 && scope>auth,route+" must verify HMAC first");
+  }
+});

@@ -33,6 +33,31 @@ export function assertPilotConfiguration(env: PilotEnv = process.env): void {
   if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(env.AGENTIC_PILOT_SHOP ?? "")) {
     throw new Response("Canonical pilot shop has not been configured", { status: 503 });
   }
+  // The SDK requires both the client secret and an externally reachable app
+  // origin for session/token exchange. Database readiness alone cannot attest
+  // that these required values were provided. Never log either value.
+  const secret = env.SHOPIFY_API_SECRET;
+  if (typeof secret !== "string" || secret.length < 16 ||
+      secret.trim() !== secret) {
+    throw new Response("Pilot Shopify client secret has not been configured", { status: 503 });
+  }
+  const appUrl = env.SHOPIFY_APP_URL;
+  let origin: URL;
+  try {
+    if (!appUrl || appUrl.trim() !== appUrl) throw new Error("Missing app URL");
+    origin = new URL(appUrl);
+  } catch {
+    throw new Response("Pilot application URL is invalid", { status: 503 });
+  }
+  const labels = origin.hostname.split(".");
+  if (origin.protocol !== "https:" ||
+      labels.length < 2 ||
+      labels.some(label => !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)) ||
+      !/[a-z]/.test(labels[labels.length - 1]) ||
+      origin.username || origin.password || origin.port ||
+      origin.pathname !== "/" || origin.search || origin.hash) {
+    throw new Response("Pilot application URL must be a public HTTPS origin", { status: 503 });
+  }
 }
 
 export function assertPilotRequest(

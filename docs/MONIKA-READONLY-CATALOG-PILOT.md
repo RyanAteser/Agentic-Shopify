@@ -12,6 +12,10 @@ Status (November 3, 2026): **Shopify installation verified; backend NOT connecte
 - Separately, the user-authorized Shopify connector switched to the correct Monika Blunder Beauty Shopify Plus store and successfully fetched a small live read-only product/SEO sample. **That connector has different authentication and is not evidence the installed pilot app has exchanged OAuth credentials.**
 - This repository's broader Blog Agent still requests `write_content,read_products`. Never deploy that configuration to the read-only pilot.
 
+## Pagination metadata integrity (November 4, 2026)
+
+The bounded product reader now requires a nonempty Shopify connection to supply a nonempty `pageInfo.endCursor` even when `hasNextPage=false`, and requires an empty completed connection to have a null end cursor. This rejects contradictory GraphQL mappings instead of allowing a final page with missing cursor evidence to be reported as a complete SEO sample. Regression tests cover nonempty final pages with missing/empty cursors, empty final pages with stale cursors, and a legitimate empty catalog. This does not attest Shopify OAuth or prove catalog completeness outside the requested search filter.
+
 ## Implementation added on the feature branch
 
 - `AGENTIC_PILOT_MODE=read_only` selects SDK `AppDistribution.SingleMerchant` instead of AppStore distribution. Pilot-specific environment markers (`AGENTIC_PILOT_SHOP`, `AGENTIC_PILOT_CLIENT_ID`, or even an empty `AGENTIC_PILOT_MODE`) without exactly `AGENTIC_PILOT_MODE=read_only` now fail closed (HTTP 503), rather than silently selecting the full application. This check runs during Shopify SDK initialization and on guarded requests/services.

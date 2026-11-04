@@ -84,7 +84,7 @@ export type GscProductDay = OrganicMetric & { pageUrl: string };
 export function parseGscPageResponse(
   response: unknown, expectedUrl: string, startDate: string, endDate: string
 ): GscProductDay[] {
-  if (!response || typeof response !== "object" || Array.isArray(response)) {
+  // Validate response context independently of the request builder. A future\n  // importer must not turn an arbitrary page or invalid window into evidence.\n  gscPageQuery(expectedUrl, startDate, endDate);\n  if (!response || typeof response !== "object" || Array.isArray(response)) {
     throw new Error("Invalid GSC page response");
   }
   const payload = response as Record<string, unknown>;

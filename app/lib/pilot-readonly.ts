@@ -5,11 +5,19 @@
 type PilotEnv = Record<string, string | undefined>;
 
 export function readOnlyPilotEnabled(env: PilotEnv = process.env): boolean {
+  // A partially configured single-merchant pilot must never become the
+  // unrestricted full application because one mode variable was omitted.
+  // Presence, rather than truthiness, also catches empty staged variables.
+  const hasPilotMarker = ["AGENTIC_PILOT_MODE", "AGENTIC_PILOT_SHOP",
+    "AGENTIC_PILOT_CLIENT_ID"].some(key => env[key] !== undefined);
+  if (hasPilotMarker && env.AGENTIC_PILOT_MODE !== "read_only") {
+    throw new Response("Incomplete or unsupported pilot mode", { status: 503 });
+  }
   return env.AGENTIC_PILOT_MODE === "read_only";
 }
 
 export function assertPilotConfiguration(env: PilotEnv = process.env): void {
-  if (!env.AGENTIC_PILOT_MODE) return;
+  if (!readOnlyPilotEnabled(env)) return;
   if (env.AGENTIC_PILOT_MODE !== "read_only") {
     throw new Response("Unknown pilot mode", { status: 503 });
   }
@@ -31,7 +39,7 @@ export function assertPilotRequest(
   request: Pick<Request, "url" | "method">,
   env: PilotEnv = process.env,
 ): void {
-  if (!env.AGENTIC_PILOT_MODE) return;
+  if (!readOnlyPilotEnabled(env)) return;
   assertPilotConfiguration(env);
   const path = new URL(request.url).pathname;
   // Shopify manages /auth/... callbacks/session negotiation. All merchant
@@ -58,7 +66,7 @@ export function assertPilotShop(
  * are separate, authenticated handlers and must remain operational.
  */
 export function assertPilotServiceDisabled(env: PilotEnv = process.env): void {
-  if (!env.AGENTIC_PILOT_MODE) return;
+  if (!readOnlyPilotEnabled(env)) return;
   assertPilotConfiguration(env);
   throw new Response("Unavailable in read-only pilot", { status: 403 });
 }
@@ -71,7 +79,7 @@ export function assertPilotSessionScopes(
   granted: string | undefined,
   env: PilotEnv = process.env,
 ): void {
-  if (!env.AGENTIC_PILOT_MODE) return;
+  if (!readOnlyPilotEnabled(env)) return;
   assertPilotConfiguration(env);
   if (granted !== "read_products") {
     throw new Response("Unexpected Shopify session scopes", { status: 403 });

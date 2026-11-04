@@ -40,6 +40,9 @@ Status (November 3, 2026): **Shopify installation verified; backend NOT connecte
 - Regression tests cover zero-product and zero-eligible-product samples, partial and full bounded samples, findings present, and invalid coverage denominators.
 - This is an offline accuracy improvement only. No hosted OAuth connection, merchant write, Search Console import, ranking or sales outcome was verified.
 
+
+- Duplicate verified canonical product URLs across distinct Shopify product records now cause the pilot catalog audit to abstain rather than double-count page coverage or findings. This is a data-integrity check, not evidence of merchant SEO performance.
+
 ## Deployment gate (not yet completed)
 
 1. Provision an isolated stable HTTPS application host, isolated managed PostgreSQL, backups/retention, encryption and secrets. **No Agentic Shopify Vercel project was found in the connected account** at inspection time. The connected Supabase organization is on the Free tier with two unrelated active projects; reusing those databases would violate the pilot isolation gate. The previously used EC2 SSH endpoints were unreachable from the authorized desktop. Do not treat the old Artemis ngrok tunnel as a deployment target. Do not create a chargeable database/project without explicit cost approval.

@@ -107,6 +107,12 @@ query ShopifySeoCatalog($after: String) {
     const response = await admin.graphql(query, {variables: {after}});
     const payload: unknown = await response.json();
     const batch = parseShopifyProductSample(payload);
+    // A prior page promised more products. An empty follow-up page cannot
+    // substantiate completion of that catalog scan; abstain rather than
+    // reporting the earlier subset as the whole eligible catalog.
+    if (page > 0 && batch.length === 0) {
+      throw new Error("Shopify product pagination returned an empty continuation page");
+    }
     const connection = (payload as {data: {products: Record<string, unknown>}}).data.products;
     const info = connection.pageInfo;
     if (!info || typeof info !== "object" || Array.isArray(info)) {

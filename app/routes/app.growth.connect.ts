@@ -5,7 +5,10 @@ import {randomOAuthState} from "../lib/gsc-crypto.server";
 import {beginGoogleAuthorization,nextGoogleConsentOrder,googleAuthorizationUrl} from "../lib/gsc.server";
 
 /** Must be navigated at the top-level for Google's non-iframe OAuth consent. */
+import { assertPilotServiceDisabled } from "../lib/pilot-readonly";
+
 export const loader=async ({request}:LoaderFunctionArgs)=>{
+  assertPilotServiceDisabled();
   // Serialize this intent in the primary DB BEFORE asynchronous Shopify auth.
   // Missing counter or database failure fails closed before OAuth state creation.
   const requestOrder=await nextGoogleConsentOrder();

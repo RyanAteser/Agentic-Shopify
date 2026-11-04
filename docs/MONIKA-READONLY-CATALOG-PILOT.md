@@ -49,6 +49,10 @@ The Docker CI job now starts a second ephemeral application process with **inert
 
 These checks do **not** use merchant API tokens, call the Shopify Admin API, prove a live OAuth handshake, prove legitimate authorized catalog reads, or verify webhook HMAC delivery. CI tests must remain separated from the real installed pilot. See `scripts/ci-container-smoke.sh`.
 
+### Product-page URL evidence gate
+
+A verified primary storefront host alone does not establish that an Online Store URL is a product detail page. The catalog pilot now accepts only canonical HTTPS `/products/{handle}` URLs (including optional `/en/` or `/en-US/` Shopify locale prefixes). Primary-host homepage, collections, blogs, unexpected nested routes, and percent-encoded handles are excluded from product-specific SEO findings; the resulting reduced sample is explicitly labeled partial. This intentionally abstains on unsupported custom product URL rewrites rather than inventing page-level SEO evidence. A real storefront must be checked for custom routing before expanding eligibility.
+
 ### Readiness gate added before hosted OAuth
 
 The HTTP `GET /health` endpoint must return `503` if the read-only pilot's declared scope, client ID, canonical shop or mode fails `assertPilotConfiguration()`, even if PostgreSQL responds. The same production-image Docker smoke now checks a valid synthetic `read_products` pilot is ready and a deliberately misconfigured `read_products,write_content` pilot is **not** ready. This does not independently prove Shopify-issued grants, Shopify Partner installation or live OAuth; it protects the load-balancer from accidentally admitting a misconfigured deployment.

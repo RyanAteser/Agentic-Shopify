@@ -51,7 +51,7 @@ These checks do **not** use merchant API tokens, call the Shopify Admin API, pro
 
 ### Product-page URL evidence gate
 
-A verified primary storefront host alone does not establish that an Online Store URL is a product detail page. The catalog pilot now accepts only canonical HTTPS `/products/{handle}` URLs (including optional `/en/` or `/en-US/` Shopify locale prefixes). Primary-host homepage, collections, blogs, unexpected nested routes, and percent-encoded handles are excluded from product-specific SEO findings; the resulting reduced sample is explicitly labeled partial. This intentionally abstains on unsupported custom product URL rewrites rather than inventing page-level SEO evidence. A real storefront must be checked for custom routing before expanding eligibility.
+A verified primary storefront host alone does not establish that an Online Store URL is a product detail page. The catalog pilot now accepts only canonical HTTPS `/products/{handle}` URLs (including optional `/en/` or `/en-US/` Shopify locale prefixes). Primary-host homepage, collections, blogs, unexpected nested routes, doubled or trailing slashes, and percent-encoded handles are excluded from product-specific SEO findings; the resulting reduced sample is explicitly labeled partial. This intentionally abstains on unsupported custom product URL rewrites rather than inventing page-level SEO evidence. A real storefront must be checked for custom routing before expanding eligibility.
 
 ### Readiness gate added before hosted OAuth
 

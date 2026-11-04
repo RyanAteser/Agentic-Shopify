@@ -14,18 +14,19 @@ export function scopePilotCatalog(products: SeoProduct[], primaryHost: string) {
   const eligible: SeoProduct[] = [];
   const seenUrls = new Set<string>();
   let excludedForeign = 0;
+  let excludedNoncanonical = 0;
   for (const product of products) {
     if (!product.url) continue;
     let url: URL;
     try { url = new URL(product.url); }
-    catch { continue; } // Existing sample audit counts malformed URLs.
+    catch { excludedNoncanonical++; continue; } // Existing sample audit counts malformed URLs.
     if (url.hostname.toLowerCase() !== host) {
       excludedForeign++;
       continue;
     }
     if (url.protocol !== "https:" || url.username || url.password ||
         url.port || url.search || url.hash ||
-        url.href !== product.url) continue;
+        url.href !== product.url) { excludedNoncanonical++; continue; }
     // A primary-domain URL is not necessarily a product page. A Shopify
     // redirect to the home page, a collection, or an article must never be
     // presented as a product-specific SEO observation. Allow an optional
@@ -33,7 +34,7 @@ export function scopePilotCatalog(products: SeoProduct[], primaryHost: string) {
     // Match the complete path rather than filtering empty segments: a URL
     // with doubled slashes or a trailing slash is not the canonical product
     // URL we claim to have audited. Reject normalization ambiguity.
-    if (!/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?products\/[a-z0-9][a-z0-9-]*$/i.test(url.pathname)) continue;
+    if (!/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?products\/[a-z0-9][a-z0-9-]*$/i.test(url.pathname)) { excludedNoncanonical++; continue; }
     // Duplicate canonical URLs make the sample's page coverage and findings
     // ambiguous. Abstain rather than count one page as multiple products.
     if (seenUrls.has(url.href)) {
@@ -42,7 +43,7 @@ export function scopePilotCatalog(products: SeoProduct[], primaryHost: string) {
     seenUrls.add(url.href);
     eligible.push(product);
   }
-  return {eligible, excludedForeign};
+  return {eligible, excludedForeign, excludedNoncanonical};
 }
 
 /**

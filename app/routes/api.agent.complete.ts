@@ -3,7 +3,10 @@ import { authorizedArticleCallback } from "../lib/article-callback-auth";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "../lib/request-body.server";
 import { ArticleCallbackRejectedError, persistArticleCallback } from "../lib/article-callback.server";
 
+import { assertPilotServiceDisabled } from "../lib/pilot-readonly";
+
 export const action = async ({ request }: ActionFunctionArgs) => {
+  assertPilotServiceDisabled();
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
   let payload: unknown;
   try {

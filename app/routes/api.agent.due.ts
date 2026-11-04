@@ -9,7 +9,10 @@ import { claimDueScheduledDraft, failScheduledDraft, findDueScheduledDrafts } fr
  * Failed/expired free plans cannot occupy all ten selected slots indefinitely.
  * This endpoint only creates drafts; it never publishes Shopify content.
  */
+import { assertPilotServiceDisabled } from "../lib/pilot-readonly";
+
 export const action = async ({ request }: ActionFunctionArgs) => {
+  assertPilotServiceDisabled();
   if (!authorizedBridge(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
   const now = new Date();

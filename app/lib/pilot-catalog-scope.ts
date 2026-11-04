@@ -26,6 +26,16 @@ export function scopePilotCatalog(products: SeoProduct[], primaryHost: string) {
     if (url.protocol !== "https:" || url.username || url.password ||
         url.port || url.search || url.hash ||
         url.href !== product.url) continue;
+    // A primary-domain URL is not necessarily a product page. A Shopify
+    // redirect to the home page, a collection, or an article must never be
+    // presented as a product-specific SEO observation. Allow an optional
+    // locale prefix used by localized Shopify storefront routes.
+    const segments = url.pathname.split("/").filter(Boolean);
+    const productIndex = segments[0] === "products" ? 0 :
+      (/^[a-z]{2}(?:-[a-z]{2})?$/i.test(segments[0] ?? "") &&
+       segments[1] === "products" ? 1 : -1);
+    if (productIndex < 0 || segments.length !== productIndex + 2 ||
+        !/^[a-z0-9][a-z0-9-]*$/i.test(segments[productIndex + 1])) continue;
     // Duplicate canonical URLs make the sample's page coverage and findings
     // ambiguous. Abstain rather than count one page as multiple products.
     if (seenUrls.has(url.href)) {

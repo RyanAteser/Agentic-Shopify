@@ -8,7 +8,10 @@ import { readMerchantProductSample, syncManagerTasks } from "../lib/manager.serv
  * Read-only background coordinator. n8n may invoke this route, but cannot
  * modify Shopify products, send messages, or publish content.
  */
+import { assertPilotServiceDisabled } from "../lib/pilot-readonly";
+
 export const action=async ({request}:ActionFunctionArgs)=>{
+  assertPilotServiceDisabled();
   if(request.method!=="POST")return Response.json({error:"Method not allowed"},{status:405});
   if(!authorizedBridge(request))return Response.json({error:"Unauthorized"},{status:401});
   const now=new Date();

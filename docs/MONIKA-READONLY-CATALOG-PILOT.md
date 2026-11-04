@@ -21,6 +21,7 @@ Status (November 3, 2026): **Shopify installation verified; backend NOT connecte
 - `AGENTIC_PILOT_CLIENT_ID` is a separate required app identifier and must match the runtime `SHOPIFY_API_KEY`. This detects inconsistent configuration, **not independently whether both values belong to the correct app**. Before deployment compare both with the client ID displayed for the newly installed pilot in Shopify Dev Dashboard; do not inherit Artemis credentials.
 - Pilot initialization rejects unexpected configured scopes or a missing canonical shop. After Shopify authentication, the actual granted `session.scope` must also be exactly `read_products`; additional scopes are denied rather than trusted. A POST or other merchant dashboard path fails closed.
 - The catalog-only page uses an existing bounded (at most 100 products) read-only Shopify GraphQL audit. It displays sample coverage and abstains on malformed API responses. It makes no merchant writes and does not persist catalog data.
+- Pilot catalog findings are now additionally scoped to the **primary storefront host attested by the authenticated Shopify Admin API**. Cross-domain product links, URL userinfo, non-HTTPS, alternate ports, query/fragment variants and invalid hosts are excluded. The UI reports the partial sample rather than presenting excluded pages as audited. This is a tenant/SEO accuracy safeguard, not proof of rankings or growth.
 - The rest of the full merchant application remains unchanged by default when pilot mode is not set.
 
 ## Railway Free provisioning record (November 3, 2026)

@@ -77,3 +77,7 @@ https://shopify.dev/docs/api/shopify-app-react-router/latest/entrypoints/shopify
 ### Bounded finding disclosure
 
 The read-only catalog pilot displays at most 25 individual SEO observations to avoid an unbounded merchant page. It preserves the full observation count and explicitly reports how many observations are omitted when the count exceeds 25. This prevents a merchant from mistaking the visible subset for a complete issue list. Observations are heuristic and unverified against live Google indexing or merchant conversion data; no content is published or changed. Future pilots should test whether this disclosure improves merchant interpretation and follow-up completion rather than assuming a revenue lift.
+
+### Bounded review priority and measurement
+
+The first 25 findings are now sorted by existing severity (`high` before `medium`) and then stable finding ID. This prevents the first 25 products returned by Shopify from hiding high-severity observations later in the bounded sample. The total and omitted counts remain visible; when more than 25 high-severity observations exist, even high-severity findings may be omitted. Severity is a review priority, **not** a measured conversion, traffic or revenue impact. No claim of complete issue coverage, Google indexing, ranking lift or a live merchant outcome is warranted. A consented pilot should track the fraction of reviewed high-priority findings and merchant-confirmed usefulness, rather than number of generated recommendations.

@@ -174,6 +174,27 @@ test("empty continuation page cannot silently certify complete catalog coverage"
   assert.deepEqual(empty, {products: [], hasMore: false, pagesFetched: 1});
 });
 
+test("final-page cursor metadata must agree with returned product nodes", async () => {
+  // Shopify's connection endCursor identifies the last returned edge.
+  // Missing/empty cursors on a nonempty final page are not reliable evidence
+  // that a complete catalog was observed.
+  for (const invalid of [
+    page([item(1)], false, null),
+    page([item(1)], false, ""),
+    page([], false, "stale-cursor"),
+  ]) {
+    await assert.rejects(readShopifySeoCatalog({graphql: async () => ({
+      json: async () => invalid
+    })}), /pagination cursor is invalid/);
+  }
+  // The truly empty final page remains an unambiguous empty catalog.
+  const empty = await readShopifySeoCatalog({graphql: async () => ({
+    json: async () => page([], false, null)
+  })});
+  assert.equal(empty.products.length, 0);
+  assert.equal(empty.hasMore, false);
+});
+
 test("missing pagination metadata is not accepted as a complete catalog", async () => {
   await assert.rejects(readShopifySeoCatalog({graphql: async () => ({
     json: async () => response([item(1)])

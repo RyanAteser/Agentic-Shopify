@@ -119,17 +119,20 @@ for path in /app /app/manager /app/seo; do
     exit 1
   fi
 done
-# React Router rejects POST to a loader-only route before invoking its
-# loader or the pilot guard. HTTP 405 is therefore the expected fail-closed
-# response for /app/catalog, not 403. Keep the other write-capable endpoints
-# on their explicit 403 guard contract.
-status="$(curl --silent --max-time 5 --request POST --output /dev/null --write-out '%{http_code}' "$pilot_url/app/catalog" || true)"
-if [[ "$status" != "405" ]]; then
-  echo "Read-only pilot catalog POST did not fail closed with HTTP 405 (got $status)" >&2
-  docker logs "$pilot_application" >&2
-  exit 1
-fi
-for path in /app /api/seo/rankings /api/agent/due; do
+# React Router rejects POST to loader-only routes before invoking their
+# loaders or pilot guards. Both /app and /app/catalog must fail closed with
+# HTTP 405; this does NOT establish that the guard ran.
+for path in /app /app/catalog; do
+  status="$(curl --silent --max-time 5 --request POST --output /dev/null --write-out '%{http_code}' "$pilot_url$path" || true)"
+  if [[ "$status" != "405" ]]; then
+    echo "Read-only pilot loader-only POST $path did not fail closed with HTTP 405 (got $status)" >&2
+    docker logs "$pilot_application" >&2
+    exit 1
+  fi
+done
+# These endpoints implement actions and must be rejected by the explicit
+# pilot authorization guard before any write or external API operation.
+for path in /api/seo/rankings /api/agent/due; do
   status="$(curl --silent --max-time 5 --request POST --output /dev/null --write-out '%{http_code}' "$pilot_url$path" || true)"
   if [[ "$status" != "403" ]]; then
     echo "Read-only pilot permitted blocked POST $path (HTTP $status)" >&2

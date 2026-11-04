@@ -82,6 +82,12 @@ The read-only catalog pilot displays at most 25 individual SEO observations to a
 
 The first 25 findings are now sorted by existing severity (`high` before `medium`) and then stable finding ID. This prevents the first 25 products returned by Shopify from hiding high-severity observations later in the bounded sample. The total and omitted counts remain visible; when more than 25 high-severity observations exist, even high-severity findings may be omitted. Severity is a review priority, **not** a measured conversion, traffic or revenue impact. No claim of complete issue coverage, Google indexing, ranking lift or a live merchant outcome is warranted. A consented pilot should track the fraction of reviewed high-priority findings and merchant-confirmed usefulness, rather than number of generated recommendations.
 
+### OAuth configuration readiness gate (2026-11-04)
+
+The read-only pilot's `/health` preflight now additionally requires a configured Shopify client secret (minimum 16 characters, without leading/trailing whitespace) and a public HTTPS application origin without URL credentials, a path, query, fragment, or non-standard port. An otherwise healthy database no longer makes a pilot with a missing secret or unusable callback origin appear ready. The check never prints the secret. Regression tests cover absent/short secrets, HTTP/local origins, credentials, unexpected paths/ports and valid HTTPS origins.
+
+**This is static configuration validation only.** A plausible value does not verify that the secret matches the installed Shopify app, that DNS resolves, that Railway is running, or that Shopify OAuth/session exchange succeeds. Compare the client ID to the Dev Dashboard and execute a merchant-consented hosted OAuth smoke before opening access. Do not apply the staged Railway URL or deploy the app automatically.
+
 ### Canonical URL regression and CI gate (2026-11-04)
 
 CI run [#41804773693](https://github.com/RyanAteser/Agentic-Shopify/actions/runs/41804773693) failed in all three jobs because the strict product-path regex had escaped slash delimiters twice, producing TypeScript parse errors at `app/lib/pilot-catalog-scope.ts:36`. Commit `6c80d47` repairs the literal. The existing test matrix covers localized canonical product paths and malformed paths; a passing fresh CI run is required before considering the branch deployable. This fix changes no live merchant data and does not validate hosted OAuth.

@@ -45,7 +45,7 @@ Status (November 3, 2026): **Shopify installation verified; backend NOT connecte
 
 ## CI HTTP route smoke for the read-only pilot
 
-The Docker CI job now starts a second ephemeral application process with **inert synthetic Shopify identifiers** and `SCOPES=read_products`. It checks database-backed `GET /health`, rejects unauthenticated access to privileged UI paths (`/app`, `/app/manager`, `/app/seo`) and the background dispatch endpoint (`POST /api/agent/due`), and requires `GET /app/catalog` without a Shopify session to redirect for authentication or return an explicit authorization failure. Tests run against the compiled production image with a throwaway PostgreSQL service.
+The Docker CI job now starts a second ephemeral application process with **inert synthetic Shopify identifiers** and `SCOPES=read_products`. It checks database-backed `GET /health`, rejects unauthenticated access to privileged UI paths (`/app`, `/app/manager`, `/app/seo`) and the background dispatch endpoint (`POST /api/agent/due`), and requires `GET /app/catalog` without a Shopify session to redirect for authentication or return a non-successful authorization response (the current SDK returns HTTP 410 for absent Shopify launch context). Tests run against the compiled production image with a throwaway PostgreSQL service.
 
 These checks do **not** use merchant API tokens, call the Shopify Admin API, prove a live OAuth handshake, prove legitimate authorized catalog reads, or verify webhook HMAC delivery. CI tests must remain separated from the real installed pilot. See `scripts/ci-container-smoke.sh`.
 

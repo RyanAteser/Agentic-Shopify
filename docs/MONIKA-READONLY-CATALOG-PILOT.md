@@ -82,6 +82,10 @@ The read-only catalog pilot displays at most 25 individual SEO observations to a
 
 The first 25 findings are now sorted by existing severity (`high` before `medium`) and then stable finding ID. This prevents the first 25 products returned by Shopify from hiding high-severity observations later in the bounded sample. The total and omitted counts remain visible; when more than 25 high-severity observations exist, even high-severity findings may be omitted. Severity is a review priority, **not** a measured conversion, traffic or revenue impact. No claim of complete issue coverage, Google indexing, ranking lift or a live merchant outcome is warranted. A consented pilot should track the fraction of reviewed high-priority findings and merchant-confirmed usefulness, rather than number of generated recommendations.
 
+### Empty continuation page fail-closed gate (2026-11-04)
+
+If Shopify reports `hasNextPage: true` for a product page but the following page contains zero products, the bounded pilot now rejects the scan instead of declaring the earlier subset a complete catalog. This guards the merchant against a misleading zero-issue conclusion during inconsistent cursor pagination. A genuinely empty first page with `hasNextPage: false` remains valid. Regression cases cover empty final and empty nonfinal continuations. This is a defensive response-consistency check, not evidence that Shopify routinely produces such responses or that merchant SEO improves.
+
 ### OAuth configuration readiness gate (2026-11-04)
 
 The read-only pilot's `/health` preflight now additionally requires a configured Shopify client secret (minimum 16 characters, without leading/trailing whitespace) and a public HTTPS application origin without URL credentials, a path, query, fragment, or non-standard port. An otherwise healthy database no longer makes a pilot with a missing secret or unusable callback origin appear ready. The check never prints the secret. Regression tests cover absent/short secrets, HTTP/local origins, credentials, unexpected paths/ports and valid HTTPS origins.

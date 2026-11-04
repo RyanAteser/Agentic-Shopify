@@ -6,7 +6,7 @@ import { auditProductSeo } from "../lib/seo";
 import { readShopifySeoCatalog, summarizeShopifySeoSample } from "../lib/shopify-product-sample";
 import { readOnlyPilotEnabled } from "../lib/pilot-readonly";
 import { primaryDomainForShop } from "../lib/ranking-ingest.server";
-import { scopePilotCatalog, catalogAuditConclusion, catalogFindingDisplay } from "../lib/pilot-catalog-scope";
+import { scopePilotCatalog, catalogAuditConclusion, catalogFindingDisplay, prioritizeCatalogFindings } from "../lib/pilot-catalog-scope";
 
 /** Catalog-only proof of authenticated Shopify access; no persistence or writes. */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -30,7 +30,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         scoped.excludedForeign ? `${scoped.excludedForeign} product URL(s) were on a different host from the Shopify-attested primary storefront and were excluded.` : "",
         scoped.eligible.length < coverage.eligibleProducts.length ? "The eligible primary-domain sample is partial; excluded pages were not audited." : ""
       ].filter(Boolean).join(" "),
-      findings: findings.slice(0, findingDisplay.displayed).map((finding) => ({
+      findings: prioritizeCatalogFindings(findings).slice(0, findingDisplay.displayed).map((finding) => ({
         id: finding.id,
         productTitle: finding.productTitle,
         kind: finding.kind,

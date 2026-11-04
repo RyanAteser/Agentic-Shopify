@@ -1,6 +1,6 @@
 # Monika Blunder Beauty: Shopify installation gate
 
-**Status: blocked; no installation or merchant access verified.** This is an operator runbook for the existing Agentic Shopify implementation in draft PR #1, not an install link or approval to modify the merchant store.
+**Updated status (2026-11-03): The separate Partner custom app `Agentic Commerce MBB Pilot` is installed with `read_products` only; the backend and OAuth catalog request are NOT verified.** This runbook originally described the broader, uninstalled `write_content,read_products` application from draft PR #1. For the actual installation and narrower pilot, see [MONIKA-READONLY-CATALOG-PILOT.md](MONIKA-READONLY-CATALOG-PILOT.md). Do not use the broader app configuration for this pilot.
 
 ## First: identify the app and ownership
 

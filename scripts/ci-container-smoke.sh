@@ -8,9 +8,10 @@ network="agentic-smoke-${suffix}"
 database="agentic-smoke-db-${suffix}"
 application="agentic-smoke-app-${suffix}"
 pilot_application="agentic-smoke-pilot-${suffix}"
+invalid_pilot_application="agentic-smoke-invalid-pilot-${suffix}"
 
 cleanup() {
-  docker rm -f "$pilot_application" "$application" "$database" >/dev/null 2>&1 || true
+  docker rm -f "$invalid_pilot_application" "$pilot_application" "$application" "$database" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -137,6 +138,45 @@ case "$status" in
     ;;
 esac
 echo "Container smoke: read-only pilot starts and rejects unauthorized routes"
+
+# The load-balancer must not mark the pilot ready if the deployed token
+# scope request drifts beyond catalog read. Use synthetic credentials only.
+docker run -d --name "$invalid_pilot_application" --network "$network" -p 127.0.0.1::3000 \
+  -e DATABASE_URL="$db_url" \
+  -e SHOPIFY_API_KEY="$pilot_key" \
+  -e SHOPIFY_API_SECRET=ci-only-inert-secret-not-for-any-store \
+  -e SHOPIFY_APP_URL=https://ci.example.invalid \
+  -e AGENTIC_PILOT_MODE=read_only \
+  -e AGENTIC_PILOT_SHOP=ci-only.myshopify.com \
+  -e AGENTIC_PILOT_CLIENT_ID="$pilot_key" \
+  -e SCOPES=read_products,write_content \
+  "$image" >/dev/null
+
+invalid_pilot_port="$(docker port "$invalid_pilot_application" 3000/tcp | head -n 1 | sed 's/.*://')"
+if [[ ! "$invalid_pilot_port" =~ ^[0-9]+$ ]]; then
+  echo "Could not resolve invalid pilot port" >&2
+  exit 1
+fi
+invalid_pilot_url="http://127.0.0.1:${invalid_pilot_port}/health"
+invalid_pilot_denied=false
+for _ in $(seq 1 30); do
+  status="$(curl --silent --max-time 2 --output /dev/null --write-out '%{http_code}' "$invalid_pilot_url" || true)"
+  if [[ "$status" == "200" ]]; then
+    echo "Misconfigured pilot incorrectly reported HTTP 200 ready" >&2
+    exit 1
+  fi
+  if [[ "$status" == "503" ]]; then
+    invalid_pilot_denied=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$invalid_pilot_denied" != true ]]; then
+  echo "Misconfigured pilot never returned the required readiness 503" >&2
+  docker logs "$invalid_pilot_application" >&2
+  exit 1
+fi
+echo "Container smoke: elevated pilot scope fails HTTP readiness"
 
 # A dead database must not be reported as ready by the load-balancer endpoint.
 docker stop "$database" >/dev/null

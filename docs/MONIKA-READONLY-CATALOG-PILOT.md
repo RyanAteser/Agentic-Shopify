@@ -23,6 +23,15 @@ Status (November 3, 2026): **Shopify installation verified; backend NOT connecte
 - The catalog-only page uses an existing bounded (at most 100 products) read-only Shopify GraphQL audit. It displays sample coverage and abstains on malformed API responses. It makes no merchant writes and does not persist catalog data.
 - The rest of the full merchant application remains unchanged by default when pilot mode is not set.
 
+## Railway Free provisioning record (November 3, 2026)
+
+- Private project: `agentic-shopify-mbb-pilot` (`5216fb0d-e7ba-4273-8ae7-8f98cadbd1dc`), with its **own** PostgreSQL service and persisted volume. The Postgres service can enter **Sleeping** state on Railway Free; a service creation is not an application deployment.
+- Pending, **not deployed**: `mbb-catalog-api` empty Railway service with `AGENTIC_PILOT_MODE=read_only`, canonical `AGENTIC_PILOT_SHOP`, `SCOPES=read_products`, and a private `${{Postgres.DATABASE_URL}}` reference. Shopify app keys/secrets and HTTPS URL have not been entered.
+- Railway UI Settings (not GitHub config): `/health` readiness path, 180-second timeout, and `npx prisma migrate deploy --schema prisma/schema.postgresql.prisma` pre-deploy command were entered, but changes remain **pending Apply/Deploy**. Check and save these in the Railway service UI before release.
+- Railway's UI states that **Config as Code is deprecated**: newly created services cannot opt into legacy config files after August 28, 2026. The earlier `railway.monika-pilot.json` and its test were removed because they could not control this new service. Configure Build = Dockerfile, Healthcheck, and Pre-deploy directly in Railway UI or an officially supported Infrastructure-as-Code method.
+- Railway cannot access the private `RyanAteser/Agentic-Shopify` repository without its GitHub App installation, which asks for write access to code, actions, workflows and repository administration. **Do not accept All repositories or broaden permissions without explicit owner approval.** An authenticated local clone exists at `D:\\AgenticShopify-MBB-Pilot`; prefer a temporary **project-scoped** Railway token with local `railway up --project ... --environment production --service mbb-catalog-api` to avoid that broad grant. Revoke the project token after use and keep it out of logs and Git.
+- The Free plan's `$1` monthly credit does not guarantee continuous app + PostgreSQL operation. Check usage and avoid upgrades or overages.
+
 ## Deployment gate (not yet completed)
 
 1. Provision an isolated stable HTTPS application host, isolated managed PostgreSQL, backups/retention, encryption and secrets. **No Agentic Shopify Vercel project was found in the connected account** at inspection time. The connected Supabase organization is on the Free tier with two unrelated active projects; reusing those databases would violate the pilot isolation gate. The previously used EC2 SSH endpoints were unreachable from the authorized desktop. Do not treat the old Artemis ngrok tunnel as a deployment target. Do not create a chargeable database/project without explicit cost approval.

@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {scopePilotCatalog,catalogAuditConclusion} from "../app/lib/pilot-catalog-scope";
+import {scopePilotCatalog,catalogAuditConclusion,catalogFindingDisplay} from "../app/lib/pilot-catalog-scope";
 import type {SeoProduct} from "../app/lib/seo";
 
 const product = (url:string|null):SeoProduct => ({
@@ -84,4 +84,18 @@ test("pilot rejects impossible audit coverage instead of a clean verdict",()=>{
     {sampled:NaN,eligible:0,findings:0,hasMore:false},
     {sampled:1,eligible:1,findings:-1,hasMore:false}
   ])assert.throws(()=>catalogAuditConclusion(input),/Invalid catalog audit coverage/);
+});
+
+test("bounded SEO findings disclose omissions without changing total counts",()=>{
+  assert.deepEqual(catalogFindingDisplay(0),{displayed:0,omitted:0,notice:""});
+  assert.deepEqual(catalogFindingDisplay(25),{displayed:25,omitted:0,notice:""});
+  const over=catalogFindingDisplay(31);
+  assert.equal(over.displayed,25);
+  assert.equal(over.omitted,6);
+  assert.match(over.notice,/Showing 25 of 31/);
+  assert.match(over.notice,/6 additional finding/);
+  assert.equal(catalogFindingDisplay(8,3).omitted,5);
+  for(const [total,limit] of [[-1,25],[NaN,25],[4,0],[4,1.5]]) {
+    assert.throws(()=>catalogFindingDisplay(total,limit),/Invalid catalog finding display bounds/);
+  }
 });

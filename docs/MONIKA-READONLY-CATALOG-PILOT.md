@@ -103,3 +103,7 @@ CI run [#41804773693](https://github.com/RyanAteser/Agentic-Shopify/actions/runs
 ### Product identity integrity gate (2026-11-04)
 
 The bounded catalog parser now requires the canonical Shopify `gid://shopify/Product/<positive decimal ID>` identity for every product record. Wrong resource types (such as Collection and ProductVariant), malformed IDs and decorated IDs fail the entire read instead of appearing as product-level SEO findings. This guards against accidental GraphQL selection/mapping regressions; it does not prove indexing, product publication, or storefront rendering. Synthetic regression tests cover valid large IDs and rejected cross-resource IDs. Hosted Shopify read-only OAuth remains unverified.
+
+### Explicit catalog URL exclusion counts (2026-11-04)
+
+The read-only audit now distinguishes product URLs excluded for a different host from those excluded for a noncanonical same-host product route (for example a collection redirect, trailing slash or tracking query). These are **sample coverage** counts, not Google indexing or SEO ranking measurements. Invalid/non-HTTPS URLs are already counted by the initial Shopify sample validator and are not double-counted in the canonical subset. The displayed total remains limited to the bounded sample. No merchant data is persisted or changed.

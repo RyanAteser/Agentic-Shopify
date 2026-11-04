@@ -6,7 +6,7 @@ import { auditProductSeo } from "../lib/seo";
 import { readShopifySeoCatalog, summarizeShopifySeoSample } from "../lib/shopify-product-sample";
 import { readOnlyPilotEnabled } from "../lib/pilot-readonly";
 import { primaryDomainForShop } from "../lib/ranking-ingest.server";
-import { scopePilotCatalog, catalogAuditConclusion } from "../lib/pilot-catalog-scope";
+import { scopePilotCatalog, catalogAuditConclusion, catalogFindingDisplay } from "../lib/pilot-catalog-scope";
 
 /** Catalog-only proof of authenticated Shopify access; no persistence or writes. */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -20,6 +20,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const coverage = summarizeShopifySeoSample(catalog.products, catalog.hasMore);
     const scoped = scopePilotCatalog(coverage.eligibleProducts, primaryHost);
     const findings = auditProductSeo(scoped.eligible);
+    const findingDisplay = catalogFindingDisplay(findings.length);
     return {
       shop: session.shop,
       unavailable: false,
@@ -29,7 +30,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         scoped.excludedForeign ? `${scoped.excludedForeign} product URL(s) were on a different host from the Shopify-attested primary storefront and were excluded.` : "",
         scoped.eligible.length < coverage.eligibleProducts.length ? "The eligible primary-domain sample is partial; excluded pages were not audited." : ""
       ].filter(Boolean).join(" "),
-      findings: findings.slice(0, 25).map((finding) => ({
+      findings: findings.slice(0, findingDisplay.displayed).map((finding) => ({
         id: finding.id,
         productTitle: finding.productTitle,
         kind: finding.kind,
@@ -37,6 +38,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         severity: finding.severity,
       })),
       findingCount: findings.length,
+      findingNotice: findingDisplay.notice,
       conclusion: catalogAuditConclusion({sampled:coverage.sampledProducts,
         eligible:scoped.eligible.length,findings:findings.length,hasMore:catalog.hasMore}),
     };
@@ -46,7 +48,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.warn("Read-only catalog pilot unavailable", error instanceof Error ? error.name : "unknown");
     return { shop: session.shop, unavailable: true, sampled: 0, eligible: 0,
       warning: "Shopify catalog could not be verified. No audit conclusions are available.",
-      findings: [], findingCount: 0, conclusion: "No SEO audit was performed." };
+      findings: [], findingCount: 0, findingNotice: "", conclusion: "No SEO audit was performed." };
   }
 };
 
@@ -67,6 +69,7 @@ export default function CatalogPilot() {
             <p><strong>{finding.productTitle}</strong> · {finding.severity} · {finding.kind}</p>
             <p>{finding.message}</p>
           </div>)}
+          {data.findingNotice ? <p role="status">{data.findingNotice}</p> : null}
           <p role={data.eligible===0?"status":undefined}>{data.conclusion}</p>
         </>}
     </s-section>

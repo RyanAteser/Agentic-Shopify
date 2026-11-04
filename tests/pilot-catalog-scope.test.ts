@@ -34,6 +34,18 @@ test("pilot permits valid alternate Shopify domain only when attested",()=>{
   assert.equal(scopePilotCatalog([product(url)],"other.example.com").eligible.length,0);
 });
 
+test("pilot abstains on duplicate verified product URLs rather than double-count SEO findings",()=>{
+  const url="https://shop.example.com/products/one";
+  const first=product(url);
+  const second={...product(url),id:"gid://shopify/Product/2",title:"Another product"};
+  assert.throws(()=>scopePilotCatalog([first,second],"shop.example.com"),/Duplicate Shopify primary-storefront product URL/);
+  assert.deepEqual(scopePilotCatalog([first,product("https://shop.example.com/products/two")],
+    "shop.example.com").eligible.map(p=>p.url),[url,"https://shop.example.com/products/two"]);
+  // An off-domain duplicate does not enter the eligible page denominator.
+  assert.equal(scopePilotCatalog([first,product("https://other.example.com/products/one"),
+    product("https://other.example.com/products/one")],"shop.example.com").eligible.length,1);
+});
+
 test("pilot abstains when no eligible products were actually audited",()=>{
   assert.match(catalogAuditConclusion({sampled:13,eligible:0,findings:0,hasMore:false}),/No SEO audit was performed/);
   assert.match(catalogAuditConclusion({sampled:0,eligible:0,findings:0,hasMore:false}),/No SEO audit was performed/);

@@ -73,3 +73,7 @@ The HTTP `GET /health` endpoint must return `503` if the read-only pilot's decla
 Sources: Shopify documentation on custom distribution and SingleMerchant SDK authentication:
 https://shopify.dev/docs/apps/launch/distribution
 https://shopify.dev/docs/api/shopify-app-react-router/latest/entrypoints/shopifyapp
+
+### Bounded finding disclosure
+
+The read-only catalog pilot displays at most 25 individual SEO observations to avoid an unbounded merchant page. It preserves the full observation count and explicitly reports how many observations are omitted when the count exceeds 25. This prevents a merchant from mistaking the visible subset for a complete issue list. Observations are heuristic and unverified against live Google indexing or merchant conversion data; no content is published or changed. Future pilots should test whether this disclosure improves merchant interpretation and follow-up completion rather than assuming a revenue lift.

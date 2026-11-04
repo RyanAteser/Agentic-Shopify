@@ -125,10 +125,10 @@ if [[ "$status" != "403" ]]; then
   exit 1
 fi
 # Without an authenticated Shopify session the allowed catalog route must not
-# reveal product data. A redirect to OAuth or explicit auth failure is fine.
+# reveal product data. The SDK returns 410 for a missing Shopify launch\n# context; explicit denial or redirect to auth are both safe.
 status="$(curl --silent --max-time 5 --output /dev/null --write-out '%{http_code}' "$pilot_url/app/catalog" || true)"
 case "$status" in
-  301|302|303|307|308|400|401|403) ;;
+  301|302|303|307|308|400|401|403|410) ;;
   *)
     echo "Anonymous pilot catalog did not require authentication (HTTP $status)" >&2
     docker logs "$pilot_application" >&2

@@ -33,6 +33,13 @@ Status (November 3, 2026): **Shopify installation verified; backend NOT connecte
 - Railway cannot access private `RyanAteser/Agentic-Shopify` without its GitHub App installation, which asks for write access to code, actions, workflows and repository administration. **Do not accept All repositories or grant these permissions without explicit informed owner approval.** An authenticated local clone exists at `D:\\AgenticShopify-MBB-Pilot`. Railway documents a temporary **project-scoped** token and local `railway up --project 5216fb0d-e7ba-4273-8ae7-8f98cadbd1dc --environment production --service mbb-catalog-api` as an alternative, but the connected desktop tool blocked creating that token automatically. No token was minted for this project. A human may run the scoped CLI deploy, then revoke the project token, without giving Railway GitHub administration rights.
 - The Free plan's `$1` monthly credit does not guarantee continuous app + PostgreSQL operation. Check usage and avoid upgrades or overages.
 
+## Audit evidence gate (November 3, 2026)
+
+- A verified primary-host URL is a prerequisite for counting a product as audited. If the Shopify sample contains zero eligible URLs (including password-protected stores), the catalog UI explicitly states **no SEO audit was performed** rather than displaying a reassuring `No issues detected` message.
+- A partial primary-host sample or paginated catalog is labeled as a partial observation. A clean bounded sample cannot establish indexing, full-store SEO quality, ranking changes or revenue lift.
+- Regression tests cover zero-product and zero-eligible-product samples, partial and full bounded samples, findings present, and invalid coverage denominators.
+- This is an offline accuracy improvement only. No hosted OAuth connection, merchant write, Search Console import, ranking or sales outcome was verified.
+
 ## Deployment gate (not yet completed)
 
 1. Provision an isolated stable HTTPS application host, isolated managed PostgreSQL, backups/retention, encryption and secrets. **No Agentic Shopify Vercel project was found in the connected account** at inspection time. The connected Supabase organization is on the Free tier with two unrelated active projects; reusing those databases would violate the pilot isolation gate. The previously used EC2 SSH endpoints were unreachable from the authorized desktop. Do not treat the old Artemis ngrok tunnel as a deployment target. Do not create a chargeable database/project without explicit cost approval.

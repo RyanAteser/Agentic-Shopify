@@ -16,6 +16,12 @@ export function assertPilotConfiguration(env: PilotEnv = process.env): void {
   if (env.SCOPES !== "read_products") {
     throw new Response("Pilot must use read_products only", { status: 503 });
   }
+  // Separate test/public Shopify apps must not silently inherit Artemis keys.
+  // Public app client identifiers are not secrets, but must match exactly.
+  if (!/^[a-f0-9]{32}$/.test(env.AGENTIC_PILOT_CLIENT_ID ?? "") ||
+      env.SHOPIFY_API_KEY !== env.AGENTIC_PILOT_CLIENT_ID) {
+    throw new Response("Pilot Shopify app identity mismatch", { status: 503 });
+  }
   if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(env.AGENTIC_PILOT_SHOP ?? "")) {
     throw new Response("Canonical pilot shop has not been configured", { status: 503 });
   }

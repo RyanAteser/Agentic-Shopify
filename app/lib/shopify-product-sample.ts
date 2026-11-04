@@ -32,7 +32,7 @@ export function parseShopifyProductSample(payload: unknown): SeoProduct[] {
       throw new Error("Shopify product record is malformed");
     }
     const p = node as Record<string, unknown>;
-    if (typeof p.id !== "string" || !p.id || ids.has(p.id) ||
+    if (typeof p.id !== "string" || !/^gid:\/\/shopify\/Product\/[1-9][0-9]*$/.test(p.id) || ids.has(p.id) ||
         typeof p.title !== "string" || typeof p.description !== "string" ||
         (p.onlineStoreUrl !== null && typeof p.onlineStoreUrl !== "string") ||
         (p.seo !== null && (!p.seo || typeof p.seo !== "object" || Array.isArray(p.seo)))) {

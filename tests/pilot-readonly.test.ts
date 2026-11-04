@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  readOnlyPilotEnabled, assertPilotConfiguration,
+  readOnlyPilotEnabled, assertPilotConfiguration, assertPilotServiceDisabled,
   assertPilotRequest, assertPilotShop
 } from "../app/lib/pilot-readonly";
 
@@ -61,4 +61,22 @@ test("the single-merchant config is inert until operator credential and host bin
   assert.match(server,/AppDistribution.SingleMerchant/);
   assert.match(server,/assertPilotRequest\(args\[0\]\)/);
   assert.match(server,/assertPilotShop\(context.session.shop\)/);
+});
+
+test("privileged background endpoints always refuse a catalog-only pilot", () => {
+  assert.throws(() => assertPilotServiceDisabled(pilot), status(403));
+  assert.throws(() => assertPilotServiceDisabled({...pilot, AGENTIC_PILOT_MODE: "unsafe"}), status(503));
+  assert.doesNotThrow(() => assertPilotServiceDisabled({}));
+  for (const route of [
+    "api.agent.complete.ts", "api.agent.due.ts", "api.agent.recover.ts",
+    "api.growth.sync.ts", "api.manager.sync.ts", "api.seo.rankings.ts",
+    "auth.google.callback.ts", "app.growth.connect.ts"
+  ]) {
+    const source=readFileSync(new URL("../app/routes/"+route, import.meta.url),"utf8");
+    const importAt=source.indexOf("import { assertPilotServiceDisabled }");
+    const handlerAt=source.indexOf("export const ",importAt);
+    const gateAt=source.indexOf("assertPilotServiceDisabled();",handlerAt);
+    assert.ok(importAt>=0 && handlerAt>=0 && gateAt>handlerAt, route+" missing service gate");
+    assert.ok(gateAt-handlerAt<180, route+" service gate must precede effects");
+  }
 });

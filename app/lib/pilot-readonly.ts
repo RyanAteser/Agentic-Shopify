@@ -25,7 +25,7 @@ export function assertPilotRequest(
   request: Pick<Request, "url" | "method">,
   env: PilotEnv = process.env,
 ): void {
-  if (!readOnlyPilotEnabled(env)) return;
+  if (!env.AGENTIC_PILOT_MODE) return;
   assertPilotConfiguration(env);
   const path = new URL(request.url).pathname;
   // Shopify manages /auth/... callbacks/session negotiation. All merchant

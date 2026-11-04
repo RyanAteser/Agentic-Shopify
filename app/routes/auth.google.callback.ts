@@ -5,7 +5,10 @@ import {unauthenticated} from "../shopify.server";
 import {hashState} from "../lib/gsc-crypto.server";
 import {googleExchangeCode,verifyGoogleSite,storeGoogleConnection} from "../lib/gsc.server";
 
+import { assertPilotServiceDisabled } from "../lib/pilot-readonly";
+
 export const loader=async ({request}:LoaderFunctionArgs)=>{
+  assertPilotServiceDisabled();
   const url=new URL(request.url);
   const state=url.searchParams.get("state")||"";
   const code=url.searchParams.get("code")||"";

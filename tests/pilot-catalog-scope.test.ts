@@ -48,6 +48,21 @@ test("pilot abstains on primary-host pages that are not Shopify product routes",
   assert.match(catalogAuditConclusion({sampled:urls.length,eligible:3,findings:0,hasMore:false}),/Excluded or unsampled pages/);
 });
 
+test("pilot discloses canonical-path exclusions separately from foreign hosts",()=>{
+  const result=scopePilotCatalog([
+    product("https://shop.example.com/products/valid"),
+    product("https://shop.example.com/collections/sale"),
+    product("https://shop.example.com/products/valid?campaign=abc"),
+    product("https://shop.example.com/products/valid/"),
+    product("https://other.example.com/products/valid"),
+    product("https://shop.example.com/en/products/second"),
+  ],"shop.example.com");
+  assert.equal(result.eligible.length,2);
+  assert.equal(result.excludedForeign,1);
+  assert.equal(result.excludedNoncanonical,3);
+  assert.equal(result.eligible.length+result.excludedForeign+result.excludedNoncanonical,6);
+});
+
 test("pilot rejects invalid or unverified primary domain",()=>{
   for(const host of ["","localhost","shop.example.com.evil..test","https://shop.example.com","127.0.0.1","shop.example.com/other"]){
     assert.throws(()=>scopePilotCatalog([product("https://shop.example.com/products/one")],host));

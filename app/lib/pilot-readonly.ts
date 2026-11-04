@@ -62,3 +62,18 @@ export function assertPilotServiceDisabled(env: PilotEnv = process.env): void {
   assertPilotConfiguration(env);
   throw new Response("Unavailable in read-only pilot", { status: 403 });
 }
+
+/** The effective Shopify session grant can differ from requested env scopes.
+ * Require the installed app's actual token/session permission set to remain
+ * exactly catalog-read-only, even after a Shopify scope-update webhook.
+ */
+export function assertPilotSessionScopes(
+  granted: string | undefined,
+  env: PilotEnv = process.env,
+): void {
+  if (!env.AGENTIC_PILOT_MODE) return;
+  assertPilotConfiguration(env);
+  if (granted !== "read_products") {
+    throw new Response("Unexpected Shopify session scopes", { status: 403 });
+  }
+}

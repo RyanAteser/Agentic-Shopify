@@ -71,3 +71,16 @@ export function catalogAuditConclusion(input: {
     ? "No issues detected among eligible sampled products. Excluded or unsampled pages were not audited."
     : "No issues detected among eligible sampled products. This is not proof of Google indexing, full-store SEO quality or growth.";
 }
+
+/** A bounded UI must disclose omitted findings rather than imply full review. */
+export function catalogFindingDisplay(total: number, limit = 25) {
+  if (!Number.isSafeInteger(total) || total < 0 ||
+      !Number.isSafeInteger(limit) || limit < 1) {
+    throw new Error("Invalid catalog finding display bounds");
+  }
+  const displayed = Math.min(total, limit);
+  return {displayed, omitted: total - displayed,
+    notice: total > limit
+      ? `Showing ${displayed} of ${total} potential SEO findings; ${total - displayed} additional finding(s) are not displayed. This is a bounded review, not a complete issue list.`
+      : ""};
+}

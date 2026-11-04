@@ -8,7 +8,10 @@ import { recoverQueuedJobs } from "../lib/queued-recovery.server";
  * an operator explicitly configures credentials and enables it.
  * Never auto-replay running, dispatch_uncertain, completed or legacy jobs.
  */
+import { assertPilotServiceDisabled } from "../lib/pilot-readonly";
+
 export const action = async ({ request }: ActionFunctionArgs) => {
+  assertPilotServiceDisabled();
   if (!authorizedBridge(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
   const url = process.env.N8N_BLOG_WEBHOOK_URL;

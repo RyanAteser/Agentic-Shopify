@@ -133,6 +133,26 @@ test("malformed second pages, cross-page duplicates and cursor loops fail closed
   }
 });
 
+test("empty continuation page cannot silently certify complete catalog coverage", async () => {
+  const first = page([item(1)], true, "cursor-1");
+  for (const second of [
+    page([], false, null),
+    page([], false, "cursor-2"),
+    page([], true, "cursor-2"),
+  ]) {
+    let calls = 0;
+    await assert.rejects(readShopifySeoCatalog({graphql: async () => ({
+      json: async () => ++calls === 1 ? first : second
+    })}), /empty continuation page/);
+    assert.equal(calls, 2);
+  }
+  // A genuinely empty first page is valid only when Shopify says it is final.
+  const empty = await readShopifySeoCatalog({graphql: async () => ({
+    json: async () => page([], false, null)
+  })});
+  assert.deepEqual(empty, {products: [], hasMore: false, pagesFetched: 1});
+});
+
 test("missing pagination metadata is not accepted as a complete catalog", async () => {
   await assert.rejects(readShopifySeoCatalog({graphql: async () => ({
     json: async () => response([item(1)])

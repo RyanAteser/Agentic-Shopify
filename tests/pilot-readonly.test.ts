@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  readOnlyPilotEnabled, assertPilotConfiguration, assertPilotServiceDisabled,
+  readOnlyPilotEnabled, assertPilotConfiguration, assertPilotServiceDisabled, assertPilotSessionScopes,
   assertPilotRequest, assertPilotShop
 } from "../app/lib/pilot-readonly";
 
@@ -97,4 +97,14 @@ test("Shopify lifecycle webhooks verify signed tenant before state changes", () 
     const scope=source.indexOf("assertPilotShop(shop)",auth);
     assert.ok(auth>=0 && scope>auth,route+" must verify HMAC first");
   }
+});
+
+test("effective Shopify session token grants cannot exceed product read access", () => {
+  assert.doesNotThrow(() => assertPilotSessionScopes("read_products", pilot));
+  for (const granted of [undefined, "", "write_content,read_products", "read_products,read_orders", "read_products,write_products"]) {
+    assert.throws(() => assertPilotSessionScopes(granted,pilot),status(403));
+  }
+  assert.doesNotThrow(() => assertPilotSessionScopes("write_content",{}));
+  const server=readFileSync(new URL("../app/shopify.server.ts",import.meta.url),"utf8");
+  assert.match(server,/assertPilotSessionScopes\(context\.session\.scope\)/);
 });

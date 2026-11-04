@@ -18,6 +18,29 @@ const req = (path: string, method = "GET") =>
 const status = (code: number) => (error: unknown) =>
   error instanceof Response && error.status === code;
 
+test("partial pilot environment cannot silently enable the full app", () => {
+  const partial = [
+    { ...pilot, AGENTIC_PILOT_MODE: undefined },
+    { ...pilot, AGENTIC_PILOT_MODE: "" },
+    { ...pilot, AGENTIC_PILOT_MODE: "disabled" },
+    { AGENTIC_PILOT_SHOP: pilot.AGENTIC_PILOT_SHOP },
+    { AGENTIC_PILOT_CLIENT_ID: pilot.AGENTIC_PILOT_CLIENT_ID },
+    { AGENTIC_PILOT_CLIENT_ID: "" },
+  ];
+  for (const env of partial) {
+    assert.throws(() => readOnlyPilotEnabled(env), status(503));
+    assert.throws(() => assertPilotConfiguration(env), status(503));
+    assert.throws(() => assertPilotRequest(req("/app/catalog"), env), status(503));
+    assert.throws(() => assertPilotRequest(req("/app/manager"), env), status(503));
+    assert.throws(() => assertPilotShop(pilot.AGENTIC_PILOT_SHOP, env), status(503));
+    assert.throws(() => assertPilotSessionScopes("read_products", env), status(503));
+    assert.throws(() => assertPilotServiceDisabled(env), status(503));
+  }
+  // No pilot markers preserves the independent full-app default.
+  assert.equal(readOnlyPilotEnabled({}), false);
+  assert.doesNotThrow(() => assertPilotConfiguration({}));
+});
+
 test("pilot activation requires exact read-only scope and a canonical shop", () => {
   assert.equal(readOnlyPilotEnabled(pilot), true);
   assert.doesNotThrow(() => assertPilotConfiguration(pilot));

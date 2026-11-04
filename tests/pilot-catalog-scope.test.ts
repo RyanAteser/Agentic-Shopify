@@ -23,6 +23,26 @@ test("pilot only audits exact Shopify-attested primary host",()=>{
   assert.deepEqual(result.eligible.map(p=>p.url),["https://shop.example.com/products/one"]);
   assert.equal(result.excludedForeign,2);
 });
+test("pilot abstains on primary-host pages that are not Shopify product routes",()=>{
+  const urls = [
+    "https://shop.example.com/",
+    "https://shop.example.com/collections/sale",
+    "https://shop.example.com/blogs/news/launch",
+    "https://shop.example.com/products/",
+    "https://shop.example.com/products/one/extra",
+    "https://shop.example.com/products/%2Fadmin",
+    "https://shop.example.com/en/products/one",
+    "https://shop.example.com/en-US/products/two",
+    "https://shop.example.com/products/three"
+  ];
+  assert.deepEqual(scopePilotCatalog(urls.map(product),"shop.example.com").eligible.map(p=>p.url),[
+    "https://shop.example.com/en/products/one",
+    "https://shop.example.com/en-US/products/two",
+    "https://shop.example.com/products/three"
+  ]);
+  assert.match(catalogAuditConclusion({sampled:urls.length,eligible:3,findings:0,hasMore:false}),/Excluded or unsampled pages/);
+});
+
 test("pilot rejects invalid or unverified primary domain",()=>{
   for(const host of ["","localhost","shop.example.com.evil..test","https://shop.example.com","127.0.0.1","shop.example.com/other"]){
     assert.throws(()=>scopePilotCatalog([product("https://shop.example.com/products/one")],host));

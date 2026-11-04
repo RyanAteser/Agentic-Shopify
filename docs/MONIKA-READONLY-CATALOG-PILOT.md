@@ -19,7 +19,7 @@ Status (November 3, 2026): **Shopify installation verified; backend NOT connecte
 - Background n8n callbacks, scheduled dispatch, manager/ranking imports and Google OAuth completion routes explicitly deny pilot mode before their service effects. Authenticated lifecycle/privacy webhooks remain enabled but verify tenant identity after Shopify HMAC authentication.
 - `AGENTIC_PILOT_SHOP` is checked against the **authenticated session shop**, never a browser query parameter, form field, or merchant-supplied URL.
 - `AGENTIC_PILOT_CLIENT_ID` is a separate required app identifier and must match the actual `SHOPIFY_API_KEY`. A leftover Artemis API key causes startup requests to fail closed.
-- Pilot initialization rejects unexpected scopes or a missing canonical shop. A POST or other merchant dashboard path fails closed.
+- Pilot initialization rejects unexpected configured scopes or a missing canonical shop. After Shopify authentication, the actual granted `session.scope` must also be exactly `read_products`; additional scopes are denied rather than trusted. A POST or other merchant dashboard path fails closed.
 - The catalog-only page uses an existing bounded (at most 100 products) read-only Shopify GraphQL audit. It displays sample coverage and abstains on malformed API responses. It makes no merchant writes and does not persist catalog data.
 - The rest of the full merchant application remains unchanged by default when pilot mode is not set.
 

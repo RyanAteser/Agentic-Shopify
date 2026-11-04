@@ -47,6 +47,10 @@ The bounded product reader now requires a nonempty Shopify connection to supply 
 
 - Duplicate verified canonical product URLs across distinct Shopify product records now cause the pilot catalog audit to abstain rather than double-count page coverage or findings. This is a data-integrity check, not evidence of merchant SEO performance.
 
+## Compiled-image write-denial regression (November 4, 2026)
+
+The production-image smoke now requires HTTP 403 for POST requests to `/app/catalog`, `/app`, `/api/seo/rankings`, and `/api/agent/due` in synthetic read-only pilot mode. This verifies the actual HTTP route boundary, not only pure guard functions. It prevents a permitted catalog GET from accidentally implying permission for a catalog POST or background connector import. These tests use inert credentials and no merchant data; they do not verify real Shopify OAuth, session grants, or webhook delivery.
+
 ## CI HTTP route smoke for the read-only pilot
 
 The Docker CI job now starts a second ephemeral application process with **inert synthetic Shopify identifiers** and `SCOPES=read_products`. It checks database-backed `GET /health`, rejects unauthenticated access to privileged UI paths (`/app`, `/app/manager`, `/app/seo`) and the background dispatch endpoint (`POST /api/agent/due`), and requires `GET /app/catalog` without a Shopify session to redirect for authentication or return a non-successful authorization response (the current SDK returns HTTP 410 for absent Shopify launch context). Tests run against the compiled production image with a throwaway PostgreSQL service.

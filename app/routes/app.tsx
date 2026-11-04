@@ -12,16 +12,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
 
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return { apiKey: process.env.SHOPIFY_API_KEY || "", pilot: readOnlyPilotEnabled() };
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, pilot } = useLoaderData<typeof loader>();
 
   return (
     <AppProvider apiKey={apiKey}>
       <NavMenu>
-        {readOnlyPilotEnabled() ? <a href="/app/catalog" rel="home">Catalog pilot</a> : <>
+        {pilot ? <a href="/app/catalog" rel="home">Catalog pilot</a> : <>
         <a href="/app" rel="home">Blog Agent</a>
         <a href="/app/manager">Store Manager</a>
         <a href="/app/team">AI Team</a>

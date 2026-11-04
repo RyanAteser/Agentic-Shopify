@@ -5,6 +5,8 @@ import { authenticate } from "../shopify.server";
 import { auditProductSeo } from "../lib/seo";
 import { readShopifySeoCatalog, summarizeShopifySeoSample } from "../lib/shopify-product-sample";
 import { readOnlyPilotEnabled } from "../lib/pilot-readonly";
+import { primaryDomainForShop } from "../lib/ranking-ingest.server";
+import { scopePilotCatalog } from "../lib/pilot-catalog-scope";
 
 /** Catalog-only proof of authenticated Shopify access; no persistence or writes. */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -13,15 +15,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   const { admin, session } = await authenticate.admin(request);
   try {
+    const primaryHost = await primaryDomainForShop(admin, session.shop);
     const catalog = await readShopifySeoCatalog(admin);
     const coverage = summarizeShopifySeoSample(catalog.products, catalog.hasMore);
-    const findings = auditProductSeo(coverage.eligibleProducts);
+    const scoped = scopePilotCatalog(coverage.eligibleProducts, primaryHost);
+    const findings = auditProductSeo(scoped.eligible);
     return {
       shop: session.shop,
       unavailable: false,
       sampled: coverage.sampledProducts,
-      eligible: coverage.eligibleProducts.length,
-      warning: coverage.warning,
+      eligible: scoped.eligible.length,
+      warning: [coverage.warning,
+        scoped.excludedForeign ? `${scoped.excludedForeign} product URL(s) were on a different host from the Shopify-attested primary storefront and were excluded.` : "",
+        scoped.eligible.length < coverage.eligibleProducts.length ? "The eligible primary-domain sample is partial; excluded pages were not audited." : ""
+      ].filter(Boolean).join(" "),
       findings: findings.slice(0, 25).map((finding) => ({
         id: finding.id,
         productTitle: finding.productTitle,

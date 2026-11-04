@@ -33,7 +33,7 @@ export function scopePilotCatalog(products: SeoProduct[], primaryHost: string) {
     // Match the complete path rather than filtering empty segments: a URL
     // with doubled slashes or a trailing slash is not the canonical product
     // URL we claim to have audited. Reject normalization ambiguity.
-    if (!/^\\/(?:[a-z]{2}(?:-[a-z]{2})?\\/)?products\\/[a-z0-9][a-z0-9-]*$/i.test(url.pathname)) continue;
+    if (!/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?products\/[a-z0-9][a-z0-9-]*$/i.test(url.pathname)) continue;
     // Duplicate canonical URLs make the sample's page coverage and findings
     // ambiguous. Abstain rather than count one page as multiple products.
     if (seenUrls.has(url.href)) {

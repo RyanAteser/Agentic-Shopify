@@ -111,3 +111,7 @@ The bounded catalog parser now requires the canonical Shopify `gid://shopify/Pro
 ### Explicit catalog URL exclusion counts (2026-11-04)
 
 The read-only audit now distinguishes product URLs excluded for a different host from those excluded for a noncanonical same-host product route (for example a collection redirect, trailing slash or tracking query). These are **sample coverage** counts, not Google indexing or SEO ranking measurements. Invalid/non-HTTPS URLs are already counted by the initial Shopify sample validator and are not double-counted in the canonical subset. The displayed total remains limited to the bounded sample. No merchant data is persisted or changed.
+
+### Compiled HTTP write-denial semantics (2026-11-04)
+
+The container smoke test distinguishes two safe rejection paths: POST to the loader-only `/app/catalog` route is rejected by React Router with **405 Method Not Allowed** before its loader runs, while POST to guarded write-capable routes (`/app`, `/api/seo/rankings`, `/api/agent/due`) must return **403 Forbidden**. A 405 is not evidence that the pilot guard executed; it establishes only that the framework did not dispatch the unsupported method. The synthetic container smoke does not establish authenticated tenant isolation or live Shopify OAuth behavior. CI failure [#41883244112](https://github.com/RyanAteser/Agentic-Shopify/actions/runs/41883244112) exposed the incorrect prior expectation of 403 for the loader-only route.

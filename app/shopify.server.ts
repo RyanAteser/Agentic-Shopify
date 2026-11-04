@@ -6,7 +6,7 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
-import { assertPilotRequest, assertPilotShop, readOnlyPilotEnabled } from "./lib/pilot-readonly";
+import { assertPilotRequest, assertPilotShop, assertPilotSessionScopes, readOnlyPilotEnabled } from "./lib/pilot-readonly";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -35,6 +35,7 @@ const guardedAdmin = (async (...args: Parameters<typeof shopify.authenticate.adm
   assertPilotRequest(args[0]);
   const context = await shopify.authenticate.admin(...args);
   assertPilotShop(context.session.shop);
+  assertPilotSessionScopes(context.session.scope);
   return context;
 }) as typeof shopify.authenticate.admin;
 export const authenticate = { ...shopify.authenticate, admin: guardedAdmin };

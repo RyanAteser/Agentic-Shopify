@@ -6,7 +6,7 @@ import { auditProductSeo } from "../lib/seo";
 import { readShopifySeoCatalog, summarizeShopifySeoSample } from "../lib/shopify-product-sample";
 import { readOnlyPilotEnabled } from "../lib/pilot-readonly";
 import { primaryDomainForShop } from "../lib/ranking-ingest.server";
-import { scopePilotCatalog } from "../lib/pilot-catalog-scope";
+import { scopePilotCatalog, catalogAuditConclusion } from "../lib/pilot-catalog-scope";
 
 /** Catalog-only proof of authenticated Shopify access; no persistence or writes. */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -37,6 +37,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         severity: finding.severity,
       })),
       findingCount: findings.length,
+      conclusion: catalogAuditConclusion({sampled:coverage.sampledProducts,
+        eligible:scoped.eligible.length,findings:findings.length,hasMore:catalog.hasMore}),
     };
   } catch (error) {
     // Do not leak Shopify tokens, GraphQL response bodies, or data from
@@ -44,7 +46,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.warn("Read-only catalog pilot unavailable", error instanceof Error ? error.name : "unknown");
     return { shop: session.shop, unavailable: true, sampled: 0, eligible: 0,
       warning: "Shopify catalog could not be verified. No audit conclusions are available.",
-      findings: [], findingCount: 0 };
+      findings: [], findingCount: 0, conclusion: "No SEO audit was performed." };
   }
 };
 
@@ -65,8 +67,7 @@ export default function CatalogPilot() {
             <p><strong>{finding.productTitle}</strong> · {finding.severity} · {finding.kind}</p>
             <p>{finding.message}</p>
           </div>)}
-          {!data.findings.length && <p>No issues detected in the eligible sample.
-            This does not establish that the full catalog is free of issues.</p>}
+          <p role={data.eligible===0?"status":undefined}>{data.conclusion}</p>
         </>}
     </s-section>
   </s-page>;

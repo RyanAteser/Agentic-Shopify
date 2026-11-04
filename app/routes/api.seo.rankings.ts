@@ -5,7 +5,10 @@ import { primaryDomainForShop, saveRankingsForShop, reserveRankingImportBudget, 
 import { authorizedRankingConnector } from "../lib/ranking-credentials.server";
 import { readBoundedRequestText, RequestBodyTooLargeError } from "../lib/request-body.server";
 
+import { assertPilotServiceDisabled } from "../lib/pilot-readonly";
+
 export const action = async ({ request }: ActionFunctionArgs) => {
+  assertPilotServiceDisabled();
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
   let shop: string;
   let entries: ReturnType<typeof parseRanking>[];

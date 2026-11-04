@@ -49,6 +49,10 @@ The Docker CI job now starts a second ephemeral application process with **inert
 
 These checks do **not** use merchant API tokens, call the Shopify Admin API, prove a live OAuth handshake, prove legitimate authorized catalog reads, or verify webhook HMAC delivery. CI tests must remain separated from the real installed pilot. See `scripts/ci-container-smoke.sh`.
 
+### Readiness gate added before hosted OAuth
+
+The HTTP `GET /health` endpoint must return `503` if the read-only pilot's declared scope, client ID, canonical shop or mode fails `assertPilotConfiguration()`, even if PostgreSQL responds. The same production-image Docker smoke now checks a valid synthetic `read_products` pilot is ready and a deliberately misconfigured `read_products,write_content` pilot is **not** ready. This does not independently prove Shopify-issued grants, Shopify Partner installation or live OAuth; it protects the load-balancer from accidentally admitting a misconfigured deployment.
+
 ## Deployment gate (not yet completed)
 
 1. Provision an isolated stable HTTPS application host, isolated managed PostgreSQL, backups/retention, encryption and secrets. **No Agentic Shopify Vercel project was found in the connected account** at inspection time. The connected Supabase organization is on the Free tier with two unrelated active projects; reusing those databases would violate the pilot isolation gate. The previously used EC2 SSH endpoints were unreachable from the authorized desktop. Do not treat the old Artemis ngrok tunnel as a deployment target. Do not create a chargeable database/project without explicit cost approval.

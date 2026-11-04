@@ -46,3 +46,13 @@ export function assertPilotShop(
     throw new Response("Wrong merchant for this pilot", { status: 403 });
   }
 }
+
+/** Stop privileged background bridges, GSC OAuth and token-bearing callbacks
+ * before they read or mutate any merchant state. Shopify privacy webhooks
+ * are separate, authenticated handlers and must remain operational.
+ */
+export function assertPilotServiceDisabled(env: PilotEnv = process.env): void {
+  if (!env.AGENTIC_PILOT_MODE) return;
+  assertPilotConfiguration(env);
+  throw new Response("Unavailable in read-only pilot", { status: 403 });
+}

@@ -95,3 +95,7 @@ The read-only pilot's `/health` preflight now additionally requires a configured
 ### Canonical URL regression and CI gate (2026-11-04)
 
 CI run [#41804773693](https://github.com/RyanAteser/Agentic-Shopify/actions/runs/41804773693) failed in all three jobs because the strict product-path regex had escaped slash delimiters twice, producing TypeScript parse errors at `app/lib/pilot-catalog-scope.ts:36`. Commit `6c80d47` repairs the literal. The existing test matrix covers localized canonical product paths and malformed paths; a passing fresh CI run is required before considering the branch deployable. This fix changes no live merchant data and does not validate hosted OAuth.
+
+### Product identity integrity gate (2026-11-04)
+
+The bounded catalog parser now requires the canonical Shopify `gid://shopify/Product/<positive decimal ID>` identity for every product record. Wrong resource types (such as Collection and ProductVariant), malformed IDs and decorated IDs fail the entire read instead of appearing as product-level SEO findings. This guards against accidental GraphQL selection/mapping regressions; it does not prove indexing, product publication, or storefront rendering. Synthetic regression tests cover valid large IDs and rejected cross-resource IDs. Hosted Shopify read-only OAuth remains unverified.

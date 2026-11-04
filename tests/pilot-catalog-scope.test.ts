@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {scopePilotCatalog,catalogAuditConclusion,catalogFindingDisplay} from "../app/lib/pilot-catalog-scope";
+import {scopePilotCatalog,catalogAuditConclusion,catalogFindingDisplay,prioritizeCatalogFindings} from "../app/lib/pilot-catalog-scope";
 import type {SeoProduct} from "../app/lib/seo";
 
 const product = (url:string|null):SeoProduct => ({
@@ -98,4 +98,32 @@ test("bounded SEO findings disclose omissions without changing total counts",()=
   for(const [total,limit] of [[-1,25],[NaN,25],[4,0],[4,1.5]]) {
     assert.throws(()=>catalogFindingDisplay(total,limit),/Invalid catalog finding display bounds/);
   }
+});
+
+test("bounded catalog review prioritizes high-severity findings regardless of API order",()=>{
+  const findings=Array.from({length:30},(_,i)=>({
+    id:`medium-${String(i).padStart(2,"0")}`,severity:"medium" as const
+  }));
+  const high={id:"high-late",severity:"high" as const};
+  const input=[...findings,high];
+  const prioritized=prioritizeCatalogFindings(input);
+  assert.equal(prioritized[0].id,"high-late");
+  assert.equal(prioritized.length,31);
+  assert.equal(input[0].id,"medium-00"); // No mutation of source observations.
+  const display=catalogFindingDisplay(prioritized.length);
+  assert.equal(display.displayed,25);
+  assert.equal(display.omitted,6);
+  assert.ok(prioritized.slice(0,display.displayed).some(f=>f.id==="high-late"));
+  assert.deepEqual(prioritizeCatalogFindings([...input].reverse()).map(f=>f.id),
+    prioritized.map(f=>f.id)); // Stable ordering across page order.
+});
+
+test("catalog review preserves every high-severity finding before truncation",()=>{
+  const high=Array.from({length:27},(_,i)=>({
+    id:`high-${String(i).padStart(2,"0")}`,severity:"high" as const
+  }));
+  const medium={id:"medium-first",severity:"medium" as const};
+  const sorted=prioritizeCatalogFindings([medium,...high]);
+  assert.ok(sorted.slice(0,25).every(f=>f.severity==="high"));
+  assert.equal(catalogFindingDisplay(sorted.length).omitted,3);
 });

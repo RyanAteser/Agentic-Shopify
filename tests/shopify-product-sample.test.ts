@@ -42,6 +42,11 @@ test("partial product records cannot masquerade as a successful empty SEO audit"
     {...published, seo: undefined},
     {...published, seo: {title: undefined, description: null}},
     {...published, seo: {title: null, description: 123}},
+    {...published, id: "gid://shopify/Collection/1"},
+    {...published, id: "gid://shopify/ProductVariant/1"},
+    {...published, id: "gid://shopify/Product/0"},
+    {...published, id: "gid://shopify/Product/not-an-id"},
+    {...published, id: "gid://shopify/Product/1?other=2"},
   ]) {
     assert.throws(() => parseShopifyProductSample(response([invalidNode])), /Shopify/);
   }
@@ -49,6 +54,22 @@ test("partial product records cannot masquerade as a successful empty SEO audit"
   assert.throws(() => parseShopifyProductSample(response(Array(51).fill(posOnly))), /Shopify/);
 });
 
+
+test("only Shopify Product GIDs are accepted as product observations", () => {
+  const valid = parseShopifyProductSample(response([
+    {...published, id: "gid://shopify/Product/1234567890123456789"},
+  ]));
+  assert.equal(valid[0].id, "gid://shopify/Product/1234567890123456789");
+  // A typed Shopify ID prevents accidental collection/variant joins from
+  // being presented as product-level SEO evidence.
+  for (const id of [
+    "gid://shopify/Collection/123", "gid://shopify/ProductVariant/123",
+    "gid://shopify/Product/12/extra", "gid://shopify/Product/12?foo=bar",
+    "gid://other/Product/12", "gid://shopify/Product/-1",
+  ]) {
+    assert.throws(() => parseShopifyProductSample(response([{...published, id}])), /Shopify/);
+  }
+});
 
 test("password-protected Shopify product URL gaps do not imply unpublished inventory", () => {
   const coverage = summarizeShopifySeoSample(parseShopifyProductSample(response([

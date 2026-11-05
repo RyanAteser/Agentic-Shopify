@@ -1,0 +1,113 @@
+import db from "../db.server";
+import { UncertainDispatchError } from "./n8n-delivery.server";
+import { DispatchAlreadyClaimedError } from "./dispatch-claim.server";
+import { failCreditedJob } from "./credits.server";
+import { failScheduledDraft, scheduledClaimFromJob } from "./scheduled-drafts.server";
+
+/**
+ * Recovery is safe ONLY for newly versioned jobs still in "queued" state.
+ * The dispatch step atomically transitions queued -> running AFTER read-only
+ * product discovery but BEFORE any n8n POST. Running/uncertain jobs never replay.
+ * Legacy queued jobs predate this invariant and require operator inspection.
+ */
+export const QUEUED_RECOVERY_MIN_AGE_MS = 5 * 60_000;
+export const QUEUED_RECOVERY_BATCH = 3;
+
+type Dispatch = (jobId: string, shop: string) => Promise<void>;
+
+// Avoid initializing Shopify SDK in pure database recovery tests. Production
+// imports the actual publisher only when a queued job is selected for dispatch.
+const dispatchProduction: Dispatch = async (jobId, shop) => {
+  const { dispatchArticleJob } = await import("./agent.server");
+  await dispatchArticleJob(jobId, shop);
+};
+
+export async function recoverQueuedJobs(
+  now = new Date(), dispatch: Dispatch = dispatchProduction
+) {
+  if (!Number.isFinite(now.getTime())) throw new Error("Invalid recovery clock");
+  const cutoff = new Date(now.getTime() - QUEUED_RECOVERY_MIN_AGE_MS);
+  // One oldest eligible job per merchant per sweep. A single merchant with a
+  // large backlog must not consume all three global dispatch opportunities.
+  // Group in SQL rather than oversampling a fixed number of oldest jobs:
+  // oversampling can still starve another merchant behind a large backlog.
+  const eligible = {
+    status: "queued", outboxVersion: 1, createdAt: { lte: cutoff }
+  };
+  const shops = await db.contentJob.groupBy({
+    by: ["shop"],
+    where: eligible,
+    _min: { createdAt: true },
+    orderBy: [{ _min: { createdAt: "asc" } }, { shop: "asc" }],
+    take: QUEUED_RECOVERY_BATCH
+  });
+  // A concurrent sweeper can claim between these reads. The downstream
+  // queued -> running compare-and-set remains the single-dispatch fence.
+  const candidates = await Promise.all(shops.map(({ shop }) =>
+    db.contentJob.findFirst({
+      where: { ...eligible, shop },
+      select: { id: true, shop: true, topic: true, scheduleClaim: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+    })
+  ));
+  const jobs = candidates.filter((job): job is NonNullable<typeof job> => job !== null);
+  let accepted = 0, uncertain = 0, rejected = 0, raced = 0, blocked = 0;
+  for (const job of jobs) {
+    // Check the durable schedule metadata BEFORE dispatch. Never send a job
+    // whose refund/rewind contract is corrupted.
+    let schedule;
+    try { schedule = scheduledClaimFromJob(job); }
+    catch {
+      // Quarantine corrupt rows rather than letting the oldest three block
+      // every later merchant indefinitely. Keep the credit and full record.
+      try {
+        await db.contentJob.updateMany({
+          where: { id: job.id, shop: job.shop, status: "queued", outboxVersion: 1 },
+          data: { outboxVersion: 0, error: "Recovery quarantined: invalid schedule metadata" }
+        });
+      } catch {
+        console.error("Could not quarantine corrupt queued recovery metadata");
+      }
+      blocked++;
+      console.error("Queued recovery blocked by corrupt schedule metadata");
+      continue;
+    }
+    try {
+      await dispatch(job.id, job.shop);
+      accepted++;
+    } catch (error) {
+      if (error instanceof DispatchAlreadyClaimedError) {
+        raced++; // Another worker or a completed callback won the claim.
+        continue;
+      }
+      if (error instanceof UncertainDispatchError) {
+        uncertain++; // n8n may already be processing the job.
+        continue;
+      }
+      // A generic exception is NOT proof of a pre-POST failure: an unexpected
+      // error may occur after the durable queued -> running claim. Refund only
+      // if the job is still queued. An already-claimed job needs reconciliation
+      // even when the exception class is not UncertainDispatchError.
+      try {
+        const current = await db.contentJob.findFirst({
+          where: { id: job.id, shop: job.shop },
+          select: { status: true }
+        });
+        if (!current || current.status !== "queued") {
+          blocked++;
+          console.error("Queued recovery encountered a claimed job after an unexpected failure; reconcile without refund");
+          continue;
+        }
+        const refunded = schedule
+          ? await failScheduledDraft(schedule, error, true)
+          : await failCreditedJob(job.shop, job.id, error, true);
+        if (refunded) rejected++;
+        else raced++;
+      } catch {
+        blocked++;
+        console.error("Queued recovery could not persist definitive failure");
+      }
+    }
+  }
+  return { candidates: jobs.length, accepted, uncertain, rejected, raced, blocked };
+}

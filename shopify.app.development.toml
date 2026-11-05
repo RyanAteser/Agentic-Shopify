@@ -1,0 +1,39 @@
+# Artemis development integration. CLI updates dev-store URLs using a temporary HTTPS tunnel.
+# Do not deploy this local configuration to production.
+client_id = "1f155897d9fb7b59cf5111230edc07dc"
+name = "Artemis"
+handle = "artemis-1"
+embedded = true
+application_url = "https://example.com"
+
+[build]
+automatically_update_urls_on_dev = true
+
+[access_scopes]
+scopes = "write_content,read_products"
+
+[auth]
+redirect_urls = ["https://example.com/auth/callback"]
+
+[webhooks]
+api_version = "2026-10"
+
+[[webhooks.subscriptions]]
+uri = "/webhooks/app/uninstalled"
+topics = ["app/uninstalled"]
+
+[[webhooks.subscriptions]]
+uri = "/webhooks/app/scopes_update"
+topics = ["app/scopes_update"]
+
+[[webhooks.subscriptions]]
+uri = "/webhooks/customers/data_request"
+compliance_topics = ["customers/data_request"]
+
+[[webhooks.subscriptions]]
+uri = "/webhooks/customers/redact"
+compliance_topics = ["customers/redact"]
+
+[[webhooks.subscriptions]]
+uri = "/webhooks/shop/redact"
+compliance_topics = ["shop/redact"]

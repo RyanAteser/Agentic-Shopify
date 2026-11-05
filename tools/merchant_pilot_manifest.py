@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Verify observed pilot assignments against a frozen, pseudonymous assignment manifest."""
+import argparse
+import csv
+import json
+from pathlib import Path
+
+KEYS = ("merchant_id", "brief_id", "arm")
+ARMS = {"ai", "control"}
+
+def load_csv(path, required_columns):
+    """Reject ambiguous CSV headers, malformed rows and oversized pilot inputs."""
+    if path.stat().st_size > 1024 * 1024:
+        raise ValueError("CSV exceeds 1 MiB limit")
+    with path.open(newline="", encoding="utf-8-sig") as stream:
+        # DictReader silently skips blank physical lines; an assignment can vanish.
+        raw = stream.read()
+        if "\x00" in raw or not raw.strip():
+            raise ValueError("CSV contains NUL or is empty")
+        if any(not line.strip() for line in raw.splitlines()):
+            raise ValueError("CSV contains blank physical line")
+        reader = csv.DictReader(raw.splitlines(keepends=True), strict=True)
+        headers = reader.fieldnames
+        if not headers or any(not h.strip() or h != h.strip() for h in headers) or len(headers) != len(set(headers)):
+            raise ValueError("CSV missing or duplicate column headers")
+        if not set(required_columns).issubset(headers):
+            raise ValueError("CSV missing required columns")
+        rows = []
+        for line, row in enumerate(reader, 2):
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError(f"CSV malformed row {line}")
+            rows.append(row)
+        return rows
+
+
+def verify(manifest, observed):
+    def index(rows, source):
+        result = {}
+        for line, row in enumerate(rows, 2):
+            if not all(k in row for k in KEYS):
+                raise ValueError(f"{source}: missing required columns")
+            key = (row["merchant_id"], row["brief_id"])
+            if not all(key) or row["arm"] not in ARMS:
+                raise ValueError(f"{source}: invalid assignment on row {line}")
+            if key in result:
+                raise ValueError(f"{source}: duplicate assignment on row {line}")
+            result[key] = row["arm"]
+        return result
+    planned = index(manifest, "manifest")
+    actual = index(observed, "observed")
+    missing = planned.keys() - actual.keys()
+    unexpected = actual.keys() - planned.keys()
+    switched = {k for k in planned.keys() & actual.keys() if planned[k] != actual[k]}
+    return {
+        "manifest_assignments": len(planned),
+        "observed_assignments": len(actual),
+        "missing_assignments": len(missing),
+        "unexpected_assignments": len(unexpected),
+        "arm_mismatches": len(switched),
+        "manifest_matches": bool(planned) and not (missing or unexpected or switched),
+        "interpretation": "Assignment completeness only; cannot establish preregistration date, randomization, reviewer blinding, or outcome validity."
+    }
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("manifest", type=Path)
+    parser.add_argument("observed", type=Path)
+    args = parser.parse_args()
+    result = verify(load_csv(args.manifest, KEYS), load_csv(args.observed, KEYS))
+    print(json.dumps(result, indent=2, sort_keys=True))
+    if not result["manifest_matches"]:
+        raise SystemExit(1)
+
+if __name__ == "__main__":
+    main()

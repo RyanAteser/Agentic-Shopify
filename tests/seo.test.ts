@@ -1,0 +1,195 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { parseRanking, auditProductSeo, isOnlineStoreSeoCandidate, assertRankingTargetsForPrimaryDomain, assertUniqueRankingObservations } from "../app/lib/seo";
+
+const now = new Date("2026-10-24T12:00:00.000Z");
+const context = {engine:"google",country:"US",device:"desktop"} as const;
+test("SERP rank record retains source, country, device and observation time", () => {
+  const a = parseRanking({...context,keyword:"  Running Shoes ",position:4,country:"US",device:"mobile",
+    observedAt:"2026-10-24T11:00:00.000Z",targetUrl:"https://example.com/shoes"},now);
+  assert.equal(a.keyword,"running shoes");
+  assert.equal(a.position,4);
+  assert.equal(a.source,"brightdata-serp");
+  assert.equal(a.device,"mobile");
+  const b = parseRanking({...context,keyword:"running shoes",position:null,targetUrl:"",observedAt:"2026-10-24T11:00:00.000Z"},now);
+  assert.equal(b.position,null);
+});
+test("reject invalid ranks, unsafe URLs, and future observations", () => {
+  for(const input of [
+    {keyword:"test",position:0,observedAt:now.toISOString()},
+    {keyword:"test",position:-2,observedAt:now.toISOString()},
+    {keyword:"test",position:2.5,observedAt:now.toISOString()},
+    {keyword:"test",position:7,observedAt:"2026-11-24T00:00:00.000Z"},
+    {keyword:"test",position:3,observedAt:now.toISOString(),targetUrl:"javascript:alert(1)"}
+  ]) assert.throws(()=>parseRanking(input,now));
+});
+test("SERP imports must distinguish explicit not-found from missing or unmapped rank data", () => {
+  const base = {...context, keyword:"boots", observedAt:now.toISOString()};
+  // A missing field can mean a broken n8n mapping, a truncated SERP response,
+  // or an unexecuted scrape. It must never silently become "Not found".
+  for (const invalid of [
+    base,
+    {...base, position:undefined, targetUrl:""},
+    {...base, position:null},
+    {...base, position:null, targetUrl:undefined},
+    {...base, position:null, targetUrl:null},
+    {...base, position:4},
+    {...base, position:4, targetUrl:""},
+  ]) {
+    assert.throws(() => parseRanking(invalid, now), /position|target URL|result URL/i);
+  }
+  const notFound = parseRanking({...base, position:null, targetUrl:""}, now);
+  assert.equal(notFound.position, null);
+  assert.equal(notFound.targetUrl, "");
+  const found = parseRanking({...base, position:4, targetUrl:"https://shop.example/boots"}, now);
+  assert.equal(found.position, 4);
+});
+
+test("metadata audit detects blank descriptions and duplicate titles without mutating products", () => {
+  const products=[
+    {id:"1",title:"Sample",url:"https://example.com/a",description:"",seo:{title:"Same",description:null}},
+    {id:"2",title:"Sample2",url:"https://example.com/b",description:"hello",seo:{title:"Same",description:"Valid meta"}}
+  ];
+  const findings=auditProductSeo(products);
+  assert.ok(findings.some(x=>x.kind==="missing-description"));
+  assert.ok(findings.some(x=>x.kind==="duplicate-title"));
+  assert.equal(products[0].seo.title,"Same");
+});
+
+test("Shopify description fallback prevents false missing-meta alerts and arbitrary length warnings", () => {
+  const products = [
+    {id:"fallback",title:"Useful product",url:"https://example.com/fallback",
+      description:"A specific, useful description of this product and its features.",seo:{title:null,description:null}},
+    {id:"empty",title:"No description",url:"https://example.com/empty",
+      description:"  ",seo:{title:null,description:null}},
+    {id:"custom200",title:"Custom 200",url:"https://example.com/200",
+      description:"",seo:{title:null,description:"a".repeat(200)}},
+    {id:"custom321",title:"Custom 321",url:"https://example.com/321",
+      description:"",seo:{title:null,description:"b".repeat(321)}},
+  ];
+  const findings = auditProductSeo(products);
+  assert.equal(findings.filter(f=>f.productId==="fallback").length,0,
+    "Shopify's product description is the default meta description");
+  assert.equal(findings.find(f=>f.productId==="empty")?.kind,"missing-description");
+  assert.equal(findings.find(f=>f.productId==="empty")?.severity,"high");
+  assert.equal(findings.filter(f=>f.productId==="custom200").length,0,
+    "Google has no 165-character meta-description limit");
+  assert.equal(findings.find(f=>f.productId==="custom321")?.kind,"long-description");
+  assert.equal(findings.find(f=>f.productId==="custom321")?.severity,"medium");
+});
+
+
+test("SERP target URLs must belong to Shopify's verified primary domain", () => {
+  const found = parseRanking({...context,keyword:"boots",position:5,observedAt:now.toISOString(),
+    targetUrl:"https://www.store.example/products/boots"},now);
+  assert.doesNotThrow(() => assertRankingTargetsForPrimaryDomain([found], "www.store.example"));
+  const absent = parseRanking({...context,keyword:"boots",position:null,targetUrl:"",observedAt:now.toISOString()},now);
+  assert.doesNotThrow(() => assertRankingTargetsForPrimaryDomain([absent], "www.store.example"));
+  for (const url of [
+    "https://store.example/products/boots",
+    "https://competitor.example/products/boots",
+    "https://www.store.example.attacker.test/products/boots",
+    "https://blog.www.store.example/products/boots",
+    "https://www.store.example./products/boots"
+  ]) {
+    const row = parseRanking({...context,keyword:"boots",position:5,observedAt:now.toISOString(),targetUrl:url},now);
+    assert.throws(() => assertRankingTargetsForPrimaryDomain([row],"www.store.example"), url);
+  }
+  assert.throws(() => parseRanking({...context,keyword:"boots",position:5,observedAt:now.toISOString(),
+    targetUrl:"https://www.store.example@attacker.test/products/boots"},now), /credentials/);
+  // A caller may pass already-parsed SeoRanking objects directly, bypassing
+  // parseRanking's URL validation. The domain trust boundary must stand alone.
+  assert.throws(() => assertRankingTargetsForPrimaryDomain([
+    {...found,targetUrl:"https://www.store.example:8443/products/boots"}
+  ],"www.store.example"), /primary domain/);
+  assert.doesNotThrow(() => assertRankingTargetsForPrimaryDomain([
+    {...found,targetUrl:"https://www.store.example:443/products/boots"}
+  ],"www.store.example"));
+  assert.throws(() => assertRankingTargetsForPrimaryDomain([{...found,targetUrl:""}],"www.store.example"));
+  assert.throws(() => assertRankingTargetsForPrimaryDomain([{...absent,targetUrl:found.targetUrl}],"www.store.example"));
+  assert.throws(() => assertRankingTargetsForPrimaryDomain([found],"https://www.store.example"));
+});
+
+
+test("SERP import rejects omitted market context rather than silently labeling US desktop Google", () => {
+  const valid: Record<string, unknown> = {
+    ...context, keyword:"boots", position:5,
+    targetUrl:"https://shop.example/boots", observedAt:now.toISOString()
+  };
+  for (const missing of ["engine", "country", "device"]) {
+    const row = {...valid};
+    delete row[missing];
+    assert.throws(() => parseRanking(row, now), missing);
+  }
+  assert.equal(parseRanking(valid, now).country, "US");
+});
+
+test("SERP timestamps require an explicit offset and a real calendar date", () => {
+  const valid = {
+    ...context, keyword:"boots", position:5,
+    targetUrl:"https://shop.example/boots"
+  };
+  for (const observedAt of [
+    "2026-10-24T11:00:00",
+    "2026-10-24",
+    "2026-02-30T11:00:00Z",
+    "2026-10-24T11:00:00+14:30",
+    "2026-10-24T11:00:00+15:00",
+    "2026-10-24T25:00:00Z"
+  ]) {
+    assert.throws(() => parseRanking({...valid, observedAt}, now), observedAt);
+  }
+  const offset = parseRanking({...valid, observedAt:"2026-10-24T13:00:00+02:00"}, now);
+  assert.equal(offset.observedAt.toISOString(), "2026-10-24T11:00:00.000Z");
+  assert.equal(parseRanking({...valid, observedAt:"2024-02-29T11:00:00Z"},
+    new Date("2024-02-29T12:00:00Z")).observedAt.toISOString(), "2024-02-29T11:00:00.000Z");
+});
+
+test("duplicate same-market SERP snapshots are rejected before last-write-wins upsert", () => {
+  const base = parseRanking({...context,keyword:"boots",position:4,
+    observedAt:now.toISOString(),targetUrl:"https://shop.example/boots"},now);
+  assert.throws(() => assertUniqueRankingObservations([base,{...base,position:9}]), /Duplicate/);
+  assert.doesNotThrow(() => assertUniqueRankingObservations([
+    base, {...base,device:"mobile"}, {...base,observedAt:new Date(now.getTime()-60_000)}
+  ]));
+});
+
+test("Shopify blank custom titles fall back to product names; Google has no 70-character limit", () => {
+  const products = [
+    {id:"blank",title:"A useful product name",url:"https://shop.example/a",
+      description:"Useful product description",seo:{title:"   ",description:null}},
+    {id:"long",title:"A ".repeat(55).trim(),url:"https://shop.example/long",
+      description:"Useful product description",seo:{title:null,description:null}}
+  ];
+  assert.deepEqual(auditProductSeo(products),[],
+    "a blank SEO override and a long title do not prove missing metadata or a ranking penalty");
+});
+
+test("duplicate effective SEO titles flag every sampled product independent of order", () => {
+  const products = [
+    {id:"a",title:"Boots",url:"https://shop.example/a",description:"Details",seo:{title:"Leather  Boots",description:null}},
+    {id:"b",title:"Different",url:"https://shop.example/b",description:"Details",seo:{title:" leather boots ",description:null}},
+    {id:"c",title:"LEATHER BOOTS",url:"https://shop.example/c",description:"Details",seo:{title:null,description:null}},
+    {id:"d",title:"Unique",url:"https://shop.example/d",description:"Details",seo:{title:null,description:null}}
+  ];
+  for (const sample of [products,[...products].reverse()]) {
+    const findings=auditProductSeo(sample).filter(f=>f.kind==="duplicate-title");
+    assert.deepEqual(findings.map(f=>f.productId).sort(),["a","b","c"]);
+    assert.ok(findings.every(f=>f.observedTitle==="leather boots"));
+    assert.ok(findings.every(f=>f.message.includes("sampled")));
+  }
+});
+
+test("storefront SEO audits exclude active inventory without a published Online Store URL", () => {
+  const base={title:"Leather boots",description:"",seo:{title:null,description:null}};
+  const published={...base,id:"public",url:"https://shop.example/products/boots"};
+  const unpublished={...base,id:"private",url:null};
+  const otherChannel={...base,id:"pos-only",url:null};
+  const unsafe={...base,id:"invalid",url:"javascript:alert(1)"};
+  assert.equal(isOnlineStoreSeoCandidate(published),true);
+  assert.equal(isOnlineStoreSeoCandidate(unpublished),false);
+  assert.equal(isOnlineStoreSeoCandidate(unsafe),false);
+  const findings=auditProductSeo([published,unpublished,otherChannel,unsafe]);
+  assert.deepEqual(findings.map(f=>f.productId),["public"]);
+  assert.equal(findings[0].kind,"missing-description");
+});

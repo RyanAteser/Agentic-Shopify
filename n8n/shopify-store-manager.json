@@ -1,0 +1,70 @@
+{
+  "name": "Agentic Shopify | Daily Read-Only Store Manager Tasks",
+  "nodes": [
+    {
+      "id": "manager-hourly-schedule",
+      "name": "Hourly Read-Only Manager Tick",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1,
+              "triggerAtMinute": 25
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "manager-sync-api",
+      "name": "Refresh Manager Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        590,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PUBLISHED-SHOPIFY-APP.example/api/manager/sync",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Hourly Read-Only Manager Tick": {
+      "main": [
+        [
+          {
+            "node": "Refresh Manager Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "active": false,
+  "pinData": {}
+}

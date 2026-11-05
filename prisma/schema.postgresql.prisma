@@ -1,0 +1,225 @@
+// Production schema. Keep model definitions in sync with schema.prisma (SQLite local dev).
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model StoreConfig {
+  shop             String   @id
+  blogId           String   @default("")
+  authorName       String   @default("Editorial Team")
+  audience         String   @default("")
+  brandVoice       String   @default("")
+  seedTopics       String   @default("")
+  cadenceDays      Int      @default(7)
+  topicCursor       Int      @default(0)
+  freeDraftsUsed    Int      @default(0)
+  rankingWindowStart DateTime?
+  rankingRequestsUsed Int      @default(0)
+  rankingRecordsUsed  Int      @default(0)
+  lastManagerSyncAt DateTime?
+  // Latest explicit Google disconnect, retained while the Shopify app remains installed.
+  gscConsentRevokedAt DateTime?
+  // Monotonic consent ordering, independent of wall-clock corrections.
+  gscConsentRevokedOrder BigInt @default(0)
+  nextRunAt        DateTime?
+  enabled          Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ContentJob {
+  id               String   @id @default(cuid())
+  shop             String
+  topic            String
+  status           String   @default("queued")
+  // Only jobs created after the recovery contract is introduced are auto-recoverable.
+  outboxVersion    Int      @default(0)
+  // Immutable schedule snapshot for a definitive rejection/refund after a crash.
+  scheduleClaim    String?
+  error            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  @@index([shop, status])
+  @@index([outboxVersion, status, createdAt])
+}
+
+model ArticleDraft {
+  id               String   @id @default(cuid())
+  shop             String
+  jobId            String   @unique
+  topic            String
+  title            String
+  summary          String
+  body             String
+  tags             String   @default("")
+  keyword          String   @default("")
+  seoScore         Int      @default(0)
+  reviewNotes      String   @default("")
+  status           String   @default("ready")
+  shopifyArticleId String?
+  publishedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  @@index([shop, status])
+}
+
+model RankingConnectorCredential {
+  shop      String   @id
+  keyHash   String   @unique
+  createdAt DateTime @default(now())
+  rotatedAt DateTime @default(now())
+}
+
+model SeoRankObservation {
+  id          String   @id @default(cuid())
+  shop        String
+  keyword     String
+  engine      String   @default("google")
+  country     String   @default("US")
+  device      String   @default("desktop")
+  position    Int?
+  targetUrl   String   @default("")
+  source      String   @default("brightdata-serp")
+  observedAt  DateTime
+  receivedAt  DateTime @default(now())
+  @@unique([shop, keyword, engine, country, device, observedAt])
+  @@index([shop, observedAt])
+  @@index([shop, keyword])
+}
+
+model StoreRecommendation {
+  id           String   @id @default(cuid())
+  shop         String
+  sourceKey    String
+  agent        String
+  kind         String
+  targetId     String
+  title        String
+  rationale    String
+  evidence     String   @default("")
+  priority     Int      @default(50)
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  decidedAt    DateTime?
+  @@unique([shop, sourceKey])
+  @@index([shop, status, priority])
+}
+
+model StoreActivity {
+  id                String   @id @default(cuid())
+  shop              String
+  recommendationId  String?
+  actorId           String?
+  action            String
+  outcome           String
+  detail            String   @default("")
+  createdAt         DateTime @default(now())
+  @@index([shop, createdAt])
+}
+
+// One database-serialized counter for Google Connect/Disconnect intents.
+// No merchant identity or token is retained in this global sequence.
+model GscConsentOrderCounter {
+  id       Int    @id
+  sequence BigInt @default(0)
+}
+
+model GoogleAuthState {
+  stateHash   String   @id
+  shop        String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  @@index([shop, expiresAt])
+}
+
+model SearchConsoleConnection {
+  shop               String   @id
+  property           String
+  encryptedRefresh   String
+  status             String   @default("active")
+  connectedAt        DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  lastSyncedAt       DateTime?
+  lastSyncStartedAt  DateTime?
+  lastPageSyncedAt      DateTime?
+  lastPageSyncStartedAt DateTime?
+}
+
+model OrganicDailyMetric {
+  id             String   @id @default(cuid())
+  shop           String
+  property       String
+  date           String
+  clicks         Float
+  impressions    Float
+  ctr            Float
+  position       Float
+  importedAt     DateTime @default(now())
+  @@unique([shop, property, date])
+  @@index([shop, date])
+}
+
+
+
+/// Read-only Google Search Console metrics for merchant-verified product URLs.
+/// Missing page/date rows are unobserved, never invented as zero traffic.
+model GscProductDailyMetric {
+  id          String   @id @default(cuid())
+  shop        String
+  property    String
+  pageUrl     String
+  date        String
+  clicks      Float
+  impressions Float
+  ctr         Float
+  position    Float
+  importedAt  DateTime @default(now())
+  @@unique([shop, property, pageUrl, date])
+  @@index([shop, property, date])
+}
+
+
+model EditorialReview {
+  id            String   @id @default(cuid())
+  shop          String
+  draftId       String
+  decision      String
+  contentDigest String   @default("")
+  reviewMinutes Int?
+  feedback      String   @default("")
+  reviewedAt    DateTime @default(now())
+  @@unique([shop, draftId])
+  @@index([shop, reviewedAt])
+}

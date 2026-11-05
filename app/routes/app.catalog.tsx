@@ -5,6 +5,7 @@ import { authenticate } from "../shopify.server";
 import { auditProductSeo } from "../lib/seo";
 import { readShopifySeoCatalog, summarizeShopifySeoSample } from "../lib/shopify-product-sample";
 import { readOnlyPilotEnabled } from "../lib/pilot-readonly";
+import { catalogReadEvent, type CatalogReadStage } from "../lib/catalog-read-observability";
 import { primaryDomainForShop } from "../lib/ranking-ingest.server";
 import { scopePilotCatalog, catalogAuditConclusion, catalogFindingDisplay, prioritizeCatalogFindings } from "../lib/pilot-catalog-scope";
 
@@ -14,13 +15,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw new Response("Catalog pilot not enabled", { status: 404 });
   }
   const { admin, session } = await authenticate.admin(request);
+  let stage: CatalogReadStage = "primary_domain";
   try {
     const primaryHost = await primaryDomainForShop(admin, session.shop);
+    stage = "catalog_page";
     const catalog = await readShopifySeoCatalog(admin);
+    stage = "audit";
     const coverage = summarizeShopifySeoSample(catalog.products, catalog.hasMore);
     const scoped = scopePilotCatalog(coverage.eligibleProducts, primaryHost);
     const findings = auditProductSeo(scoped.eligible);
     const findingDisplay = catalogFindingDisplay(findings.length);
+    console.info(catalogReadEvent("success", "audit"));
     return {
       shop: session.shop,
       unavailable: false,
@@ -46,7 +51,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch (error) {
     // Do not leak Shopify tokens, GraphQL response bodies, or data from
     // another tenant to the browser or application logs.
-    console.warn("Read-only catalog pilot unavailable", error instanceof Error ? error.name : "unknown");
+    // Fixed-schema event; no tenant identifiers, provider payloads or exception strings.
+    console.warn(catalogReadEvent("failure", stage));
     return { shop: session.shop, unavailable: true, sampled: 0, eligible: 0,
       warning: "Shopify catalog could not be verified. No audit conclusions are available.",
       findings: [], findingCount: 0, findingNotice: "", conclusion: "No SEO audit was performed." };

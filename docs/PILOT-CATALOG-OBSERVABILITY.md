@@ -19,3 +19,7 @@ Do not treat an HTTP 200 as a successful audit: the embedded merchant warning in
 4. Configure a collector/alert with retention and access controls, then test an actual alert before closing issue #8.
 
 No merchant-store writes, new permissions, deployment or billing are required for this code change.
+
+## Telemetry sink failure behavior
+
+Structured logging is best effort: a throwing stdout/log collector must not turn a successful catalog read into a merchant-visible failure, nor prevent the safe unavailable result after a Shopify read error. The runner separates audit operations from event emission and catches only sink exceptions at the emission boundary. Regression tests exercise both outcomes. Monitor the log collector independently: absence of events cannot establish catalog health, and this safeguard does not verify hosted alert delivery.

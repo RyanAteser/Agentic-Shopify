@@ -23,6 +23,12 @@ test("Gemini transport is fixed endpoint, one POST, structured output, metered u
     const sent=JSON.parse(String(init?.body));
     assert.equal(sent.generationConfig.responseMimeType,"application/json");
     assert.equal(sent.generationConfig.maxOutputTokens,650);
+    assert.equal(sent.generationConfig.responseMimeType,"application/json");
+    assert.equal(sent.generationConfig.responseJsonSchema.type,"object");
+    assert.deepEqual(sent.generationConfig.responseJsonSchema.required,
+      ["text","evidenceUrls","falsifier","verdict"]);
+    assert.deepEqual(sent.generationConfig.responseJsonSchema.properties.verdict.enum,
+      ["supported","rejected","abstain"]);
     assert.equal(sent.generationConfig.thinkingConfig.thinkingLevel,"low");
     return new Response(JSON.stringify({
       candidates:[{finishReason:"STOP",content:{parts:[{text:JSON.stringify({
@@ -81,5 +87,20 @@ test("HTTP rejection and thinking-token truncation produce sanitized categories"
     geminiBoundedProvider(env,truncated).generate(prompt),
     (error:unknown)=>error instanceof SwarmProviderError &&
       error.diagnosticCode==="GEMINI_FINISH_MAX_TOKENS"
+  );
+});
+
+test("Gemini schema-policy violations have a safe diagnostic code without user text",async()=>{
+  const bad=(async()=>new Response(JSON.stringify({
+    candidates:[{finishReason:"STOP",content:{parts:[{text:JSON.stringify({
+      text:"bad",evidenceUrls:[],falsifier:"too short",verdict:"abstain"
+    })}]}}],
+    usageMetadata:{promptTokenCount:10,candidatesTokenCount:11}
+  }),{status:200})) as typeof fetch;
+  await assert.rejects(
+    geminiBoundedProvider(env,bad).generate(prompt),
+    (e:unknown)=>e instanceof SwarmProviderError &&
+      e.diagnosticCode==="GEMINI_SCHEMA_POLICY_MISMATCH" &&
+      !e.message.includes("bad")
   );
 });

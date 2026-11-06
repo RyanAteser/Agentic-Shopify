@@ -29,7 +29,7 @@ export async function loadSwarmTeam(shop: string) {
   const [runs,usage]=await Promise.all([
     cases.length ? db.swarmExecution.findMany({
       where:{shop,caseId:{in:cases.map(x=>x.id)}},
-      select:{id:true,caseId:true,status:true,provider:true,model:true,
+      select:{id:true,caseId:true,status:true,provider:true,model:true,plan:true,
         callsStarted:true,callsFinished:true,inputTokens:true,outputTokens:true,errorCode:true},
       take:12
     }) : Promise.resolve([]),

@@ -92,6 +92,7 @@ class PublicSeoAuditTests(unittest.TestCase):
         result = audit.inspect_metadata(doc, PRODUCT)
         self.assertEqual(result["malformed_jsonld_scripts"], 1)
         self.assertFalse(result["product_jsonld"])
+        self.assertIn("malformed_jsonld_script", result["flags"])
 
     def test_only_explicit_readonly_public_urls_requested(self):
         docs = {
@@ -200,6 +201,28 @@ class PublicSeoAuditTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     audit.run(HOST, 5, 0.5, opener=opener, expected_products=case)
                 self.assertEqual(opener.visited, [], "Invalid manifest must not cause network requests")
+
+    def test_markup_conditions_are_separate_from_length_heuristics(self):
+        title = "A" * 70
+        description = "B" * 170
+        invalid = '<script type="application/ld+json">{"@type":"Product","name":"bad\nraw"}</script>'
+        html = page(title, description).replace("</head>", invalid + "</head>")
+        opener = FakeOpener({
+            HOST + "/robots.txt": FakeResponse("User-agent: *\\nAllow: /".replace("\\n", "\n"), "text/plain"),
+            PRODUCT: FakeResponse(html, "text/html"),
+        })
+        expected = [{"url": PRODUCT, "seoTitle": title, "seoDescription": description}]
+        with patch.object(audit.time, "sleep", return_value=None):
+            result = audit.run(HOST, 1, 0.5, opener=opener, expected_products=expected)
+        self.assertEqual(result["admin_parity_checked"], 1)
+        self.assertEqual(result["admin_parity_mismatches"], {"title": 0, "description": 0})
+        self.assertEqual(result["observed_markup_conditions"], {"malformed_jsonld_script": 1})
+        self.assertEqual(result["review_heuristics"], {
+            "long_meta_description_heuristic": 1, "long_title_heuristic": 1
+        })
+        self.assertTrue(result["pages"][0]["product_jsonld"],
+                        "Another valid Product block remains available")
+        self.assertEqual(result["pages"][0]["malformed_jsonld_scripts"], 1)
 
     def test_redirect_cannot_change_port_or_add_credentials(self):
         from urllib.request import Request

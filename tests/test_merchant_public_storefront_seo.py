@@ -139,5 +139,83 @@ class PublicSeoAuditTests(unittest.TestCase):
         self.assertEqual(result["errors"][0]["error"], "Blocked by robots.txt")
         self.assertEqual(len(opener.visited), 2, "Must not request disallowed product")
 
+    def test_pinned_admin_metadata_parity_accepts_theme_brand_suffix(self):
+        seo_title = "Blunder Cover | Clean Foundation + Concealer"
+        seo_description = "Clean foundation & concealer for hydrated skin."
+        doc = page(seo_title + " – Monika Blunder Beauty",
+                   "Clean foundation &amp; concealer for hydrated skin.")
+        actual = audit.inspect_metadata(doc, PRODUCT, seo_title, seo_description)
+        self.assertNotIn("rendered_title_differs_from_admin", actual["flags"])
+        self.assertNotIn("rendered_description_differs_from_admin", actual["flags"])
+        self.assertNotIn(seo_description, str(actual), "Report must not retain merchant product text")
+
+    def test_pinned_admin_metadata_mismatch_is_falsifiable(self):
+        doc = page("Wrong product | Monika Blunder Beauty", "Unrelated meta description")
+        actual = audit.inspect_metadata(
+            doc, PRODUCT, "Blunder Cover | Clean Foundation + Concealer",
+            "Original, merchant-authenticated SEO description.")
+        self.assertIn("rendered_title_differs_from_admin", actual["flags"])
+        self.assertIn("rendered_description_differs_from_admin", actual["flags"])
+        self.assertNotIn("Original, merchant-authenticated SEO description.", str(actual))
+        # Similar beginning without a complete delimiter must not pass.
+        self.assertFalse(audit.storefront_title_matches("Blunder Cover Refill", "Blunder Cover"))
+        self.assertFalse(audit.storefront_title_matches("", ""))
+
+    def test_pinned_catalog_reads_only_explicit_product_pages_not_collection(self):
+        expected = [{"url": PRODUCT, "seoTitle": "Blunder Cover",
+                     "seoDescription": "A clean foundation with botanicals."}]
+        opener = FakeOpener({
+            HOST + "/robots.txt": FakeResponse("User-agent: *\\nAllow: /".replace("\\n", "\n"), "text/plain"),
+            PRODUCT: FakeResponse(
+                page("Blunder Cover – Monika Blunder Beauty",
+                     "A clean foundation with botanicals."), "text/html")
+        })
+        with patch.object(audit.time, "sleep", return_value=None):
+            result = audit.run(HOST, 5, 0.5, opener=opener, expected_products=expected)
+        self.assertEqual(result["audit"], "public_html_metadata_with_admin_parity")
+        self.assertIsNone(result["collection"])
+        self.assertEqual(result["product_pages_inspected"], 1)
+        self.assertEqual(result["flags"], {})
+        self.assertEqual([req.full_url for req in opener.visited], [
+            HOST + "/robots.txt", PRODUCT
+        ])
+
+    def test_pinned_manifest_host_and_identity_are_rejected_before_network(self):
+        valid = {"url": PRODUCT, "seoTitle": "Blunder Cover", "seoDescription": "Description"}
+        bad = [
+            [{**valid, "url": "https://other.example/products/cover"}],
+            [{**valid, "url": "https://user:pass@monikablunderbeauty.com/products/cover"}],
+            [{**valid, "url": HOST + ":8443/products/cover"}],
+            [{**valid, "url": PRODUCT + "?variant=123"}],
+            [{**valid, "url": PRODUCT + "#reviews"}],
+            [{**valid, "url": PRODUCT + "/"}],
+            [valid, valid],
+            [{**valid, "seoTitle": None}],
+            [{**valid, "extra": "data"}],
+            [],
+        ]
+        for case in bad:
+            with self.subTest(case=case):
+                opener = FakeOpener({})
+                with self.assertRaises(ValueError):
+                    audit.run(HOST, 5, 0.5, opener=opener, expected_products=case)
+                self.assertEqual(opener.visited, [], "Invalid manifest must not cause network requests")
+
+    def test_redirect_cannot_change_port_or_add_credentials(self):
+        from urllib.request import Request
+        guard = audit.SingleHostRedirect("monikablunderbeauty.com")
+        req = Request(PRODUCT)
+        for target in [
+            "https://other.example/products/cover",
+            "https://monikablunderbeauty.com:8443/products/cover",
+            "https://user:secret@monikablunderbeauty.com/products/cover",
+            "http://monikablunderbeauty.com/products/cover",
+            "https://monikablunderbeauty.com/products/cover#other",
+        ]:
+            with self.subTest(target=target):
+                with self.assertRaises(ValueError):
+                    guard.redirect_request(req, None, 302, "Found", {}, target)
+
+
 if __name__ == "__main__":
     unittest.main()

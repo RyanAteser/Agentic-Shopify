@@ -15,6 +15,7 @@ import sys
 import time
 from collections import Counter
 from datetime import datetime, timezone
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -40,7 +41,8 @@ class SingleHostRedirect(HTTPRedirectHandler):
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         parsed = urlsplit(newurl)
-        if parsed.scheme != "https" or parsed.hostname != self.hostname:
+        if (parsed.scheme != "https" or parsed.hostname != self.hostname or
+                parsed.username or parsed.password or parsed.port or parsed.fragment):
             raise ValueError("Redirect outside the permitted HTTPS storefront")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
@@ -122,7 +124,22 @@ def product_schema_flags(obj) -> tuple[bool, bool]:
     return found_product, found_offer
 
 
-def inspect_metadata(html: str, page_url: str) -> dict:
+def storefront_title_matches(rendered: str, expected: str) -> bool:
+    """Shopify themes may append a brand suffix after a meaningful delimiter."""
+    rendered = " ".join(unescape(rendered).split())
+    expected = " ".join(unescape(expected).split())
+    if not expected:
+        return False
+    if rendered == expected:
+        return True
+    if not rendered.startswith(expected):
+        return False
+    return bool(re.match(r"^\s+[|\u2013\u2014-]\s+\S", rendered[len(expected):]))
+
+
+def inspect_metadata(html: str, page_url: str,
+                     expected_title: str | None = None,
+                     expected_description: str | None = None) -> dict:
     parser = SeoDocument()
     parser.feed(html)
     title = parser.title
@@ -157,6 +174,17 @@ def inspect_metadata(html: str, page_url: str) -> dict:
 
     if "noindex" in robots.lower():
         flags.add("meta_noindex")
+
+    # Cross-layer observations are more objective than title/description
+    # length rules. Expected values must come from the same merchant's
+    # authenticated, read-only Shopify Admin export, NEVER from a visitor.
+    # Don't retain product descriptions, tokens or raw HTML in the report.
+    if expected_title is not None and not storefront_title_matches(title, expected_title):
+        flags.add("rendered_title_differs_from_admin")
+    if expected_description is not None and (
+        description != " ".join(unescape(expected_description).split())
+    ):
+        flags.add("rendered_description_differs_from_admin")
 
     product_schema = False
     product_offer = False
@@ -225,7 +253,38 @@ def fetch(opener, url: str, cap: int = MAX_HTML_BYTES) -> tuple[str, dict]:
         }
 
 
-def run(origin: str, limit: int, delay: float, opener=None) -> dict:
+def validate_expected_products(origin: str, products: object) -> list[dict[str, str]]:
+    """Reject cross-host URLs, malformed manifests and repeated product pages."""
+    if not isinstance(products, list) or not 1 <= len(products) <= 24:
+        raise ValueError("Expected 1..24 explicitly selected product records")
+    host = urlsplit(origin).hostname
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for record in products:
+        if not isinstance(record, dict) or set(record) != {"url", "seoTitle", "seoDescription"}:
+            raise ValueError("Expected explicit URL, SEO title and description")
+        url, title, desc = record["url"], record["seoTitle"], record["seoDescription"]
+        if not all(isinstance(x, str) for x in (url, title, desc)) or (
+            len(title) > 500 or len(desc) > 1000
+        ):
+            raise ValueError("Expected public, bounded text metadata")
+        try:
+            p = urlsplit(url)
+            canonical = urlunsplit(("https", host or "", p.path, "", ""))
+        except ValueError as exc:
+            raise ValueError("Expected URL malformed") from exc
+        if (url != canonical or p.scheme != "https" or p.hostname != host or
+                p.username or p.password or p.port or p.query or p.fragment or
+                not PRODUCT_PATH_RE.fullmatch(p.path) or p.path.endswith("/") or
+                url in seen):
+            raise ValueError("Expected product URL must be unique and canonical on primary host")
+        seen.add(url)
+        result.append(record)
+    return result
+
+
+def run(origin: str, limit: int, delay: float, opener=None,
+        expected_products: list[dict[str, str]] | None = None) -> dict:
     parsed = urlsplit(origin)
     if parsed.scheme != "https" or parsed.username or parsed.password or parsed.port or parsed.path not in ("", "/") or not re.fullmatch(r"[a-z0-9.-]+", parsed.hostname or ""):
         raise ValueError("Origin must be a public HTTPS hostname without credentials, port or path")
@@ -239,6 +298,10 @@ def run(origin: str, limit: int, delay: float, opener=None) -> dict:
     else:
         raise ValueError("IP addresses are not permitted audit origins")
     origin = f"https://{hostname}"
+    # The manifest is validated before any network request, including robots.
+    # A Shopify Admin connector supplies the expected SEO fields separately.
+    expected = validate_expected_products(origin, expected_products) if expected_products is not None else None
+    expectations = {p["url"]: p for p in expected} if expected is not None else {}
     opener = opener or build_opener(SingleHostRedirect(hostname))
 
     robots_text, robots_headers = fetch(opener, origin + "/robots.txt", MAX_ROBOTS_BYTES)
@@ -246,15 +309,18 @@ def run(origin: str, limit: int, delay: float, opener=None) -> dict:
         raise RuntimeError("robots.txt must return plain text")
     robots = RobotFileParser()
     robots.parse(robots_text.splitlines())
-    collection_url = origin + COLLECTION_PATH
-    if not robots.can_fetch(USER_AGENT, collection_url):
-        raise RuntimeError("robots.txt prohibits reading the collection")
-    collection_html, meta = fetch(opener, collection_url)
-    if "html" not in meta["content_type"]:
-        raise RuntimeError("Collection did not return HTML")
-    links = product_urls(collection_html, origin)
-    if not links:
-        raise RuntimeError("No verified public product URLs found on collection page")
+    collection_url = None if expected is not None else origin + COLLECTION_PATH
+    if expected is not None:
+        links = [p["url"] for p in expected]
+    else:
+        if not robots.can_fetch(USER_AGENT, collection_url):
+            raise RuntimeError("robots.txt prohibits reading the collection")
+        collection_html, meta = fetch(opener, collection_url)
+        if "html" not in meta["content_type"]:
+            raise RuntimeError("Collection did not return HTML")
+        links = product_urls(collection_html, origin)
+        if not links:
+            raise RuntimeError("No verified public product URLs found on collection page")
     pages = []
     errors = []
     for url in links[:limit]:
@@ -266,7 +332,12 @@ def run(origin: str, limit: int, delay: float, opener=None) -> dict:
             html, headers = fetch(opener, url)
             if "html" not in headers["content_type"]:
                 raise RuntimeError("Non-HTML product page")
-            result = inspect_metadata(html, url)
+            pinned = expectations.get(url)
+            result = inspect_metadata(
+                html, url,
+                expected_title=pinned["seoTitle"] if pinned else None,
+                expected_description=pinned["seoDescription"] if pinned else None,
+            )
             if "noindex" in headers["x_robots_tag"].lower():
                 result["flags"].append("http_noindex")
             pages.append(result)
@@ -275,7 +346,7 @@ def run(origin: str, limit: int, delay: float, opener=None) -> dict:
     issue_counts = Counter(flag for page in pages for flag in page["flags"])
     duplicate_title_count = len(pages) - len(set(p["title"].casefold() for p in pages))
     return {
-        "audit": "public_html_metadata_only",
+        "audit": "public_html_metadata_with_admin_parity" if expected is not None else "public_html_metadata_only",
         "origin": origin,
         "collection": collection_url,
         "checked_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -292,6 +363,8 @@ def run(origin: str, limit: int, delay: float, opener=None) -> dict:
         "caveats": [
             "Only publicly reachable product HTML; NOT an authenticated Shopify merchant audit.",
             "Metadata-length flags are screening heuristics, not Google's ranking rules.",
+            "Passing technical indexing signals is NOT evidence of inclusion in Google's index.",
+            "Expected metadata, when supplied, must come from the same merchant's read-only Admin API.",
             "No crawl, indexation, traffic, revenue, or Search Console claims are inferred.",
             "No website changes, credentials, customer information, or full HTML retained.",
         ],
@@ -304,12 +377,22 @@ def main():
     parser.add_argument("--limit", type=int, default=12, help="Maximum product URLs (1..24)")
     parser.add_argument("--delay", type=float, default=0.75, help="Delay between product requests (at least 0.5 s)")
     parser.add_argument("--output", type=Path, help="Optional local JSON report path")
+    parser.add_argument("--expected-json", type=Path,
+                        help="Read-only Admin metadata manifest with products:[{url,seoTitle,seoDescription}]; select exactly these URLs")
     args = parser.parse_args()
     if not 1 <= args.limit <= 24 or not 0.5 <= args.delay <= 5:
         parser.error("Limit must be 1..24 and delay must be 0.5..5 seconds")
     try:
-        report = run(args.origin, args.limit, args.delay)
-    except (ValueError, HTTPError, URLError, RuntimeError) as exc:
+        expected = None
+        if args.expected_json:
+            if args.expected_json.stat().st_size > 128_000:
+                raise ValueError("Expected metadata manifest exceeds size bound")
+            obj = json.loads(args.expected_json.read_text(encoding="utf-8"))
+            if not isinstance(obj, dict) or set(obj) != {"products"}:
+                raise ValueError("Expected manifest must contain only products")
+            expected = obj["products"]
+        report = run(args.origin, args.limit, args.delay, expected_products=expected)
+    except (OSError, json.JSONDecodeError, ValueError, HTTPError, URLError, RuntimeError) as exc:
         print(f"Public SEO audit failed closed: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
     text = json.dumps(report, indent=2, ensure_ascii=False)

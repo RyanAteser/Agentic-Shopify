@@ -16,6 +16,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify Railway CLI upload retains reproducible lockfile
+        run: |
+          test -s package-lock.json
+          if git check-ignore --quiet --no-index package-lock.json; then
+            echo 'package-lock.json is ignored by the Railway upload context' >&2
+            exit 1
+          fi
       - run: npm ci --no-audit --no-fund
       - run: npm audit --omit=dev --audit-level=high
       - run: npx prisma generate

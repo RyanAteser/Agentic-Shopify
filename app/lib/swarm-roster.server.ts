@@ -1,5 +1,6 @@
 import db from "../db.server";
 import { AGENTS } from "./agent-registry";
+import {SHOPIFY_EVIDENCE_SENDER,requireVerifiedShopifySnapshot,type VerifiedShopifySnapshot} from "./swarm-evidence.server";
 import {laneFor} from "./swarm-lanes";
 import {
   assertAgentMessage, calculateSwarmRoster, mayResizeRole, requiredSkeptics,
@@ -95,6 +96,7 @@ export async function resizeSwarmRole(params:{
 export async function queueSwarmResearch(params:{
   shop:string;sessionId:string;role:string;title:unknown;hypothesis:unknown;
   metric:unknown;rejectionRule:unknown;plan:SwarmPlan;
+  trustedSnapshot?:VerifiedShopifySnapshot;
 }) {
   const role=requireSwarmRole(params.role);
   const brief=validateResearchBrief(params);
@@ -120,6 +122,13 @@ export async function queueSwarmResearch(params:{
       shop:params.shop,role,...brief,status:"queued",
       participantsJson:JSON.stringify(active.map(x=>x.id))
     }});
+    if(params.trustedSnapshot){
+      const snapshot=requireVerifiedShopifySnapshot(params.trustedSnapshot,params.shop);
+      await tx.swarmMessage.create({data:{
+        shop:params.shop,caseId:item.id,senderId:SHOPIFY_EVIDENCE_SENDER,
+        kind:"evidence",body:JSON.stringify(snapshot),evidenceJson:"[]"
+      }});
+    }
     await tx.swarmMessage.createMany({data:active.map(x=>({
       shop:params.shop,caseId:item.id,senderId:"merchant",recipientId:x.id,
       kind:"brief",body:JSON.stringify({

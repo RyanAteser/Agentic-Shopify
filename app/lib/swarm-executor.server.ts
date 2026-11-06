@@ -1,6 +1,7 @@
 import {randomUUID,createHash} from "node:crypto";
 import db from "../db.server";
 import {SwarmProviderError} from "./swarm-gemini.server";
+import {SHOPIFY_EVIDENCE_SENDER,requireVerifiedShopifySnapshot} from "./swarm-evidence.server";
 import {readOnlyPilotEnabled} from "./pilot-readonly";
 import {recordSwarmWorkerMessage} from "./swarm-roster.server";
 import {SWARM_PLANS,SwarmPolicyError} from "./swarm-policy";
@@ -200,6 +201,18 @@ export async function executeBoundedSwarmCase(input:{
   env?:Record<string,string|undefined>;
 }){
   const env=input.env??process.env;
+  // Fail BEFORE reserving credits or making a paid provider request when a
+  // merchant-bound authenticated Shopify evidence snapshot is missing/stale.
+  const record=await db.swarmMessage.findFirst({where:{
+    shop:input.shop,caseId:input.caseId,senderId:SHOPIFY_EVIDENCE_SENDER,kind:"evidence"
+  },select:{body:true}});
+  if(!record)throw new SwarmPolicyError("Verified Shopify evidence snapshot required before execution.",409);
+  let trustedShopifyFacts;
+  try{
+    trustedShopifyFacts=requireVerifiedShopifySnapshot(JSON.parse(record.body),input.shop);
+  }catch{
+    throw new SwarmPolicyError("Verified Shopify evidence unavailable or stale.",409);
+  }
   const reserved=await reserveBoundedSwarmCase({...input,env});
   const planned=planSixCallResearch(reserved.agents);
   const participant=new Map(reserved.agents.map(a=>[a.id,a]));
@@ -212,7 +225,7 @@ export async function executeBoundedSwarmCase(input:{
       }});
       if(!research)throw new SwarmPolicyError("Case missing.");
       const prior=await db.swarmMessage.findMany({
-        where:{shop:input.shop,caseId:reserved.caseId,senderId:{not:"merchant"}},
+        where:{shop:input.shop,caseId:reserved.caseId,senderId:{notIn:["merchant",SHOPIFY_EVIDENCE_SENDER]}},
         select:{senderId:true,kind:true,body:true},orderBy:{createdAt:"asc"},take:20
       });
       const agent=participant.get(stage.agentId);
@@ -220,7 +233,7 @@ export async function executeBoundedSwarmCase(input:{
       const prompt=buildWorkerPrompt({
         phase:stage.phase,title:research.title,hypothesis:research.hypothesis,
         metric:research.metric,rejectionRule:research.rejectionRule,
-        specialty:agent.specialty,prior
+        specialty:agent.specialty,prior,trustedShopifyFacts
       });
       const claimed=await claimStep({shop:input.shop,runId:reserved.id,
         leaseToken:reserved.leaseToken,month:reserved.month,ordinal:stage.ordinal,worker:stage});

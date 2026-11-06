@@ -5,6 +5,7 @@ import {authenticate} from "../shopify.server";
 import {loadMerchantConfig} from "../lib/merchant-config.server";
 import {AGENTS,STATUS_LABELS} from "../lib/agent-registry";
 import {resolveSwarmEntitlement} from "../lib/swarm-billing.server";
+import {captureVerifiedShopifySnapshot} from "../lib/swarm-evidence.server";
 import {loadSwarmTeam,resizeSwarmRole,queueSwarmResearch} from "../lib/swarm-roster.server";
 import {SWARM_PLANS,SwarmPolicyError,requiredSkeptics} from "../lib/swarm-policy";
 
@@ -47,8 +48,11 @@ export const action=async ({request}:ActionFunctionArgs)=>{
     if(intent==="queue_case"){
       const role=form.get("role");
       if(typeof role!=="string")return {ok:false,message:"Choose a valid role."};
+      // Read-only, authenticated Shopify facts are frozen before debate;
+      // an unavailable source prevents queuing an unsupported live run.
+      const trustedSnapshot=await captureVerifiedShopifySnapshot(admin,session.shop);
       const result=await queueSwarmResearch({
-        shop:session.shop,sessionId:session.id,role,plan,
+        shop:session.shop,sessionId:session.id,role,plan,trustedSnapshot,
         title:form.get("title"),hypothesis:form.get("hypothesis"),
         metric:form.get("metric"),rejectionRule:form.get("rejectionRule")
       });
@@ -192,7 +196,7 @@ export default function Team(){
               <p>Entries are immutable routing envelopes or attributed worker messages.
                 Brief delivery does not mean a model ran.</p>
               {notes.map(m=><div key={m.id} style={{padding:"8px 0",borderTop:"1px solid #ddd"}}>
-                <strong>{m.kind}</strong> · {labels.get(m.senderId)??"Merchant brief"}
+                <strong>{m.kind}</strong> · {labels.get(m.senderId)??(m.senderId==="shopify-admin-verified-snapshot"?"Verified Shopify Admin snapshot":"Merchant brief")}
                 {m.recipientId?" → "+(labels.get(m.recipientId)??"Assigned worker"):""}
                 {m.verdict?" · "+m.verdict:""}
                 <p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{m.kind==="brief"

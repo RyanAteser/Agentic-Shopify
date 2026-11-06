@@ -1,4 +1,5 @@
 import {createHash} from "node:crypto";
+import type {VerifiedShopifySnapshot} from "./swarm-evidence.server";
 import {SwarmPolicyError, type SwarmMessageKind} from "./swarm-policy";
 
 export const PILOT_MAX_MODEL_CALLS=6;
@@ -84,6 +85,7 @@ export function parseWorkerText(text:unknown, urls:unknown, falsifier:unknown,
 export function buildWorkerPrompt(input:{
   phase:SwarmPhase;title:string;hypothesis:string;metric:string;
   rejectionRule:string;specialty:string;
+  trustedShopifyFacts?:VerifiedShopifySnapshot;
   prior:readonly {kind:string;body:string;senderId:string}[];
 }):BoundedModelRequest{
   const independent=input.phase==="independent_hypothesis"||input.phase==="independent_evidence";
@@ -95,6 +97,7 @@ export function buildWorkerPrompt(input:{
     task:input.title,hypothesis:input.hypothesis,metric:input.metric,
     rejectionRule:input.rejectionRule,assignedLane:input.specialty,
     phase:input.phase,previousDebate:transcript,
+    verifiedReadOnlyShopifySnapshot:input.trustedShopifyFacts??null,
     responseSchema:{
       text:"Specific sourced observation, alternative mechanism, or criticism. Mark unsupported as speculation.",
       evidenceUrls:["https://source.example/path"],falsifier:"An observation that would reject the claim.",
@@ -107,7 +110,9 @@ export function buildWorkerPrompt(input:{
       "You are a bounded Shopify growth RESEARCH worker, not a storefront operator.",
       "Assume every claim may be wrong; give falsification tests, alternative explanations and limitations.",
       "Your assigned research lane is distinct; prioritize first-principles reasoning, not SEO clichés.",
-      "You have NO browsing, Google Search Console, analytics, Shopify write access or verified external data.",
+      "You have NO browsing, Google Search Console, analytics or Shopify write access.",
+      "The verifiedReadOnlyShopifySnapshot was captured by the authenticated Shopify Admin API; treat its exact fields as trusted observations, not proof of Google indexing.",
+      "Never assert Shopify password state or product publication from assumptions when the snapshot contains the observed value.",
       "Never invent citations, observations, rank changes, metrics or real experiments.",
       "Do not claim search indexing, lift or conversion without independent evidence.",
       "Return only a JSON object with text, evidenceUrls array, falsifier and optionally verdict.",

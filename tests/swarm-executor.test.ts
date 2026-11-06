@@ -9,6 +9,7 @@ import {reserveBoundedSwarmCase,executeBoundedSwarmCase,closeExpiredSwarmRun}
 import {planSixCallResearch,buildWorkerPrompt,PILOT_MAX_MODEL_CALLS,
   type BoundedModelProvider,type SwarmPhase} from "../app/lib/swarm-execution-policy";
 import {geminiBoundedProvider,SwarmProviderError} from "../app/lib/swarm-gemini.server";
+import {SHOPIFY_EVIDENCE_SENDER,SNAPSHOT_SOURCE} from "../app/lib/swarm-evidence.server";
 
 const testEnv=(shop:string)=>({
   SWARM_WORKER_ENABLED:"true",SWARM_EXECUTION_ENABLED:"true",
@@ -28,7 +29,16 @@ async function seeded(){
     hypothesis:"Product information gaps might reduce search discovery for valuable questions.",
     metric:"Compare observed nonbrand Search Console clicks with unchanged similar pages.",
     rejectionRule:"Reject if held-out relative improvement is absent or negative."};
-  const queued=await queueSwarmResearch(caseInput);
+  const queued=await queueSwarmResearch({...caseInput,
+    trustedSnapshot:{
+      source:SNAPSHOT_SOURCE,shop,collectedAt:new Date().toISOString(),
+      storefrontPasswordEnabled:true,allProductsSampled:18,
+      allProductsHasNextPage:false,activeProductsInSample:16,
+      allProductsWithOnlineStoreUrl:0,publishedProductsSampled:13,
+      publishedProductsHasNextPage:false,publishedActiveProductsInSample:13,
+      publishedProductsWithOnlineStoreUrl:0
+    }
+  });
   return {shop,sessionId,caseId:queued.id,caseInput};
 }
 function fakeModel(errorOnCall=-1):BoundedModelProvider & {prompts:{phase:SwarmPhase;prompt:string}[]} {
@@ -70,7 +80,13 @@ test("two specialists plus skeptic complete six staged calls with a forced unver
     assert.equal(usage.consumed,6);
     assert.equal(usage.reserved,0);
     const messages=await db.swarmMessage.findMany({where:{shop,caseId}});
-    assert.equal(messages.length,9);
+    assert.equal(messages.length,10);
+    assert.equal(messages.filter(x=>x.senderId===SHOPIFY_EVIDENCE_SENDER).length,1);
+    for(const prompt of provider.prompts){
+      const parsed=JSON.parse(prompt.prompt);
+      assert.equal(parsed.verifiedReadOnlyShopifySnapshot.storefrontPasswordEnabled,true);
+      assert.equal(parsed.verifiedReadOnlyShopifySnapshot.publishedProductsSampled,13);
+    }
     const verdict=messages.find(x=>x.kind==="verdict");
     assert.equal(verdict?.verdict,"abstain","unverified citations cannot produce an approval");
     assert.equal(await db.storeRecommendation.count({where:{shop}}),0);
@@ -168,5 +184,20 @@ test("sanitized provider failure code is retained without HTTP response bodies",
     const execution=await db.swarmExecution.findUniqueOrThrow({where:{caseId}});
     assert.equal(execution.errorCode,"GEMINI_FINISH_MAX_TOKENS");
     assert.equal((await db.swarmUsageMonth.findFirstOrThrow({where:{shop}})).consumed,1);
+  }finally{await eraseMerchantData(shop)}
+});
+
+test("missing verified Shopify evidence prevents any provider attempts or quota reservations",async()=>{
+  const {shop,caseId}=await seeded();const provider=fakeModel();
+  try{
+    await db.swarmMessage.deleteMany({where:{shop,caseId,senderId:SHOPIFY_EVIDENCE_SENDER}});
+    await assert.rejects(
+      executeBoundedSwarmCase({shop,caseId,provider,env:testEnv(shop)}),
+      /Verified Shopify evidence snapshot required/
+    );
+    assert.equal(await db.swarmExecution.count({where:{shop}}),0);
+    assert.equal(await db.swarmInvocation.count({where:{shop}}),0);
+    assert.equal(await db.swarmUsageMonth.count({where:{shop}}),0);
+    assert.equal(provider.prompts.length,0);
   }finally{await eraseMerchantData(shop)}
 });

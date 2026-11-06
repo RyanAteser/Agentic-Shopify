@@ -2,6 +2,12 @@
 
 Status (November 3, 2026): **Shopify installation verified; backend NOT connected.**
 
+## Railway source-archive reproducibility (November 5, 2026)
+
+A remote Railway CLI `up` to the existing isolated `mbb-catalog-api` service failed at Docker `npm ci` because the CLI upload honored `.gitignore`, which listed `package-lock.json` even though that lockfile is committed and ordinary GitHub Actions/Docker builds include it. No application instance was started by the failed build. The PR now stops ignoring the tracked lockfile and includes a CI check using `git check-ignore --no-index` to catch future exclusions before another Railway upload. Keep `.env`, merchant credentials and local workfiles excluded; **do not** use `railway up --no-gitignore` on the working directory to bypass this error.
+
+This build-packaging repair does not validate Shopify OAuth, installed app permissions or SEO outcomes.
+
 ## Verified installation (no catalog outcome yet)
 
 - A separately created Partner custom-distribution app, **Agentic Commerce MBB Pilot**, was installed in the Monika Blunder Beauty Shopify admin.

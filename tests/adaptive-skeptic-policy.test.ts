@@ -74,3 +74,20 @@ test("incomplete sample never qualifies for a cheap one-agent exit",()=>{
   });
   assert.ok(x.reasons.includes("COVERAGE_INCOMPLETE"));
 });
+
+test("adaptive router accepts correct labeled answer with same-line punctuation, unlike frozen A/B grader",()=>{
+  for(const value of [
+    "ANSWER: YES. publishedActiveProductsInSample is 13.",
+    "ANSWER: YES! publishedActiveProductsInSample is 13.",
+    "ANSWER: YES\npublishedActiveProductsInSample is 13."
+  ]){
+    const x=routeAdaptiveSkeptic({...context,answer:answer(value)});
+    assert.equal(x.escalate,false,value);
+    assert.equal(x.firstAnswer,"YES",value);
+  }
+  for(const value of ["ANSWER: YESTERDAY publishedActiveProductsInSample is 13.",
+    "ANSWER: YESNO publishedActiveProductsInSample is 13."]){
+    const x=routeAdaptiveSkeptic({...context,answer:answer(value)});
+    assert.equal(x.escalate,true,value);
+  }
+});

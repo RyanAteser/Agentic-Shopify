@@ -1,4 +1,4 @@
-import {parseBenchmarkAnswer,type BenchmarkLabel} from "./swarm-benchmark-policy";
+import type {BenchmarkLabel} from "./swarm-benchmark-policy";
 import type {VerifiedShopifySnapshot} from "./swarm-evidence.server";
 import type {BoundedModelAnswer} from "./swarm-execution-policy";
 
@@ -26,7 +26,13 @@ export function routeAdaptiveSkeptic(input:{
 }):AdaptiveRoutingDecision{
   const reasons:AdaptiveReason[]=[];
   const {answer,snapshot}=input;
-  const label=parseBenchmarkAnswer(answer.text);
+  // The operational router accepts a first-line "ANSWER: YES. Explanation"
+  // without mistaking harmless punctuation for missing evidence. The
+  // preregistered A/B benchmark parser intentionally remains unchanged.
+  const labelToken=answer.text.trimStart().match(
+    /^ANSWER:\s*(INSUFFICIENT|YES|NO)\b(?=[\s.!?]|$)/i
+  );
+  const label=labelToken?labelToken[1].toUpperCase() as BenchmarkLabel:null;
   const context=[input.title,input.hypothesis,input.metric,input.rejectionRule].join(" ");
   if(!label||label==="INSUFFICIENT")reasons.push("NONFINAL_OR_ABSTAINING_ANSWER");
   if(snapshot.allProductsHasNextPage||snapshot.publishedProductsHasNextPage)

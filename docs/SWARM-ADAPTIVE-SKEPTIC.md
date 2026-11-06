@@ -44,3 +44,13 @@ All else equal, expected request cost is E[C] = C1 + Pr(escalation)*(C2+C3), rat
 ## Recommended next empirical test
 
 Use a new, independent set of 30+ preregistered, held-out merchant evidence tasks with blinded adjudication. Compare 1-call baseline, adaptive 1-or-3-call policy, and the previous six-call swarm. Measure factual error, false-negative early exits, abstention calibration, measured token cost, completion/timeout rate, and review minutes. A simple single-agent solution remains preferable unless adaptive skepticism shows a reproducible quality-adjusted advantage. Do not reuse the first two benchmark questions as independent held-out examples, and do not infer profitable alpha or SEO growth.
+
+## First real Gemini adaptive smoke test (November 6, 2026)
+
+After draft PR #16 CI passed all three jobs (application, PostgreSQL, Docker), a single shop-isolated Artemis dev-store case cmw5kagvn0000uz44a29pz1jx was created from a new authenticated Shopify Admin 2026-10 snapshot. The factual question was whether any active published Online Store products existed; source field publishedActiveProductsInSample was **13**. User-authorized manual DPAPI launcher ran the fixed three-call ceiling.
+
+Execution cmw5kawn70000uzq8qa28or3o completed **3 attempted and committed Gemini calls** (2,046 input tokens; 516 output+thinking tokens), no errors, final **needs_evidence** and no Shopify edits. The initial specialist answer was factually correct and grounded: **"ANSWER: YES. According to the authenticated Shopify Admin ... publishedActiveProductsInSample is 13"**. However, the initial operational parser required YES to be followed by a line break, not a period; it misclassified a correct result as absent and triggered the skeptic twice. Both skeptic messages also answered YES from the same source. The persisted reason was NONFINAL_OR_ABSTAINING_ANSWER; **that reason was a formatting false positive, not substantive uncertainty**. The skeptic verdict remained abstain by design, not a merchant endorsement. November dev-store attempt meter rose from 15 to **18 of 25**.
+
+Prospective correction: the **adaptive operational** gate now permits a single-line "ANSWER: YES. Explanation" or "ANSWER: YES! Explanation" and continues to reject ambiguous tokens such as ANSWER: YESNO. Focused tests pass; **the original preregistered benchmark parser remains unchanged**, avoiding retrospective scoring changes. The completed case is not retried.
+
+The test proves the adapter and 3-call path operate live. It does NOT demonstrate adaptive cost saving, since a formatting mismatch forced escalation. A separate new, grounded low-risk case is required to verify the one-call early exit on live Gemini.

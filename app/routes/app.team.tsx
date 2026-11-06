@@ -5,6 +5,7 @@ import {authenticate} from "../shopify.server";
 import {loadMerchantConfig} from "../lib/merchant-config.server";
 import {AGENTS,STATUS_LABELS} from "../lib/agent-registry";
 import {resolveSwarmEntitlement} from "../lib/swarm-billing.server";
+import {captureVerifiedShopifySnapshot} from "../lib/swarm-evidence.server";
 import {loadSwarmTeam,resizeSwarmRole,queueSwarmResearch} from "../lib/swarm-roster.server";
 import {SWARM_PLANS,SwarmPolicyError,requiredSkeptics} from "../lib/swarm-policy";
 
@@ -47,8 +48,11 @@ export const action=async ({request}:ActionFunctionArgs)=>{
     if(intent==="queue_case"){
       const role=form.get("role");
       if(typeof role!=="string")return {ok:false,message:"Choose a valid role."};
+      // Read-only, authenticated Shopify facts are frozen before debate;
+      // an unavailable source prevents queuing an unsupported live run.
+      const trustedSnapshot=await captureVerifiedShopifySnapshot(admin,session.shop);
       const result=await queueSwarmResearch({
-        shop:session.shop,sessionId:session.id,role,plan,
+        shop:session.shop,sessionId:session.id,role,plan,trustedSnapshot,
         title:form.get("title"),hypothesis:form.get("hypothesis"),
         metric:form.get("metric"),rejectionRule:form.get("rejectionRule")
       });
@@ -77,11 +81,15 @@ export default function Team(){
   const skeptical=team.participants.totalSkeptics;
   const overLimit=count>planDetails.specialistSlots;
   const labels=new Map(team.agents.map(a=>[a.id,a.label]));
+  const executionByCase=new Map(team.runs.map(run=>[run.caseId,run]));
+  const recentUsage=team.usage[0];
   return <s-page heading="AI Team · Swarm Control Plane">
     <s-section heading="Your team and subscription guardrails">
       <p><strong>{shop}</strong> · Entitlement: <strong>{plan.toUpperCase()}</strong></p>
       <p>{count} of {planDetails.specialistSlots} specialist slots allocated · {skeptical} independent skeptics assigned ·
         {planDetails.researchCredits} proposed monthly research credits.</p>
+      {recentUsage&&<p><strong>Worker test meter ({recentUsage.month}):</strong> {recentUsage.consumed} model attempts consumed · {recentUsage.reserved} reserved.
+        Uncertain attempts are never automatically refunded. This is a request-count safety meter, not verified dollar spend.</p>}
       <p>One skeptic per five specialists <strong>within each role</strong>, rounded up.
         Skeptics do not consume specialist slots. Every claim needs evidence, a measurable
         success criterion and a rejection rule before it can be recommended.</p>
@@ -172,17 +180,23 @@ export default function Team(){
       <div style={{display:"grid",gap:12}}>
         {team.cases.map(item=>{
           const notes=team.messages.filter(m=>m.caseId===item.id);
+          const execution=executionByCase.get(item.id);
           return <article key={item.id} style={panelStyle}>
             <h3 style={{margin:"0 0 8px",fontSize:16}}>{item.title}</h3>
             <p style={{fontSize:13}}>Role: {item.role} · Review round: {item.reviewRound+1} · State: <strong>{item.status}</strong> ·
               {notes.length} visible inbox/message entries</p>
             <p><strong>Metric:</strong> {item.metric}</p>
             <p><strong>Reject when:</strong> {item.rejectionRule}</p>
+            {execution&&<p><strong>Execution:</strong> {execution.status} · Model: {execution.model} ·
+              {execution.callsFinished}/{execution.callsStarted} model calls committed/attempted ·
+              {execution.inputTokens} input and {execution.outputTokens} output/thinking tokens reported.
+              {execution.errorCode&&<> · <strong>Manual reconciliation required:</strong> {execution.errorCode}</>}
+            </p>}
             <details><summary>Inter-agent message ledger</summary>
               <p>Entries are immutable routing envelopes or attributed worker messages.
                 Brief delivery does not mean a model ran.</p>
               {notes.map(m=><div key={m.id} style={{padding:"8px 0",borderTop:"1px solid #ddd"}}>
-                <strong>{m.kind}</strong> · {labels.get(m.senderId)??"Merchant brief"}
+                <strong>{m.kind}</strong> · {labels.get(m.senderId)??(m.senderId==="shopify-admin-verified-snapshot"?"Verified Shopify Admin snapshot":"Merchant brief")}
                 {m.recipientId?" → "+(labels.get(m.recipientId)??"Assigned worker"):""}
                 {m.verdict?" · "+m.verdict:""}
                 <p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{m.kind==="brief"

@@ -1,5 +1,6 @@
 import db from "../db.server";
 import { AGENTS } from "./agent-registry";
+import {SHOPIFY_EVIDENCE_SENDER,requireVerifiedShopifySnapshot,type VerifiedShopifySnapshot} from "./swarm-evidence.server";
 import {laneFor} from "./swarm-lanes";
 import {
   assertAgentMessage, calculateSwarmRoster, mayResizeRole, requiredSkeptics,
@@ -25,12 +26,22 @@ export async function loadSwarmTeam(shop: string) {
       orderBy:{createdAt:"desc"},take:12})
   ]);
   const participants=calculateSwarmRoster(agents as Array<{role:string;kind:SwarmAgentKind;status:string}>);
+  const [runs,usage]=await Promise.all([
+    cases.length ? db.swarmExecution.findMany({
+      where:{shop,caseId:{in:cases.map(x=>x.id)}},
+      select:{id:true,caseId:true,status:true,provider:true,model:true,
+        callsStarted:true,callsFinished:true,inputTokens:true,outputTokens:true,errorCode:true},
+      take:12
+    }) : Promise.resolve([]),
+    db.swarmUsageMonth.findMany({where:{shop},
+      select:{month:true,consumed:true,reserved:true},orderBy:{month:"desc"},take:2})
+  ]);
   const messages=cases.length ? await db.swarmMessage.findMany({
     where:{shop,caseId:{in:cases.map(x=>x.id)}},
     select:{id:true,caseId:true,senderId:true,recipientId:true,kind:true,body:true,verdict:true,createdAt:true},
     orderBy:{createdAt:"desc"},take:80
   }) : [];
-  return {agents,cases,participants,messages};
+  return {agents,cases,participants,messages,runs,usage};
 }
 
 export async function resizeSwarmRole(params:{
@@ -85,6 +96,7 @@ export async function resizeSwarmRole(params:{
 export async function queueSwarmResearch(params:{
   shop:string;sessionId:string;role:string;title:unknown;hypothesis:unknown;
   metric:unknown;rejectionRule:unknown;plan:SwarmPlan;
+  trustedSnapshot?:VerifiedShopifySnapshot;
 }) {
   const role=requireSwarmRole(params.role);
   const brief=validateResearchBrief(params);
@@ -110,6 +122,13 @@ export async function queueSwarmResearch(params:{
       shop:params.shop,role,...brief,status:"queued",
       participantsJson:JSON.stringify(active.map(x=>x.id))
     }});
+    if(params.trustedSnapshot){
+      const snapshot=requireVerifiedShopifySnapshot(params.trustedSnapshot,params.shop);
+      await tx.swarmMessage.create({data:{
+        shop:params.shop,caseId:item.id,senderId:SHOPIFY_EVIDENCE_SENDER,
+        kind:"evidence",body:JSON.stringify(snapshot),evidenceJson:"[]"
+      }});
+    }
     await tx.swarmMessage.createMany({data:active.map(x=>({
       shop:params.shop,caseId:item.id,senderId:"merchant",recipientId:x.id,
       kind:"brief",body:JSON.stringify({
@@ -162,7 +181,7 @@ export async function recordSwarmWorkerMessage(input:{
       if(!recipient)throw new SwarmPolicyError("Cross-merchant or inactive recipient.",403);
     }
     assertAgentMessage({kind:input.kind,actorKind:sender.kind as SwarmAgentKind,
-      content:input.body,evidenceUrls:input.evidenceUrls,falsifier:input.falsifier});
+      content:input.body,evidenceUrls:input.evidenceUrls,falsifier:input.falsifier,verdict:input.verdict});
     const reviewRound=item.reviewRound+(input.kind==="revision"?1:0);
     if(input.kind==="hypothesis"&&item.status!=="queued"){
       throw new SwarmPolicyError("A later claim must be a revision, not a fresh initial hypothesis.",409);

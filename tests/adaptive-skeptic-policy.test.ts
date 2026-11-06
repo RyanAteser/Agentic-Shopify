@@ -77,13 +77,13 @@ test("incomplete sample never qualifies for a cheap one-agent exit",()=>{
 
 test("adaptive router accepts correct labeled answer with same-line punctuation, unlike frozen A/B grader",()=>{
   for(const value of [
-    "ANSWER: YES. publishedActiveProductsInSample is 13.",
-    "ANSWER: YES! publishedActiveProductsInSample is 13.",
-    "ANSWER: YES\npublishedActiveProductsInSample is 13."
+    "ANSWER: NO. publishedActiveProductsInSample is 13.",
+    "ANSWER: NO! publishedActiveProductsInSample is 13.",
+    "ANSWER: NO\npublishedActiveProductsInSample is 13."
   ]){
     const x=routeAdaptiveSkeptic({...context,answer:answer(value)});
     assert.equal(x.escalate,false,value);
-    assert.equal(x.firstAnswer,"YES",value);
+    assert.equal(x.firstAnswer,"NO",value);
   }
   for(const value of ["ANSWER: YESTERDAY publishedActiveProductsInSample is 13.",
     "ANSWER: YESNO publishedActiveProductsInSample is 13."]){
@@ -95,21 +95,21 @@ test("adaptive router accepts correct labeled answer with same-line punctuation,
 test("typed snapshot source fact enables one-call exit without brittle wording rules",()=>{
   const typed=answer("ANSWER: YES\nThe independently authenticated Shopify admin observation directly answers this question.");
   typed.sourceFact={field:"storefrontPasswordEnabled",value:"true"};
-  const clear=routeAdaptiveSkeptic({...context,answer:typed});
+  const clear=routeAdaptiveSkeptic({...context,title:"Is storefront password protection enabled?",answer:typed});
   assert.equal(clear.escalate,false);
   assert.deepEqual(clear.reasons,[]);
   const wrong=answer("ANSWER: YES\nThe source says password protection is enabled.");
   wrong.sourceFact={field:"storefrontPasswordEnabled",value:"false"};
-  const rejected=routeAdaptiveSkeptic({...context,answer:wrong});
+  const rejected=routeAdaptiveSkeptic({...context,title:"Is storefront password protection enabled?",answer:wrong});
   assert.ok(rejected.reasons.includes("STORE_FACT_CONFLICT"));
 });
 
 test("legacy prose-only verified fact handles explicit modifiers and numbers",()=>{
-  for(const text of [
-    "ANSWER: YES\nstorefrontPasswordEnabled is explicitly set to true.",
-    "ANSWER: NO\npublishedActiveProductsInSample equals exactly 13."
+  for(const item of [
+    {title:"Is storefront password protection enabled?",text:"ANSWER: YES\nstorefrontPasswordEnabled is explicitly set to true."},
+    {title:context.title,text:"ANSWER: NO\npublishedActiveProductsInSample equals exactly 13."}
   ]){
-    const x=routeAdaptiveSkeptic({...context,answer:answer(text)});
-    assert.equal(x.escalate,false,text);
+    const x=routeAdaptiveSkeptic({...context,title:item.title,answer:answer(item.text)});
+    assert.equal(x.escalate,false,item.text);
   }
 });

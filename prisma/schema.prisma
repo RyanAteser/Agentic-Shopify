@@ -274,3 +274,57 @@ model SwarmMessage {
   @@index([shop, caseId, createdAt])
   @@index([shop, senderId])
 }
+
+
+/** A single bounded attempt per case. No automatic replay after a network call. */
+model SwarmExecution {
+  id            String   @id @default(cuid())
+  shop          String
+  caseId        String   @unique
+  status        String   @default("reserved")
+  provider      String
+  model         String
+  plan          String
+  usageMonth    String
+  maxCalls      Int
+  callsStarted  Int      @default(0)
+  callsFinished Int      @default(0)
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  leaseToken    String?
+  leaseExpiresAt DateTime?
+  errorCode     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@index([shop, status, createdAt])
+}
+
+/** Charge exactly once at attempt claim. Unknown HTTP delivery remains charged. */
+model SwarmInvocation {
+  id          String   @id @default(cuid())
+  shop        String
+  executionId String
+  ordinal     Int
+  agentId     String
+  phase       String
+  status      String   @default("attempted")
+  inputTokens Int      @default(0)
+  outputTokens Int     @default(0)
+  outputHash  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@unique([executionId, ordinal])
+  @@index([shop, status, createdAt])
+}
+
+/** Bounded monthly reservations; all values are model-request units, not dollars. */
+model SwarmUsageMonth {
+  shop       String
+  month      String
+  reserved   Int      @default(0)
+  consumed   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@id([shop, month])
+  @@index([shop, month])
+}

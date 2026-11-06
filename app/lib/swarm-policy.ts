@@ -136,7 +136,7 @@ export function validateResearchBrief(input: {
 export function assertAgentMessage(input: {
   kind: SwarmMessageKind; actorKind: SwarmAgentKind;
   content: string; evidenceUrls: readonly string[];
-  falsifier?: string;
+  falsifier?: string; verdict?: "supported"|"rejected"|"abstain";
 }) {
   if (input.actorKind !== "specialist" && input.actorKind !== "skeptic") {
     throw new SwarmPolicyError("Unrecognized agent authority.", 403);
@@ -161,8 +161,9 @@ export function assertAgentMessage(input: {
       input.falsifier.length > 600)) {
     throw new SwarmPolicyError("This claim requires an explicit failure condition.");
   }
-  if (input.kind === "verdict" && input.evidenceUrls.length === 0) {
-    throw new SwarmPolicyError("Skeptic verdicts require evidence.");
+  if (input.kind === "verdict" && input.evidenceUrls.length === 0 &&
+      input.verdict !== "abstain") {
+    throw new SwarmPolicyError("Supported verdicts require evidence.");
   }
 }
 

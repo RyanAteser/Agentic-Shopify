@@ -1,6 +1,15 @@
 # Monika Blunder Beauty: read-only catalog integration
 
-Status (November 3, 2026): **Shopify installation verified; backend NOT connected.**
+Status (November 5, 2026): **Hosted read-only backend healthy; Shopify Partner pilot v2 released and active; an authenticated catalog HTTP 200 was observed. Rendered product findings and webhook delivery remain unverified.**
+
+## Shopify Partner app release and OAuth observation (November 5, 2026)
+
+- On the authorized Windows desktop, Shopify CLI 5.0.1 linked the **correct** custom-distribution app, `Agentic Commerce MBB Pilot` (`gid://shopify/App/443368472577`). Its public client ID matched the isolated Railway deployment's `SHOPIFY_API_KEY` and `AGENTIC_PILOT_CLIENT_ID`; Railway also confirmed `SCOPES=read_products`, `AGENTIC_PILOT_MODE=read_only`, and the exact canonical pilot shop. These checks did not print secrets.
+- With explicit owner approval, the linked app configuration was changed **only** to `embedded=true`, `application_url=https://mbb-catalog-api-production.up.railway.app/app/catalog`, and `auth.redirect_urls=[https://mbb-catalog-api-production.up.railway.app/auth/callback]`. The existing `read_products` scope and five webhook subscriptions were retained. The Shopify CLI validator returned `valid: true`, `issues: []`.
+- `shopify app deploy --config monika-pilot --allow-updates --no-input --json` succeeded, reporting `released: true` for [app version `agentic-commerce-mbb-pilot-2`](https://dev.shopify.com/dashboard/148974351/apps/443368472577/versions/1197011861505). A separate Shopify CLI versions listing confirmed v2 is **active** and v1 inactive. A fresh fetch from Developer Dashboard confirmed the intended URL, embedded flag, callback, scopes and webhook subscriptions. The local linked `shopify.app.monika-pilot.toml` is **untracked**, and no credentials or app client secrets were committed to GitHub.
+- The hosted Railway service reports a successful deployment and `GET /health` returned 200 with `{"status":"ready"}`. The operator launched `/auth/login?shop=monikablunderbeauty-com.myshopify.com` in the desktop browser. A direct unauthenticated request to that login endpoint returned HTTP 302 to Shopify Admin's `/oauth/install` route; **after** the browser launch, Railway logged a server-side `GET /app/catalog 200` and no `Read-only catalog pilot unavailable` warning was found in the last 150 deployment log lines. Direct requests to `/app/catalog` without Shopify launch context still returned 410.
+- In this release, `/app/catalog` calls `authenticate.admin(request)` and validates the session shop and actual session scope **before** the catalog audit. The hosted 200 is therefore evidence of successful session authorization on that request. **It is not yet independent proof that the user saw valid catalog SEO findings or that the authenticated Shopify GraphQL query returned the expected product sample**: a handled catalog read failure may also return HTTP 200 with an unavailable message. Verify the actual rendered UI or a narrowly instrumented, privacy-safe sample success event in a follow-up.
+- **Unverified:** production HMAC webhook deliveries, uninstall/revocation behavior, rendered audit coverage, long-running deployment cost and availability, and any change to organic search traffic, conversion or merchant revenue. No product, price, order, customer, content, billing, marketing, n8n or scope expansion actions were performed. Keep the broader application draft branches separate from this live, isolated, read-only pilot.
 
 ## Railway source-archive reproducibility (November 5, 2026)
 
@@ -8,13 +17,13 @@ A remote Railway CLI `up` to the existing isolated `mbb-catalog-api` service fai
 
 This build-packaging repair does not validate Shopify OAuth, installed app permissions or SEO outcomes.
 
-## Verified installation (no catalog outcome yet)
+## Original installation record (November 3, 2026)
 
 - A separately created Partner custom-distribution app, **Agentic Commerce MBB Pilot**, was installed in the Monika Blunder Beauty Shopify admin.
 - Its Dev Dashboard app ID is `443368472577`. Its first version requests only `read_products`.
 - The installed-app list and developer install count (1) were checked. No article, product, price, customer, order, billing, or marketing changes were made.
 - Shopify Admin **Settings > Domains** reports the canonical shop as `monikablunderbeauty-com.myshopify.com` (primary storefront domain: `monikablunderbeauty.com`).
-- The app currently opens Shopify's default application-home page. It has **no connected application backend** and **no app-specific OAuth/GraphQL product read**.
+- At the original installation, the app opened Shopify's default application-home page and had no connected backend. This historical state was superseded by the November 5 v2 configuration release and hosted OAuth observation documented above.
 - Separately, the user-authorized Shopify connector switched to the correct Monika Blunder Beauty Shopify Plus store and successfully fetched a small live read-only product/SEO sample. **That connector has different authentication and is not evidence the installed pilot app has exchanged OAuth credentials.**
 - This repository's broader Blog Agent still requests `write_content,read_products`. Never deploy that configuration to the read-only pilot.
 

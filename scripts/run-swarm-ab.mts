@@ -3,12 +3,15 @@ import {join} from "node:path";
 import {createHash} from "node:crypto";
 import db from "../app/db.server";
 import {queueSwarmResearch,loadSwarmTeam} from "../app/lib/swarm-roster.server";
-import {captureVerifiedShopifySnapshot} from "../app/lib/swarm-evidence.server";
+import {captureVerifiedShopifySnapshot,ShopifyGroundingError} from "../app/lib/swarm-evidence.server";
 import {executeSingleAgentBenchmark,BENCHMARK_SENDER} from "../app/lib/swarm-benchmark.server";
 import {executeBoundedSwarmCase} from "../app/lib/swarm-executor.server";
 import {BENCHMARK_CASES,benchmarkBrief,scoreBenchmarkCase} from "../app/lib/swarm-benchmark-policy";
 import {geminiBoundedProvider} from "../app/lib/swarm-gemini.server";
 
+class BenchmarkPreflightError extends Error {
+  constructor(public readonly code:string){super(code);this.name="BenchmarkPreflightError";}
+}
 async function main(){
   const mode=process.argv.slice(2).join(" ");
   if(!["--run-frozen-two-case-evaluation","--run-second-case-only"].includes(mode)){
@@ -28,11 +31,11 @@ async function main(){
     select:{id:true,accessToken:true,scope:true,expires:true}});
   if(!session||session.expires&&session.expires<new Date()||
      !session.scope?.split(",").includes("read_products")){
-    throw new Error("Shopify read-only dev-store session is missing or expired.");
+    throw new BenchmarkPreflightError("SHOPIFY_SESSION_EXPIRED_OR_MISSING");
   }
   const {participants}=await loadSwarmTeam(shop);
   if(participants.totalSpecialists!==2||participants.totalSkeptics!==1){
-    throw new Error("Exactly two specialists and one skeptic required.");
+    throw new BenchmarkPreflightError("SWARM_ROSTER_INCOMPLETE");
   }
   const admin={graphql:async(query:string)=>{
     const response=await fetch("https://"+shop+"/admin/api/2026-10/graphql.json",{
@@ -43,7 +46,9 @@ async function main(){
     if(!response.ok)throw new Error("Authenticated Shopify evidence request failed.");
     return {json:()=>response.json() as Promise<unknown>};
   }};
-  const snapshot=await captureVerifiedShopifySnapshot(admin,shop);
+  let snapshot;
+  try{snapshot=await captureVerifiedShopifySnapshot(admin,shop);}
+  catch{throw new BenchmarkPreflightError("SHOPIFY_AUTHENTICATED_EVIDENCE_UNAVAILABLE");}
   if(snapshot.allProductsHasNextPage||snapshot.publishedProductsHasNextPage){
     throw new Error("Benchmark selected for fully observed bounded catalog only.");
   }
@@ -52,7 +57,7 @@ async function main(){
   }}});
   // Each paired comparison uses 1 baseline + 6 swarm requests.
   if((usage?.reserved??0)+(usage?.consumed??0)+selectedCases.length*7>25)
-    throw new Error("The existing 25-unit monthly model-request cap cannot fit the full A/B run.");
+    throw new BenchmarkPreflightError("MONTHLY_ATTEMPT_CAP_EXCEEDED");
 
   for(const spec of selectedCases){
     if(await db.swarmCase.count({where:{shop,title:spec.question}})){
@@ -67,14 +72,18 @@ async function main(){
     // Both arms receive the SAME frozen verified fact snapshot and task brief.
     const single=await queueSwarmResearch({shop,sessionId:session.id,role:"seo",
       plan:"free",...brief,trustedSnapshot:snapshot});
-    const swarm=await queueSwarmResearch({shop,sessionId:session.id,role:"seo",
-      plan:"free",...brief,trustedSnapshot:snapshot});
     const baselineResult=await executeSingleAgentBenchmark({
       shop,caseId:single.id,provider,env
     });
     if(baselineResult.status!=="completed"){
       throw new Error("Baseline outcome uncertain: stop before initiating the swarm.");
     }
+    // Release the completed control's operational open-case slot; its
+    // evidence, model invocation and answer remain immutable and visible.
+    await db.swarmCase.updateMany({where:{shop,id:single.id,status:"needs_evidence"},
+      data:{status:"benchmark_baseline_completed"}});
+    const swarm=await queueSwarmResearch({shop,sessionId:session.id,role:"seo",
+      plan:"free",...brief,trustedSnapshot:snapshot});
     const swarmResult=await executeBoundedSwarmCase({
       shop,caseId:swarm.id,provider,env
     });
@@ -135,6 +144,9 @@ async function main(){
 }
 main().catch(e=>{
   // Never print provider response bodies or dev-shop access tokens.
-  process.stderr.write("Benchmark stopped: "+(e instanceof Error?e.name:"UnknownError")+"\n");
+  const safe=e instanceof BenchmarkPreflightError?e.code:
+    e instanceof ShopifyGroundingError?"SHOPIFY_EVIDENCE_FAILED":
+      e instanceof Error?e.name:"UnknownError";
+  process.stderr.write("Benchmark stopped: "+safe+"\n");
   process.exitCode=1;
 }).finally(()=>db.$disconnect());

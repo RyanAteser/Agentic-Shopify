@@ -73,6 +73,13 @@ export function geminiBoundedProvider(
               text:{type:"string",description:"A bounded observation; begin with the required ANSWER line for benchmark tasks."},
               evidenceUrls:{type:"array",items:{type:"string"},maxItems:6},
               falsifier:{type:"string",description:"How an observation could disprove the claim."},
+              sourceFact:{type:"object",properties:{
+                field:{type:"string",enum:[
+                  "publishedActiveProductsInSample","publishedProductsWithOnlineStoreUrl",
+                  "activeProductsInSample","allProductsSampled","storefrontPasswordEnabled"
+                ]},
+                value:{type:"string",description:"Exact value from verifiedReadOnlyShopifySnapshot, represented as a string."}
+              },required:["field","value"],additionalProperties:false},
               ...(request.phase==="skeptic_verdict"?{
                 verdict:{type:"string",enum:["supported","rejected","abstain"]}
               }:{})
@@ -120,7 +127,7 @@ export function geminiBoundedProvider(
       }catch{throw new SwarmProviderError("GEMINI_INVALID_JSON","Provider output was not valid structured JSON.");}
       let result;
       try{
-        result=parseWorkerText(data.text,data.evidenceUrls,data.falsifier,data.verdict,request.phase);
+        result=parseWorkerText(data.text,data.evidenceUrls,data.falsifier,data.verdict,request.phase,data.sourceFact);
       }catch{
         throw new SwarmProviderError("GEMINI_SCHEMA_POLICY_MISMATCH","Provider structured output failed policy checks.");
       }

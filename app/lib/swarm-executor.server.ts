@@ -1,6 +1,7 @@
 import {randomUUID,createHash} from "node:crypto";
 import db from "../db.server";
 import {SwarmProviderError} from "./swarm-gemini.server";
+import {ADAPTIVE_MAX_MODEL_CALLS} from "./adaptive-skeptic-policy";
 import {SHOPIFY_EVIDENCE_SENDER,requireVerifiedShopifySnapshot} from "./swarm-evidence.server";
 import {readOnlyPilotEnabled} from "./pilot-readonly";
 import {recordSwarmWorkerMessage} from "./swarm-roster.server";
@@ -11,6 +12,7 @@ import {
   type PlannedInvocation,type SwarmAgentIdentity
 } from "./swarm-execution-policy";
 
+export const ADAPTIVE_GATE_SENDER="adaptive-routing-v1";
 const IN_PROGRESS=["queued","researching","challenged","needs_evidence"];
 const TERMINAL=["awaiting_merchant_review","needs_evidence","rejected"];
 
@@ -33,10 +35,15 @@ function ensureCaseId(x:string){if(!validId(x))throw new SwarmPolicyError("Inval
 
 export async function reserveBoundedSwarmCase(input:{
   shop:string;caseId:string;provider:BoundedModelProvider;env?:Record<string,string|undefined>;
-  at?:Date;
+  at?:Date;mode?:"full"|"adaptive";
 }){
   const env=input.env??process.env,at=input.at??new Date();
+  const adaptive=input.mode==="adaptive";
+  const maxCalls=adaptive?ADAPTIVE_MAX_MODEL_CALLS:PILOT_MAX_MODEL_CALLS;
   assertOperatorEnabled(input.shop,env);ensureCaseId(input.caseId);
+  if(adaptive&&env.SWARM_ADAPTIVE_ENABLED!=="true"){
+    throw new SwarmPolicyError("Adaptive research runner is disabled.",403);
+  }
   if(input.provider.providerName.length>80||input.provider.modelName.length>80||
       !input.provider.providerName||!input.provider.modelName){
     throw new SwarmPolicyError("Invalid provider identity.");
@@ -66,22 +73,26 @@ export async function reserveBoundedSwarmCase(input:{
       throw new SwarmPolicyError("Some snapshotted workers have retired.",409);
     }
     planSixCallResearch(agents);
+    if(adaptive&&research.role!=="seo"){
+      throw new SwarmPolicyError("Adaptive pilot supports SEO research only.",403);
+    }
     // Launch gate is intentionally free-only. Real paid entitlements cannot
     // be inferred by a CLI switch; they require Partner API reconciliation.
     const month=monthKey(at);
     const usage=await tx.swarmUsageMonth.upsert({where:{shop_month:{
       shop:input.shop,month}},create:{shop:input.shop,month},update:{}});
-    if(usage.reserved+usage.consumed+PILOT_MAX_MODEL_CALLS>
+    if(usage.reserved+usage.consumed+maxCalls>
        SWARM_PLANS.free.researchCredits){
       throw new SwarmPolicyError("Monthly pilot research credit cap exceeded.",403);
     }
     await tx.swarmUsageMonth.update({where:{shop_month:{shop:input.shop,month}},
-      data:{reserved:{increment:PILOT_MAX_MODEL_CALLS}}});
+      data:{reserved:{increment:maxCalls}}});
     const leaseToken=randomUUID();
     const run=await tx.swarmExecution.create({data:{
       shop:input.shop,caseId:input.caseId,status:"running",
-      provider:input.provider.providerName,model:input.provider.modelName,plan:"free",usageMonth:month,
-      maxCalls:PILOT_MAX_MODEL_CALLS,leaseToken,
+      provider:input.provider.providerName,model:input.provider.modelName,
+      plan:adaptive?"adaptive_free":"free",usageMonth:month,
+      maxCalls,leaseToken,
       leaseExpiresAt:new Date(at.getTime()+PILOT_LEASE_MS)
     }});
     return {id:run.id,caseId:input.caseId,leaseToken,
@@ -89,7 +100,7 @@ export async function reserveBoundedSwarmCase(input:{
   },{timeout:10000});
 }
 
-async function claimStep(params:{
+export async function claimStep(params:{
   shop:string;runId:string;leaseToken:string;ordinal:number;worker:PlannedInvocation;month:string;
 }){
   const now=new Date();
@@ -125,7 +136,7 @@ async function claimStep(params:{
   },{timeout:10000});
 }
 
-async function commitStep(params:{
+export async function commitStep(params:{
   shop:string;runId:string;leaseToken:string;invocationId:string;
   inputTokens:number;outputTokens:number;outputText:string;
 }){
@@ -150,7 +161,7 @@ async function commitStep(params:{
   },{timeout:10000});
 }
 
-async function settleRun(params:{
+export async function settleRun(params:{
   shop:string;runId:string;leaseToken:string;month:string;
   failed:boolean;requireExpiredAt?:Date;diagnosticCode?:string;
 }){
@@ -170,7 +181,30 @@ async function settleRun(params:{
         data:{reserved:{decrement:remaining}}});
     }
     const research=await tx.swarmCase.findFirst({where:{shop:params.shop,id:run.caseId}});
-    const success=!params.failed&&run.callsStarted===PILOT_MAX_MODEL_CALLS&&
+    const adaptive=run.plan==="adaptive_free";
+    const decisionMessage=adaptive ? await tx.swarmMessage.findFirst({
+      where:{shop:params.shop,caseId:run.caseId,senderId:ADAPTIVE_GATE_SENDER,kind:"evidence"},
+      select:{body:true}
+    }):null;
+    let routing:null|{escalate:boolean}=null;
+    if(decisionMessage){
+      try{
+        const parsed=JSON.parse(decisionMessage.body) as {escalate?:unknown};
+        if(typeof parsed.escalate==="boolean")routing={escalate:parsed.escalate};
+      }catch{/* invalid gate cannot complete a run */}
+    }
+    const adaptiveCallCount=routing &&
+      (routing.escalate ? run.callsStarted===3 : run.callsStarted===1);
+    const adaptiveCaseValid=adaptive&&routing&&
+      (routing.escalate
+        ? (!!research&&TERMINAL.includes(research.status)&&
+          await tx.swarmMessage.count({where:{
+            shop:params.shop,caseId:run.caseId,kind:"verdict"
+          }})>0)
+        : research?.status==="needs_evidence");
+    const success=!params.failed&&
+      (adaptive ? !!adaptiveCallCount&&!!adaptiveCaseValid :
+        run.callsStarted===PILOT_MAX_MODEL_CALLS) &&
       run.callsFinished===run.callsStarted&&
       !!research&&TERMINAL.includes(research.status);
     const status=success?"completed":"blocked_uncertain";

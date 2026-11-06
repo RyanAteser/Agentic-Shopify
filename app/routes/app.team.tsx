@@ -187,7 +187,7 @@ export default function Team(){
               {notes.length} visible inbox/message entries</p>
             <p><strong>Metric:</strong> {item.metric}</p>
             <p><strong>Reject when:</strong> {item.rejectionRule}</p>
-            {execution&&<p><strong>Execution:</strong> {execution.status} · Model: {execution.model} ·
+            {execution&&<p><strong>Execution:</strong> {execution.status} · Mode: {execution.plan==="adaptive_free"?"Adaptive skeptic (1–3 calls)":execution.plan} · Model: {execution.model} ·
               {execution.callsFinished}/{execution.callsStarted} model calls committed/attempted ·
               {execution.inputTokens} input and {execution.outputTokens} output/thinking tokens reported.
               {execution.errorCode&&<> · <strong>Manual reconciliation required:</strong> {execution.errorCode}</>}
@@ -196,7 +196,7 @@ export default function Team(){
               <p>Entries are immutable routing envelopes or attributed worker messages.
                 Brief delivery does not mean a model ran.</p>
               {notes.map(m=><div key={m.id} style={{padding:"8px 0",borderTop:"1px solid #ddd"}}>
-                <strong>{m.kind}</strong> · {labels.get(m.senderId)??(m.senderId==="shopify-admin-verified-snapshot"?"Verified Shopify Admin snapshot":"Merchant brief")}
+                <strong>{m.kind}</strong> · {labels.get(m.senderId)??(m.senderId==="shopify-admin-verified-snapshot"?"Verified Shopify Admin snapshot":m.senderId==="adaptive-routing-v1"?"Deterministic escalation decision":"Merchant brief")}
                 {m.recipientId?" → "+(labels.get(m.recipientId)??"Assigned worker"):""}
                 {m.verdict?" · "+m.verdict:""}
                 <p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{m.kind==="brief"

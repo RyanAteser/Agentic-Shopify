@@ -1,5 +1,6 @@
 import db from "../db.server";
 import { AGENTS } from "./agent-registry";
+import {laneFor} from "./swarm-lanes";
 import {
   assertAgentMessage, calculateSwarmRoster, mayResizeRole, requiredSkeptics,
   requireSwarmRole, validateResearchBrief, SWARM_PLANS, SwarmPolicyError,
@@ -17,7 +18,7 @@ async function lockMerchant(tx: any, shop: string, sessionId: string) {
 export async function loadSwarmTeam(shop: string) {
   const [agents,cases]=await Promise.all([
     db.swarmAgent.findMany({where:{shop,status:"active"},
-      select:{id:true,role:true,kind:true,label:true,status:true},
+      select:{id:true,role:true,kind:true,label:true,specialty:true,status:true},
       orderBy:[{createdAt:"asc"},{id:"asc"}],take:70}),
     db.swarmCase.findMany({where:{shop},
       select:{id:true,role:true,title:true,metric:true,rejectionRule:true,status:true,reviewRound:true,createdAt:true},
@@ -56,7 +57,7 @@ export async function resizeSwarmRole(params:{
       const count=await tx.swarmAgent.count({where:{shop:params.shop,role,kind:"specialist"}});
       await tx.swarmAgent.createMany({data:Array.from({length:params.desired-specialists.length},(_,i)=>({
         shop:params.shop,role,kind:"specialist",status:"active",
-        label:roleName+" #"+(count+i+1)
+        label:roleName+" #"+(count+i+1),specialty:laneFor(role,count+i,"specialist")
       }))});
     }
     if(bounds.skeptics<skeptics.length){
@@ -67,7 +68,7 @@ export async function resizeSwarmRole(params:{
       const count=await tx.swarmAgent.count({where:{shop:params.shop,role,kind:"skeptic"}});
       await tx.swarmAgent.createMany({data:Array.from({length:bounds.skeptics-skeptics.length},(_,i)=>({
         shop:params.shop,role,kind:"skeptic",status:"active",
-        label:roleName+" Skeptic #"+(count+i+1)
+        label:roleName+" Skeptic #"+(count+i+1),specialty:laneFor(role,count+i,"skeptic")
       }))});
     }
     if(params.desired!==currentRole){
@@ -90,7 +91,7 @@ export async function queueSwarmResearch(params:{
   return db.$transaction(async tx=>{
     await lockMerchant(tx,params.shop,params.sessionId);
     const active=await tx.swarmAgent.findMany({where:{shop:params.shop,status:"active",role},
-      select:{id:true,kind:true}});
+      select:{id:true,kind:true,specialty:true}});
     const all=await tx.swarmAgent.findMany({where:{shop:params.shop,status:"active"},
       select:{role:true,kind:true,status:true}});
     const roster=calculateSwarmRoster(all as Array<{role:string;kind:SwarmAgentKind;status:string}>);
@@ -109,13 +110,14 @@ export async function queueSwarmResearch(params:{
       shop:params.shop,role,...brief,status:"queued",
       participantsJson:JSON.stringify(active.map(x=>x.id))
     }});
-    const body=JSON.stringify({
-      hypothesis:brief.hypothesis,successMetric:brief.metric,rejectionRule:brief.rejectionRule,
-      instruction:"Independently test assumptions, cite sources and counterexamples. No Shopify writes."
-    });
     await tx.swarmMessage.createMany({data:active.map(x=>({
       shop:params.shop,caseId:item.id,senderId:"merchant",recipientId:x.id,
-      kind:"brief",body,evidenceJson:"[]",falsifier:brief.rejectionRule
+      kind:"brief",body:JSON.stringify({
+        hypothesis:brief.hypothesis,successMetric:brief.metric,rejectionRule:brief.rejectionRule,
+        assignedResearchLane:x.specialty,
+        independentFirstPass:true,
+        instruction:"Independently test this assigned mechanism; cite sources and counterexamples. No Shopify writes."
+      }),evidenceJson:"[]",falsifier:brief.rejectionRule
     }))});
     // Queue only. No model credentials or paid calls are invoked.
     return {id:item.id,recipients:active.length,status:"queued" as const};

@@ -105,6 +105,14 @@ export default function Team(){
               {agent.domain} · {STATUS_LABELS[agent.status]}</p>
             <p style={{margin:"0 0 10px"}}>{agent.purpose}</p>
             <p><strong>{current} specialists · {critics} skeptics</strong></p>
+            {current>0&&<details style={{marginBottom:12}}>
+              <summary>Research assignments</summary>
+              <ul>{team.agents.filter(worker=>worker.role===agent.id).map(worker=>
+                <li key={worker.id}><strong>{worker.kind==="skeptic"?"Skeptic":"Specialist"}:</strong>
+                  {" "+worker.specialty}</li>)}</ul>
+              <small>Distinct research lanes encourage independent work; they are not
+                evidence that an idea is novel or profitable.</small>
+            </details>}
             <Form method="post" style={{display:"flex",alignItems:"end",gap:8,flexWrap:"wrap"}}>
               <input type="hidden" name="intent" value="set_slots"/>
               <input type="hidden" name="role" value={agent.id}/>

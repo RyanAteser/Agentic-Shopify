@@ -19,6 +19,9 @@ test("durable swarm roster, skeptic challenge and revision invalidate stale verd
     const team=await loadSwarmTeam(shop);
     assert.equal(team.participants.totalSpecialists,2);
     assert.equal(team.participants.totalSkeptics,1);
+    const lanes=team.agents.filter(x=>x.kind==="specialist").map(x=>x.specialty);
+    assert.equal(new Set(lanes).size,2,"different specialists have different research assignments");
+    assert.ok(team.agents.find(x=>x.kind==="skeptic")?.specialty.includes("Counterfactual"));
     const researcher=team.agents.find(x=>x.kind==="specialist")!;
     const skeptic=team.agents.find(x=>x.kind==="skeptic")!;
     const brief={

@@ -6,6 +6,7 @@ CREATE TABLE "SwarmAgent" (
   "role" TEXT NOT NULL,
   "kind" TEXT NOT NULL,
   "label" TEXT NOT NULL,
+  "specialty" TEXT NOT NULL DEFAULT '',
   "status" TEXT NOT NULL DEFAULT 'active',
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,

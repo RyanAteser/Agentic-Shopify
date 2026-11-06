@@ -42,6 +42,8 @@ console. Every role shows specialists, derived skeptics, descriptive purpose and
 a slot form. There is a global plan limit, free-only when billing is not
 verified, a research brief form and a read-only case ledger.
 
+Each active specialist has a persistent, visible research lane from `app/lib/swarm-lanes.ts`. Six SEO slots receive six different assignments (search intent, link topology, canonical risk, query cohorts, schema quality, competitive information gaps); skeptics have distinct adversarial specialties. Assigned lanes are also included in each worker's immutable brief envelope. This reduces identical prompting but does not establish independent data, novelty or business value.
+
 The UI must NOT claim that a queued brief was answered. Until an approved model
 provider and durable queue exist, cases remain **queued**, and the ledger
 contains only real routing envelopes. Future screens should add: Activity

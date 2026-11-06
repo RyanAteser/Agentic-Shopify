@@ -1,7 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {geminiBoundedProvider,SwarmProviderError} from "../app/lib/swarm-gemini.server";
-import {buildWorkerPrompt} from "../app/lib/swarm-execution-policy";
+import {buildWorkerPrompt,parseWorkerText} from "../app/lib/swarm-execution-policy";
 
 const env={
   SWARM_WORKER_ENABLED:"true",SWARM_ENABLE_PAID_MODEL_CALLS:"true",
@@ -103,4 +103,18 @@ test("Gemini schema-policy violations have a safe diagnostic code without user t
       e.diagnosticCode==="GEMINI_SCHEMA_POLICY_MISMATCH" &&
       !e.message.includes("bad")
   );
+});
+
+test("provider source-field references are typed and malformed values fail validation",()=>{
+  const valid=parseWorkerText("ANSWER: YES\nSource-backed result is true.",[],
+    "Reject if authenticated field changes.",undefined,"independent_hypothesis",
+    {field:"storefrontPasswordEnabled",value:"true"});
+  assert.equal(valid.sourceFact?.field,"storefrontPasswordEnabled");
+  assert.equal(valid.sourceFact?.value,"true");
+  assert.throws(()=>parseWorkerText("ANSWER: YES\nSource-backed result is true.",[],
+    "Reject if authenticated field changes.",undefined,"independent_hypothesis",
+    {field:"untrustedGoogleRanking",value:"1"}),/malformed/);
+  assert.throws(()=>parseWorkerText("ANSWER: YES\nSource-backed result is true.",[],
+    "Reject if authenticated field changes.",undefined,"independent_hypothesis",
+    {field:"storefrontPasswordEnabled",value:"true",danger:"injected"}),/malformed/);
 });

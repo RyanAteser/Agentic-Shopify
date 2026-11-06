@@ -50,8 +50,9 @@ export function routeAdaptiveSkeptic(input:{
     reasons.push("MODEL_CITES_UNVERIFIED_URL");
   if(!answer.falsifier||answer.falsifier.trim().length<8)
     reasons.push("MISSING_FALSIFIER");
-  // A literal exact source-field + value reference is necessary for early
-  // exit; mere confidence or model-generated citations are never enough.
+  // Early exit requires an exact field/value pair from the already trusted
+  // snapshot. Prefer typed sourceFact. A legacy prose fallback remains for
+  // older model adapters; neither model confidence nor a URL is verification.
   const facts:readonly [string,string][]=[
     ["publishedActiveProductsInSample",String(snapshot.publishedActiveProductsInSample)],
     ["publishedProductsWithOnlineStoreUrl",String(snapshot.publishedProductsWithOnlineStoreUrl)],
@@ -59,13 +60,19 @@ export function routeAdaptiveSkeptic(input:{
     ["allProductsSampled",String(snapshot.allProductsSampled)],
     ["storefrontPasswordEnabled",String(snapshot.storefrontPasswordEnabled)],
   ];
-  const linked=facts.some(([field,value])=>{
+  const typedMatch=!!answer.sourceFact&&facts.some(
+    ([field,value])=>answer.sourceFact!.field===field&&answer.sourceFact!.value===value
+  );
+  if(answer.sourceFact&&!typedMatch)reasons.push("STORE_FACT_CONFLICT");
+  const proseMatch=facts.some(([field,value])=>{
     const position=answer.text.indexOf(field);
     if(position<0)return false;
-    const tail=answer.text.slice(position+field.length,position+field.length+30);
-    return new RegExp("^.{0,18}\\b"+value+"\\b","i").test(tail);
+    // Stay within this source-field clause; tolerate "is explicitly set to".
+    const tail=answer.text.slice(position+field.length,position+field.length+96)
+      .split(/[.;\n]/)[0];
+    return new RegExp("\\b"+value+"\\b","i").test(tail);
   });
-  if(!linked)reasons.push("NO_VERIFIED_FACT_REFERENCED");
+  if(!typedMatch&&!proseMatch)reasons.push("NO_VERIFIED_FACT_REFERENCED");
   // Detect a particularly dangerous false attribution independently of the
   // model's chosen ANSWER label.
   if(snapshot.publishedActiveProductsInSample>0&&

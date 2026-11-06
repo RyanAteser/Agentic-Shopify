@@ -91,3 +91,25 @@ test("adaptive router accepts correct labeled answer with same-line punctuation,
     assert.equal(x.escalate,true,value);
   }
 });
+
+test("typed snapshot source fact enables one-call exit without brittle wording rules",()=>{
+  const typed=answer("ANSWER: YES\nThe independently authenticated Shopify admin observation directly answers this question.");
+  typed.sourceFact={field:"storefrontPasswordEnabled",value:"true"};
+  const clear=routeAdaptiveSkeptic({...context,answer:typed});
+  assert.equal(clear.escalate,false);
+  assert.deepEqual(clear.reasons,[]);
+  const wrong=answer("ANSWER: YES\nThe source says password protection is enabled.");
+  wrong.sourceFact={field:"storefrontPasswordEnabled",value:"false"};
+  const rejected=routeAdaptiveSkeptic({...context,answer:wrong});
+  assert.ok(rejected.reasons.includes("STORE_FACT_CONFLICT"));
+});
+
+test("legacy prose-only verified fact handles explicit modifiers and numbers",()=>{
+  for(const text of [
+    "ANSWER: YES\nstorefrontPasswordEnabled is explicitly set to true.",
+    "ANSWER: NO\npublishedActiveProductsInSample equals exactly 13."
+  ]){
+    const x=routeAdaptiveSkeptic({...context,answer:answer(text)});
+    assert.equal(x.escalate,false,text);
+  }
+});

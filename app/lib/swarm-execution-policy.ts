@@ -19,8 +19,9 @@ export type SwarmAgentIdentity={
 export type BoundedModelRequest={
   phase:SwarmPhase;system:string;prompt:string;maxOutputTokens:number;
 };
+export type SnapshotSourceFact={field:"publishedActiveProductsInSample"|"publishedProductsWithOnlineStoreUrl"|"activeProductsInSample"|"allProductsSampled"|"storefrontPasswordEnabled";value:string};
 export type BoundedModelAnswer={
-  text:string;evidenceUrls:string[];falsifier?:string;
+  text:string;evidenceUrls:string[];falsifier?:string;sourceFact?:SnapshotSourceFact;
   verdict?:"supported"|"rejected"|"abstain";
   inputTokens:number;outputTokens:number;
   model:string;
@@ -54,12 +55,24 @@ export function planSixCallResearch(agents:readonly SwarmAgentIdentity[]):Planne
 }
 
 export function parseWorkerText(text:unknown, urls:unknown, falsifier:unknown,
-  verdict:unknown, phase:SwarmPhase):Pick<BoundedModelAnswer,"text"|"evidenceUrls"|"falsifier"|"verdict"> {
+  verdict:unknown, phase:SwarmPhase, sourceFact?:unknown):Pick<BoundedModelAnswer,"text"|"evidenceUrls"|"falsifier"|"verdict"|"sourceFact"> {
   if(typeof text!=="string"||text.trim().length<12||text.length>PILOT_MAX_OUTPUT_CHARS){
     throw new SwarmPolicyError("Model output was not a bounded substantive claim.");
   }
   if(!Array.isArray(urls)||urls.length>6||urls.some(x=>typeof x!=="string")) {
     throw new SwarmPolicyError("Model output had malformed evidence URLs.");
+  }
+  if(sourceFact!==undefined){
+    if(!sourceFact||typeof sourceFact!=="object"||Array.isArray(sourceFact)){
+      throw new SwarmPolicyError("Model source fact was malformed.");
+    }
+    const x=sourceFact as Record<string,unknown>;
+    if(!["publishedActiveProductsInSample","publishedProductsWithOnlineStoreUrl",
+      "activeProductsInSample","allProductsSampled","storefrontPasswordEnabled"].includes(String(x.field))||
+      typeof x.value!=="string"||x.value.length>32||
+      Object.keys(x).some(k=>!["field","value"].includes(k))){
+      throw new SwarmPolicyError("Model source fact was malformed.");
+    }
   }
   const needFalsifier=["independent_hypothesis","researcher_revision","skeptic_verdict"].includes(phase);
   if(needFalsifier&&(typeof falsifier!=="string"||falsifier.trim().length<8||falsifier.length>600)){
@@ -78,7 +91,8 @@ export function parseWorkerText(text:unknown, urls:unknown, falsifier:unknown,
   return {
     text:text.trim(),evidenceUrls:urls,
     falsifier:typeof falsifier==="string"?falsifier.trim():undefined,
-    verdict:acceptedVerdict
+    verdict:acceptedVerdict,
+    sourceFact:sourceFact as SnapshotSourceFact|undefined
   };
 }
 
@@ -101,7 +115,8 @@ export function buildWorkerPrompt(input:{
     responseSchema:{
       text:"Specific sourced observation, alternative mechanism, or criticism. Mark unsupported as speculation.",
       evidenceUrls:["https://source.example/path"],falsifier:"An observation that would reject the claim.",
-      verdict:"supported | rejected | abstain; only for skeptical verdict phase"
+      verdict:"supported | rejected | abstain; only for skeptical verdict phase",
+      sourceFact:{field:"Exact field name from verifiedReadOnlyShopifySnapshot",value:"Exact matching value copied from the snapshot as a string"}
     }
   });
   if(prompt.length>PILOT_MAX_INPUT_CHARS)throw new SwarmPolicyError("Worker context exceeds hard input bound.",413);

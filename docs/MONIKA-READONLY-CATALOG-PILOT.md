@@ -2,6 +2,30 @@
 
 Status (November 5, 2026): **Hosted read-only backend healthy; Shopify Partner pilot v2 active; merchant confirmed rendered authenticated catalog: 28 products sampled, 28 eligible URLs, 0 heuristic review observations. Webhook delivery and Google indexing remain unverified.**
 
+## Independent five-product live storefront parity (November 5, 2026)
+
+**Method:** A separate, authorized **read-only Shopify Admin connector** query for `status:active published_status:published` returned 28 products, `hasNextPage=false`, with 28 primary-storefront product URLs. Every product carried a custom SEO title and description; no duplicate effective SEO titles or Shopify metadata-only problems were found under the pilot's current rules. Select deterministic catalog indices 0, 8, 10, 23 and 26 for a cross-section of a tool, flagship foundation, mascara, lip bundle and starter bundle. This connector's credentials **are not** evidence of the installed pilot app's token, though the merchant separately confirmed the embedded view returned the same 28-product count.
+
+**Cross-layer replay:** Extend the existing `scripts/public-storefront-seo-audit.py`, not a second crawler. Supply exactly five URLs and their expected SEO fields from a separate, local, ignored Admin-metadata manifest via `--expected-json`. Validate exact primary-domain product URLs and reject cross-host/unsafe/duplicate entries *before network access*. Respect robots.txt, bound response size/time and request count, and make only public GET requests. Never persist HTML or expose Shopify access tokens. Local Python tests now include title/description parity, deliberate mismatch, unsafe-manifest and redirect negative controls.
+
+Observed in the five selected **live public pages**:
+
+| Product | HTTP | Canonical | Robots meta | Admin vs rendered title/description | JSON-LD |
+| --- | --- | --- | --- | --- | --- |
+| Cosmetic Clutch | 200 | Exact self URL | `index,follow` | Both match after whitespace/HTML entity normalization | Valid Product+Offer **and one additional malformed Product JSON-LD script** |
+| Blunder Cover | 200 | Exact self URL | `index,follow` | Both match | Valid Product+Offer |
+| Architect Eyes Buildable Mascara | 200 | Exact self URL | `index,follow` | Both match | Valid Product+Offer |
+| Lip Trio Pink | 200 | Exact self URL | `index,follow` | Both match | Valid Product+Offer |
+| Blunder Cover Starter Bundle | 200 | Exact self URL | `index,follow` | Both match | Valid Product+Offer |
+
+All five stayed on the same HTTPS product URL and had one H1. The HTTP responses did not include an `X-Robots-Tag: noindex`; the public `robots.txt` had a Googlebot `Allow: /` rule. These are **technical crawlability signals, not Google Search Console indexing status**.
+
+**One confirmed markup defect needing merchant review:** The Cosmetic Clutch page has a *second* `<script type="application/ld+json">` claiming `"@type": "Product"`, whose unescaped raw line breaks inside the `description` JSON string cause Python's strict JSON parser to reject it (invalid control character, line 7). The *other* Product script on the page is valid and includes offer data. Therefore the malformed block is a real HTML/JSON syntax issue, **not evidence that Google has lost Product markup, rich results or rankings**. Do not automatically edit the live Shopify theme. The merchant can ask the theme owner to serialize dynamic description text with a JSON-safe serializer, test in a theme preview, and validate using Google's [Rich Results Test](https://search.google.com/test/rich-results) before explicitly authorizing publication.
+
+**Heuristics separated from facts:** The existing public sampler also issued five `long_title_heuristic` flags, mainly because the theme adds `– Monika Blunder Beauty`, and one `long_meta_description_heuristic` for the mascara's 257-character description. These six are **not Google penalties or proven SEO issues**. The standalone report now distinguishes `observed_markup_conditions={"malformed_jsonld_script":1}` from `review_heuristics={"long_title_heuristic":5,"long_meta_description_heuristic":1}`. It reports `admin_parity_checked=5`, zero title/description mismatches, five valid Product+Offer blocks, and zero fetch errors. This is **1 observed malformed block among five pages**, not a measured 20% store-wide issue rate.
+
+**Falsification and next gate:** Re-run the same five-page manifest after a preview-only structured-data fix to verify the malformed-script flag disappears without affecting canonical, title, meta description or Product+Offer coverage. Separately inspect Google Search Console's URL Inspection / Product snippets reports to determine actual Google-recognized markup and indexing. No new merchant permissions, content changes, active-theme edits, SEO rankings, revenue or conversion outcomes are claimed.
+
 ## Merchant-observed rendered catalog (November 5, 2026)
 
 The merchant supplied the exact on-screen result from the installed embedded read-only app following the authenticated browser launch:

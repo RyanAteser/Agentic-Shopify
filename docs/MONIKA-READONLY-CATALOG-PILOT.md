@@ -1,6 +1,20 @@
 # Monika Blunder Beauty: read-only catalog integration
 
-Status (November 5, 2026): **Hosted read-only backend healthy; Shopify Partner pilot v2 released and active; an authenticated catalog HTTP 200 was observed. Rendered product findings and webhook delivery remain unverified.**
+Status (November 5, 2026): **Hosted read-only backend healthy; Shopify Partner pilot v2 active; merchant confirmed rendered authenticated catalog: 28 products sampled, 28 eligible URLs, 0 heuristic review observations. Webhook delivery and Google indexing remain unverified.**
+
+## Merchant-observed rendered catalog (November 5, 2026)
+
+The merchant supplied the exact on-screen result from the installed embedded read-only app following the authenticated browser launch:
+
+- **Authenticated Shopify merchant:** `monikablunderbeauty-com.myshopify.com`.
+- **Sampled products:** 28.
+- **Eligible product URLs:** 28 of 28.
+- **Review observations:** 0.
+- **Display conclusion:** "No issues detected among eligible sampled products. This is not proof of Google indexing, full-store SEO quality or growth."
+
+**Evidence level:** Merchant-observed rendered UI text, consistent with the earlier Railway `GET /app/catalog 200` after hosted OAuth. This closes the specific *rendered non-error catalog page* verification gate. It is not a replayable independent audit of Shopify GraphQL response bodies and is not evidence of Google indexing, search rankings, organic traffic, conversion, sales uplift, or absence of SEO problems outside the bounded sample. A zero-observation result indicates that the current heuristic checks did not flag the 28 eligible sample URLs; it does not establish SEO health. No merchant data was changed.
+
+**Remaining release gates:** validate at least one signed webhook delivery and uninstall behavior with no mutation; reconcile reported 28 products against a frozen read-only Admin API sample in a reproducible, privacy-safe test; add lightweight outcome telemetry and evaluate whether the merchant finds the audit useful. Keep PR draft and broad content-generation / billing / n8n capabilities disabled.
 
 ## Shopify Partner app release and OAuth observation (November 5, 2026)
 

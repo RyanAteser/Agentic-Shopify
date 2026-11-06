@@ -163,12 +163,12 @@ class PublicSeoAuditTests(unittest.TestCase):
 
     def test_pinned_catalog_reads_only_explicit_product_pages_not_collection(self):
         expected = [{"url": PRODUCT, "seoTitle": "Blunder Cover",
-                     "seoDescription": "A clean foundation with botanicals."}]
+                     "seoDescription": "A clean botanical foundation with buildable skin-like coverage and comfortable wear."}]
         opener = FakeOpener({
             HOST + "/robots.txt": FakeResponse("User-agent: *\\nAllow: /".replace("\\n", "\n"), "text/plain"),
             PRODUCT: FakeResponse(
                 page("Blunder Cover – Monika Blunder Beauty",
-                     "A clean foundation with botanicals."), "text/html")
+                     "A clean botanical foundation with buildable skin-like coverage and comfortable wear."), "text/html")
         })
         with patch.object(audit.time, "sleep", return_value=None):
             result = audit.run(HOST, 5, 0.5, opener=opener, expected_products=expected)

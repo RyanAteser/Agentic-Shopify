@@ -8,6 +8,11 @@ import {SwarmPolicyError} from "./swarm-policy";
 const GEMINI_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/";
 const PERMITTED_MODELS=new Set(["gemini-3.8-flash","gemini-2.5-flash-lite"]);
 
+/** Safe machine-readable reason; never record provider bodies, keys or prompts. */
+export class SwarmProviderError extends SwarmPolicyError {
+  constructor(public readonly diagnosticCode:string,reason:string){super(reason,502);}
+}
+
 type GeminiResponse={
   candidates?:{finishReason?:string;content?:{parts?:{text?:string}[]}}[];
   usageMetadata?:{promptTokenCount?:number;candidatesTokenCount?:number;thoughtsTokenCount?:number};
@@ -61,6 +66,8 @@ export function geminiBoundedProvider(
         generationConfig:{
           responseMimeType:"application/json",
           maxOutputTokens:request.maxOutputTokens,
+          // Reasoning tokens share the output ceiling on Gemini 3.8 Flash.
+          ...(model==="gemini-3.8-flash"?{thinkingConfig:{thinkingLevel:"low"}}:{}),
           temperature:0.35
         }
       };
@@ -74,23 +81,26 @@ export function geminiBoundedProvider(
         });
       }catch{
         // A timeout or dropped response does NOT prove the API didn't bill.
-        throw new SwarmPolicyError("Provider outcome uncertain; do not automatically retry.",502);
+        throw new SwarmProviderError("GEMINI_TRANSPORT_UNCERTAIN","Provider outcome uncertain; do not automatically retry.");
       }
-      if(!response.ok)throw new SwarmPolicyError(
-        "Provider call failed or may have been charged; do not automatically retry.",502);
+      if(!response.ok)throw new SwarmProviderError(
+        "GEMINI_HTTP_"+(response.status>=400&&response.status<=599?response.status:"OTHER"),
+        "Provider HTTP rejection; do not automatically retry.");
       const parsed=await readBoundedJson(response) as GeminiResponse;
       const candidate=parsed.candidates?.[0];
-      if(candidate?.finishReason!=="STOP")throw new SwarmPolicyError(
-        "Provider did not complete a usable output.",502);
+      if(candidate?.finishReason!=="STOP")throw new SwarmProviderError(
+        candidate?.finishReason==="MAX_TOKENS"?"GEMINI_FINISH_MAX_TOKENS":
+          candidate?.finishReason==="SAFETY"?"GEMINI_FINISH_SAFETY":"GEMINI_FINISH_OTHER",
+        "Provider did not complete a usable output.");
       const raw=candidate.content?.parts?.map(x=>x.text??"").join("")??"";
-      if(!raw||raw.length>6000)throw new SwarmPolicyError(
-        "Provider produced empty or oversized output.",502);
+      if(!raw||raw.length>6000)throw new SwarmProviderError(
+        "GEMINI_EMPTY_OR_OVERSIZED_OUTPUT","Provider produced empty or oversized output.");
       let data:Record<string,unknown>;
       try{
         const obj:unknown=JSON.parse(raw);
         if(!obj||typeof obj!=="object"||Array.isArray(obj))throw new Error();
         data=obj as Record<string,unknown>;
-      }catch{throw new SwarmPolicyError("Provider output was not valid structured JSON.",502);}
+      }catch{throw new SwarmProviderError("GEMINI_INVALID_JSON","Provider output was not valid structured JSON.");}
       const result=parseWorkerText(data.text,data.evidenceUrls,data.falsifier,data.verdict,request.phase);
       const count=parsed.usageMetadata??{};
       const usage:BoundedModelAnswer={

@@ -8,7 +8,7 @@ import {reserveBoundedSwarmCase,executeBoundedSwarmCase,closeExpiredSwarmRun}
   from "../app/lib/swarm-executor.server";
 import {planSixCallResearch,buildWorkerPrompt,PILOT_MAX_MODEL_CALLS,
   type BoundedModelProvider,type SwarmPhase} from "../app/lib/swarm-execution-policy";
-import {geminiBoundedProvider} from "../app/lib/swarm-gemini.server";
+import {geminiBoundedProvider,SwarmProviderError} from "../app/lib/swarm-gemini.server";
 
 const testEnv=(shop:string)=>({
   SWARM_WORKER_ENABLED:"true",SWARM_EXECUTION_ENABLED:"true",
@@ -151,4 +151,22 @@ test("real Gemini transport requires explicit opt-in and a pinned model",()=>{
   assert.throws(()=>geminiBoundedProvider({SWARM_GEMINI_MODEL:"custom-dangerous-model",
     SWARM_WORKER_ENABLED:"true",SWARM_ENABLE_PAID_MODEL_CALLS:"true",GEMINI_API_KEY:"x".repeat(32)}),
     /explicit allowed/);
+});
+
+test("sanitized provider failure code is retained without HTTP response bodies",async()=>{
+  const {shop,caseId}=await seeded();
+  const provider:BoundedModelProvider={providerName:"fixture-not-live",modelName:"test-only",
+    async generate(){
+      throw new SwarmProviderError("GEMINI_FINISH_MAX_TOKENS",
+        "Provider did not complete a usable output.");
+    }};
+  try{
+    const result=await executeBoundedSwarmCase({shop,caseId,provider,env:testEnv(shop)});
+    assert.equal(result.status,"blocked_uncertain");
+    assert.equal(result.callsAttempted,1);
+    assert.equal(result.callsCommitted,0);
+    const execution=await db.swarmExecution.findUniqueOrThrow({where:{caseId}});
+    assert.equal(execution.errorCode,"GEMINI_FINISH_MAX_TOKENS");
+    assert.equal((await db.swarmUsageMonth.findFirstOrThrow({where:{shop}})).consumed,1);
+  }finally{await eraseMerchantData(shop)}
 });

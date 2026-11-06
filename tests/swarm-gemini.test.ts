@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {geminiBoundedProvider} from "../app/lib/swarm-gemini.server";
+import {geminiBoundedProvider,SwarmProviderError} from "../app/lib/swarm-gemini.server";
 import {buildWorkerPrompt} from "../app/lib/swarm-execution-policy";
 
 const env={
@@ -23,6 +23,7 @@ test("Gemini transport is fixed endpoint, one POST, structured output, metered u
     const sent=JSON.parse(String(init?.body));
     assert.equal(sent.generationConfig.responseMimeType,"application/json");
     assert.equal(sent.generationConfig.maxOutputTokens,650);
+    assert.equal(sent.generationConfig.thinkingConfig.thinkingLevel,"low");
     return new Response(JSON.stringify({
       candidates:[{finishReason:"STOP",content:{parts:[{text:JSON.stringify({
         text:"A controlled research test is required before any commercial claims.",
@@ -60,4 +61,25 @@ test("network failures and missing usage are not silently retried or treated as 
 test("oversized provider body is rejected without saving model text",async()=>{
   const huge=(async()=>new Response("x".repeat(70000),{status:200})) as typeof fetch;
   await assert.rejects(geminiBoundedProvider(env,huge).generate(prompt),/size bound/);
+});
+
+test("HTTP rejection and thinking-token truncation produce sanitized categories",async()=>{
+  const httpRejected=(async()=>new Response(
+    "{\"error\":{\"message\":\"sensitive provider details must not be persisted\"}}",
+    {status:403})) as typeof fetch;
+  await assert.rejects(
+    geminiBoundedProvider(env,httpRejected).generate(prompt),
+    (error:unknown)=>error instanceof SwarmProviderError &&
+      error.diagnosticCode==="GEMINI_HTTP_403" &&
+      !error.message.includes("sensitive provider")
+  );
+  const truncated=(async()=>new Response(JSON.stringify({
+    candidates:[{finishReason:"MAX_TOKENS",content:{parts:[]}}],
+    usageMetadata:{promptTokenCount:580,candidatesTokenCount:0,thoughtsTokenCount:650}
+  }),{status:200})) as typeof fetch;
+  await assert.rejects(
+    geminiBoundedProvider(env,truncated).generate(prompt),
+    (error:unknown)=>error instanceof SwarmProviderError &&
+      error.diagnosticCode==="GEMINI_FINISH_MAX_TOKENS"
+  );
 });

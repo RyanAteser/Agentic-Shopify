@@ -1,5 +1,6 @@
 import {randomUUID,createHash} from "node:crypto";
 import db from "../db.server";
+import {SwarmProviderError} from "./swarm-gemini.server";
 import {readOnlyPilotEnabled} from "./pilot-readonly";
 import {recordSwarmWorkerMessage} from "./swarm-roster.server";
 import {SWARM_PLANS,SwarmPolicyError} from "./swarm-policy";
@@ -150,7 +151,7 @@ async function commitStep(params:{
 
 async function settleRun(params:{
   shop:string;runId:string;leaseToken:string;month:string;
-  failed:boolean;requireExpiredAt?:Date;
+  failed:boolean;requireExpiredAt?:Date;diagnosticCode?:string;
 }){
   return db.$transaction(async tx=>{
     await lockShop(tx,params.shop);
@@ -180,7 +181,7 @@ async function settleRun(params:{
       shop:params.shop,executionId:run.id,status:"attempted"
     },data:{status:"uncertain"}});
     const saved=await tx.swarmExecution.update({where:{id:run.id},data:{
-      status,errorCode:success?null:"OUTCOME_UNCERTAIN_RECONCILE_MANUALLY",
+      status,errorCode:success?null:(params.diagnosticCode??"OUTCOME_UNCERTAIN_RECONCILE_MANUALLY"),
       leaseToken:null,leaseExpiresAt:null
     }});
     return {id:saved.id,status:saved.status,callsAttempted:saved.callsStarted,
@@ -203,6 +204,7 @@ export async function executeBoundedSwarmCase(input:{
   const planned=planSixCallResearch(reserved.agents);
   const participant=new Map(reserved.agents.map(a=>[a.id,a]));
   let failed=false;
+  let diagnosticCode:string|undefined;
   for(const stage of planned){
     try{
       const research=await db.swarmCase.findFirst({where:{
@@ -236,14 +238,16 @@ export async function executeBoundedSwarmCase(input:{
         leaseToken:reserved.leaseToken,invocationId:claimed.invocationId,
         inputTokens:modelOutput.inputTokens,outputTokens:modelOutput.outputTokens,
         outputText:modelOutput.text});
-    }catch{
-      // Do not leak merchant prompts or provider error bodies. A timeout,
-      // invalid output or persist failure after claim may incur real cost.
+    }catch(error){
+      // Never persist raw provider data, prompts, messages or secrets.
+      // Distinguish HTTP, truncation and transport failures for later tests.
+      diagnosticCode=error instanceof SwarmProviderError ? error.diagnosticCode :
+        "WORKER_OUTPUT_OR_PERSISTENCE_FAILURE";
       failed=true;break;
     }
   }
   return settleRun({shop:input.shop,runId:reserved.id,leaseToken:reserved.leaseToken,
-    month:reserved.month,failed});
+    month:reserved.month,failed,diagnosticCode});
 }
 
 /** Explicit reconciliation only: never resumes uncertain provider calls. */

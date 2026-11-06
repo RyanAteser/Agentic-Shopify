@@ -25,7 +25,8 @@ database.sqlite
 .env.*
 !.env.example
 
-package-lock.json
+# Keep package-lock.json in Railway CLI uploads: Docker uses npm ci.
+# It is intentionally tracked for reproducible production builds.
 yarn.lock
 pnpm-lock.yaml
 

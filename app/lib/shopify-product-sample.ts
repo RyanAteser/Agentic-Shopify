@@ -32,7 +32,7 @@ export function parseShopifyProductSample(payload: unknown): SeoProduct[] {
       throw new Error("Shopify product record is malformed");
     }
     const p = node as Record<string, unknown>;
-    if (typeof p.id !== "string" || !p.id || ids.has(p.id) ||
+    if (typeof p.id !== "string" || !/^gid:\/\/shopify\/Product\/[1-9][0-9]*$/.test(p.id) || ids.has(p.id) ||
         typeof p.title !== "string" || typeof p.description !== "string" ||
         (p.onlineStoreUrl !== null && typeof p.onlineStoreUrl !== "string") ||
         (p.seo !== null && (!p.seo || typeof p.seo !== "object" || Array.isArray(p.seo)))) {
@@ -107,6 +107,12 @@ query ShopifySeoCatalog($after: String) {
     const response = await admin.graphql(query, {variables: {after}});
     const payload: unknown = await response.json();
     const batch = parseShopifyProductSample(payload);
+    // A prior page promised more products. An empty follow-up page cannot
+    // substantiate completion of that catalog scan; abstain rather than
+    // reporting the earlier subset as the whole eligible catalog.
+    if (page > 0 && batch.length === 0) {
+      throw new Error("Shopify product pagination returned an empty continuation page");
+    }
     const connection = (payload as {data: {products: Record<string, unknown>}}).data.products;
     const info = connection.pageInfo;
     if (!info || typeof info !== "object" || Array.isArray(info)) {
@@ -117,9 +123,14 @@ query ShopifySeoCatalog($after: String) {
         (pageInfo.endCursor !== null && typeof pageInfo.endCursor !== "string")) {
       throw new Error("Shopify product pagination information is malformed");
     }
-    if (pageInfo.hasNextPage &&
-        (typeof pageInfo.endCursor !== "string" || !pageInfo.endCursor ||
-         !batch.length || cursors.has(pageInfo.endCursor))) {
+    // A nonempty connection must have a usable end cursor even on its
+    // final page. An empty completed connection must not claim an end cursor.
+    // Otherwise a truncated/mis-mapped pageInfo can appear complete.
+    if ((batch.length > 0 &&
+         (typeof pageInfo.endCursor !== "string" || !pageInfo.endCursor)) ||
+        (batch.length === 0 && pageInfo.endCursor !== null) ||
+        (pageInfo.hasNextPage &&
+         (!batch.length || cursors.has(pageInfo.endCursor as string)))) {
       throw new Error("Shopify product pagination cursor is invalid");
     }
     for (const product of batch) {

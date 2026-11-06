@@ -5,6 +5,8 @@ import { authenticate } from "../shopify.server";
 import { auditProductSeo } from "../lib/seo";
 import { readShopifySeoCatalog, summarizeShopifySeoSample } from "../lib/shopify-product-sample";
 import { readOnlyPilotEnabled } from "../lib/pilot-readonly";
+import { primaryDomainForShop } from "../lib/ranking-ingest.server";
+import { scopePilotCatalog, catalogAuditConclusion, catalogFindingDisplay, prioritizeCatalogFindings } from "../lib/pilot-catalog-scope";
 
 /** Catalog-only proof of authenticated Shopify access; no persistence or writes. */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -13,16 +15,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   const { admin, session } = await authenticate.admin(request);
   try {
+    const primaryHost = await primaryDomainForShop(admin, session.shop);
     const catalog = await readShopifySeoCatalog(admin);
     const coverage = summarizeShopifySeoSample(catalog.products, catalog.hasMore);
-    const findings = auditProductSeo(coverage.eligibleProducts);
+    const scoped = scopePilotCatalog(coverage.eligibleProducts, primaryHost);
+    const findings = auditProductSeo(scoped.eligible);
+    const findingDisplay = catalogFindingDisplay(findings.length);
     return {
       shop: session.shop,
       unavailable: false,
       sampled: coverage.sampledProducts,
-      eligible: coverage.eligibleProducts.length,
-      warning: coverage.warning,
-      findings: findings.slice(0, 25).map((finding) => ({
+      eligible: scoped.eligible.length,
+      warning: [coverage.warning,
+        scoped.excludedForeign ? `${scoped.excludedForeign} product URL(s) were on a different host from the Shopify-attested primary storefront and were excluded.` : "",
+        scoped.excludedNoncanonical ? `${scoped.excludedNoncanonical} product URL(s) did not match a canonical primary-storefront product page and were excluded.` : "",
+        scoped.eligible.length < coverage.eligibleProducts.length ? "The eligible primary-domain sample is partial; excluded pages were not audited." : ""
+      ].filter(Boolean).join(" "),
+      findings: prioritizeCatalogFindings(findings).slice(0, findingDisplay.displayed).map((finding) => ({
         id: finding.id,
         productTitle: finding.productTitle,
         kind: finding.kind,
@@ -30,6 +39,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         severity: finding.severity,
       })),
       findingCount: findings.length,
+      findingNotice: findingDisplay.notice,
+      conclusion: catalogAuditConclusion({sampled:coverage.sampledProducts,
+        eligible:scoped.eligible.length,findings:findings.length,hasMore:catalog.hasMore}),
     };
   } catch (error) {
     // Do not leak Shopify tokens, GraphQL response bodies, or data from
@@ -37,7 +49,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.warn("Read-only catalog pilot unavailable", error instanceof Error ? error.name : "unknown");
     return { shop: session.shop, unavailable: true, sampled: 0, eligible: 0,
       warning: "Shopify catalog could not be verified. No audit conclusions are available.",
-      findings: [], findingCount: 0 };
+      findings: [], findingCount: 0, findingNotice: "", conclusion: "No SEO audit was performed." };
   }
 };
 
@@ -58,8 +70,8 @@ export default function CatalogPilot() {
             <p><strong>{finding.productTitle}</strong> · {finding.severity} · {finding.kind}</p>
             <p>{finding.message}</p>
           </div>)}
-          {!data.findings.length && <p>No issues detected in the eligible sample.
-            This does not establish that the full catalog is free of issues.</p>}
+          {data.findingNotice ? <p role="status">{data.findingNotice}</p> : null}
+          <p role={data.eligible===0?"status":undefined}>{data.conclusion}</p>
         </>}
     </s-section>
   </s-page>;

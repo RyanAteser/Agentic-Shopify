@@ -12,15 +12,15 @@ test("manager audits only published Online Store products, not other-channel inv
   const admin={graphql:async(query:string)=>{
     assert.match(query,/status:active published_status:published/);
     return {json:async()=>({data:{products:{nodes:[
-      {id:"public",title:"Public boots",description:"",onlineStoreUrl:"https://shop.example/products/boots",seo:null},
-      {id:"pos",title:"POS-only boots",description:"",onlineStoreUrl:null,seo:null},
-      {id:"bad",title:"Bad URL",description:"",onlineStoreUrl:"javascript:alert(1)",seo:null}
+      {id:"gid://shopify/Product/101",title:"Public boots",description:"",onlineStoreUrl:"https://shop.example/products/boots",seo:null},
+      {id:"gid://shopify/Product/102",title:"POS-only boots",description:"",onlineStoreUrl:null,seo:null},
+      {id:"gid://shopify/Product/103",title:"Bad URL",description:"",onlineStoreUrl:"javascript:alert(1)",seo:null}
     ],pageInfo:{hasNextPage:false,endCursor:"cursor-3"}}}})};
   }};
   const sample=await readMerchantProductSample(admin);
   assert.match(sample.warning,/Password-protected Shopify stores/);
   assert.match(sample.warning,/non-HTTPS/);
-  assert.deepEqual(sample.products.map(p=>p.id),["public"]);
+  assert.deepEqual(sample.products.map(p=>p.id),["gid://shopify/Product/101"]);
 });
 
 test("manager ranks factual SEO findings, editorial drafts and comparable rank drops",()=>{

@@ -1,4 +1,5 @@
 import {mkdir,readFile,writeFile} from "node:fs/promises";
+import {createHmac} from "node:crypto";
 import {join} from "node:path";
 import {
   makeReviewerPacket,reviewerSubmissionTemplate,
@@ -20,13 +21,23 @@ async function main(){
   if(!["--prepare-calibration-reviewers","--calibration-review-status"].includes(mode)){
     throw new Error("Usage: --prepare-calibration-reviewers | --calibration-review-status");
   }
-  const capture=await loadCapture();
+  const original=await loadCapture();
+  // The first Artemis calibration file predates keyed source digests.
+  // Preserve immutable original, but expose ONLY this salt-keyed alias to reviewers.
+  const salt=(await readFile(join(root,"cohort-merchant-pseudonym-salt.local"),"utf8")).trim();
+  if(!/^[A-Za-z0-9_-]{20,128}$/.test(salt))throw new Error("Private pseudonym salt missing.");
+  const privateReviewDigest=createHmac("sha256",salt)
+    .update("review-packet-v2\0"+original.sourceDigest).digest("hex");
+  const capture:PrivateMerchantCapture={
+    ...original,sourceDigest:privateReviewDigest,
+    cases:original.cases.map(c=>({...c,evidenceDigest:privateReviewDigest}))
+  };
   const packet=makeReviewerPacket(capture);
   const dir=join(root,"ReviewerPackets");
   await mkdir(dir,{recursive:true});
   const paths=["A","B"].map(letter=>({
-    packet:join(dir,"reviewer-"+letter+"-blind-packet.json"),
-    submission:join(dir,"reviewer-"+letter+"-submission.json")
+    packet:join(dir,"reviewer-"+letter+"-v2-blind-packet.json"),
+    submission:join(dir,"reviewer-"+letter+"-v2-submission.json")
   }));
   if(mode==="--prepare-calibration-reviewers"){
     const empty=reviewerSubmissionTemplate(capture);

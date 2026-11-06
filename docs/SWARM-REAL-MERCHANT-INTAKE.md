@@ -26,8 +26,8 @@ Local owner-only directory:
 - `artemis-calibration-first-observation.json`: private authenticated-source capture, shop domain, source digest, date, five bounded evidence items, and consent note.
 - `artemis-calibration-blind-review-packet.json`: pseudonymized collection of the five questions, identical bounded source counts and source digest. Omits shop domain, credentials, product titles, customer data, and answer keys.
 - `cohort-merchant-pseudonym-salt.local`: private per-owner random salt used to pseudonymize merchant identities across multiple captures. Never commit, email or place in a reviewer packet.
-- `ReviewerPackets\reviewer-A-blind-packet.json` and `reviewer-B-blind-packet.json`: separate copies for independent adjudicators.
-- `ReviewerPackets\reviewer-A-submission.json` and `reviewer-B-submission.json`: **blank** submissions; reviewers must independently fill their own ID, attestation, each YES/NO/INSUFFICIENT label, a decision on whether skeptic escalation was needed, and source-supported reasoning. Do not fill these with LLM-generated labels.
+- `ReviewerPackets\reviewer-A-v2-blind-packet.json` and `reviewer-B-v2-blind-packet.json`: separate salted-source-digest copies for independent adjudicators. Earlier legacy packets without `-v2` remain private and **must not be shared**.
+- `ReviewerPackets\reviewer-A-v2-submission.json` and `reviewer-B-v2-submission.json`: **blank** submissions; reviewers must independently fill their own ID, attestation, each YES/NO/INSUFFICIENT label, a decision on whether skeptic escalation was needed, and source-supported reasoning. Do not fill these with LLM-generated labels.
 
 Commands (local terminal, **read-only / offline review**):
 
@@ -94,3 +94,7 @@ Previously observed `artemisti.myshopify.com` and `monikablunderbeauty-com.mysho
 | Subscriber rollout authorized | No |
 
 **Next highest-information step:** obtain independently verifiable opt-in from additional merchants, collect snapshots with the same read-only scope, recruit blinded human reviewers, then evaluate a preregistered subset only within a newly approved provider budget. Do not count these Artemis calibration observations as fresh holdout validation, and do not infer merchant SEO uplift from administrative metadata.
+
+## Reviewer privacy update
+
+The first immutable Artemis calibration capture predates the use of a keyed source digest. That original SHA-256 source reference is retained **only in private owner storage** for audit continuity. The actual A/B reviewer packets are regenerated as **v2** files containing a secret-salted HMAC alias of the original digest; do not distribute the old unkeyed review packets. All future consented merchant captures compute a keyed HMAC of the authenticated source snapshot directly, using the private local salt. The private source snapshot and original file are never overwritten during this migration; reviewer submissions must reference their v2 packet digests. The HMAC protects pseudonyms against offline dictionary recovery from known store names and observed counts, but does not establish reviewer independence or merchant consent.

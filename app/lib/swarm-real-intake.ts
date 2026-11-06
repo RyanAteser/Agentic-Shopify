@@ -1,4 +1,4 @@
-import {createHash,randomUUID} from "node:crypto";
+import {createHash,createHmac,randomUUID} from "node:crypto";
 import {requireVerifiedShopifySnapshot,type VerifiedShopifySnapshot} from "./swarm-evidence.server";
 import type {BenchmarkLabel} from "./swarm-benchmark-policy";
 
@@ -73,7 +73,10 @@ export function makeObservedCapture(input:{
   if(!/^[a-f0-9-]{36}$/.test(captureId))throw new Error("Invalid capture identifier.");
   const merchantGroup="m-"+sha(input.groupingSalt+"\0"+snapshot.shop).slice(0,20);
   const {shop: _privateShop,...safeSnapshot}=snapshot;
-  const digest=sha(JSON.stringify(snapshot));
+  // Keyed source digest: a publicly known shop name and counts must not
+  // allow reviewers to dictionary-recover a private merchant identity.
+  const digest=createHmac("sha256",input.groupingSalt)
+    .update(JSON.stringify(snapshot)).digest("hex");
   const cases:SourceCase[]=templates.map((t,index)=>({
     id:captureId+"-"+String(index+1).padStart(2,"0"),
     caseFamily:t.family,question:t.question,metric:t.metric,

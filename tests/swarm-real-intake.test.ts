@@ -1,6 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
+import {createHash} from "node:crypto";
 import {SNAPSHOT_SOURCE,type VerifiedShopifySnapshot} from "../app/lib/swarm-evidence.server";
 import {
   makeObservedCapture,makeReviewerPacket,realCohortReadiness,
@@ -31,6 +32,8 @@ test("fresh authenticated source produces five actual observed questions as ONE 
   assert.equal(c.modelRequestsInitiated,0);
   assert.equal(c.shopifyWritesPerformed,0);
   assert.ok(c.sourceDigest.length===64);
+  const plain=createHash("sha256").update(JSON.stringify(snapshot())).digest("hex");
+  assert.notEqual(c.sourceDigest,plain,"Reviewer digest must not expose a guessable plain source hash.");
   assert.equal(packet.cases.length,5);
   assert.equal(packet.cohortClass,"calibration_seen_development_store");
   assert.equal(packet.cases[0].observedFields.allProductsSampled,18);

@@ -65,6 +65,23 @@ export function geminiBoundedProvider(
         contents:[{role:"user",parts:[{text:request.prompt}]}],
         generationConfig:{
           responseMimeType:"application/json",
+          // JSON mode alone is a hint. A strict output schema reduces failed
+          // final-stage verdicts and avoids billing for malformed JSON.
+          responseJsonSchema:{
+            type:"object",
+            properties:{
+              text:{type:"string",description:"A bounded observation; begin with the required ANSWER line for benchmark tasks."},
+              evidenceUrls:{type:"array",items:{type:"string"},maxItems:6},
+              falsifier:{type:"string",description:"How an observation could disprove the claim."},
+              ...(request.phase==="skeptic_verdict"?{
+                verdict:{type:"string",enum:["supported","rejected","abstain"]}
+              }:{})
+            },
+            required:request.phase==="skeptic_verdict"?
+              ["text","evidenceUrls","falsifier","verdict"]:
+              ["text","evidenceUrls","falsifier"],
+            additionalProperties:false
+          },
           maxOutputTokens:request.maxOutputTokens,
           // Reasoning tokens share the output ceiling on Gemini 3.8 Flash.
           ...(model==="gemini-3.8-flash"?{thinkingConfig:{thinkingLevel:"low"}}:{}),
@@ -101,7 +118,12 @@ export function geminiBoundedProvider(
         if(!obj||typeof obj!=="object"||Array.isArray(obj))throw new Error();
         data=obj as Record<string,unknown>;
       }catch{throw new SwarmProviderError("GEMINI_INVALID_JSON","Provider output was not valid structured JSON.");}
-      const result=parseWorkerText(data.text,data.evidenceUrls,data.falsifier,data.verdict,request.phase);
+      let result;
+      try{
+        result=parseWorkerText(data.text,data.evidenceUrls,data.falsifier,data.verdict,request.phase);
+      }catch{
+        throw new SwarmProviderError("GEMINI_SCHEMA_POLICY_MISMATCH","Provider structured output failed policy checks.");
+      }
       const count=parsed.usageMetadata??{};
       const usage:BoundedModelAnswer={
         ...result,inputTokens:count.promptTokenCount??-1,
@@ -109,7 +131,9 @@ export function geminiBoundedProvider(
         outputTokens:(count.candidatesTokenCount??-1)+(count.thoughtsTokenCount??0),
         model
       };
-      validateModelUsage(usage,model);
+      try{validateModelUsage(usage,model);}catch{
+        throw new SwarmProviderError("GEMINI_USAGE_MISSING_OR_INVALID","Provider usage metadata was unavailable.");
+      }
       if(usage.text.length>PILOT_MAX_OUTPUT_CHARS)throw new SwarmPolicyError(
         "Worker output over hard limit.",502);
       return usage;

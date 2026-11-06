@@ -255,7 +255,8 @@ export async function executeBoundedSwarmCase(input:{
       // Never persist raw provider data, prompts, messages or secrets.
       // Distinguish HTTP, truncation and transport failures for later tests.
       diagnosticCode=error instanceof SwarmProviderError ? error.diagnosticCode :
-        "WORKER_OUTPUT_OR_PERSISTENCE_FAILURE";
+        error instanceof SwarmPolicyError ? "WORKER_POLICY_REJECTED_STAGE_"+stage.ordinal :
+        "WORKER_PERSISTENCE_UNCERTAIN_STAGE_"+stage.ordinal;
       failed=true;break;
     }
   }

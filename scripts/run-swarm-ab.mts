@@ -10,9 +10,12 @@ import {BENCHMARK_CASES,benchmarkBrief,scoreBenchmarkCase} from "../app/lib/swar
 import {geminiBoundedProvider} from "../app/lib/swarm-gemini.server";
 
 async function main(){
-  if(process.argv.slice(2).join(" ")!=="--run-frozen-two-case-evaluation"){
-    throw new Error("Usage: node --import tsx scripts/run-swarm-ab.mts --run-frozen-two-case-evaluation");
+  const mode=process.argv.slice(2).join(" ");
+  if(!["--run-frozen-two-case-evaluation","--run-second-case-only"].includes(mode)){
+    throw new Error("Usage: --run-frozen-two-case-evaluation or --run-second-case-only");
   }
+  const selectedCases=mode==="--run-second-case-only"?
+    BENCHMARK_CASES.slice(1):BENCHMARK_CASES;
   const env=process.env;
   const shop=env.SWARM_WORKER_ALLOWED_SHOP;
   if(!shop||env.SWARM_BENCHMARK_ENABLED!=="true"||
@@ -47,14 +50,19 @@ async function main(){
   const usage=await db.swarmUsageMonth.findUnique({where:{shop_month:{
     shop,month:snapshot.collectedAt.slice(0,7)
   }}});
-  // This benchmark is 2*(1+6)=14 requests and honors the preexisting cap.
-  if((usage?.reserved??0)+(usage?.consumed??0)+14>25)
+  // Each paired comparison uses 1 baseline + 6 swarm requests.
+  if((usage?.reserved??0)+(usage?.consumed??0)+selectedCases.length*7>25)
     throw new Error("The existing 25-unit monthly model-request cap cannot fit the full A/B run.");
 
+  for(const spec of selectedCases){
+    if(await db.swarmCase.count({where:{shop,title:spec.question}})){
+      throw new Error("This preregistered benchmark question already has an attempt; do not duplicate.");
+    }
+  }
   const referenceDigest=createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
   const results:unknown[]=[];
   const started=Date.now();
-  for(const spec of BENCHMARK_CASES){
+  for(const spec of selectedCases){
     const brief=benchmarkBrief(spec);
     // Both arms receive the SAME frozen verified fact snapshot and task brief.
     const single=await queueSwarmResearch({shop,sessionId:session.id,role:"seo",
@@ -105,7 +113,7 @@ async function main(){
   }
   const report={kind:"owner_only_exploratory_grounded_ab",shop,model:provider.modelName,
     snapshotDigest:referenceDigest,snapshotObservedAt:snapshot.collectedAt,
-    benchmarkCaseCount:BENCHMARK_CASES.length,elapsedMs:Date.now()-started,
+    benchmarkCaseCount:selectedCases.length,elapsedMs:Date.now()-started,
     results,conclusion:"Too few cases to infer swarm superiority, SEO gains or production ROI."};
   const local=env.LOCALAPPDATA;
   if(local){

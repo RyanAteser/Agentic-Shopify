@@ -32,6 +32,12 @@ TIMEOUT_SECONDS = 18
 PRODUCT_PATH_RE = re.compile(r"^/products/[a-z0-9-]+/?$")
 TITLE_RANGE = (30, 65)
 DESCRIPTION_RANGE = (70, 160)
+# Soft triage cues, not Google ranking thresholds or crawl failures.
+HEURISTIC_FLAGS = frozenset({
+    "short_title_heuristic", "long_title_heuristic",
+    "short_meta_description_heuristic", "long_meta_description_heuristic",
+    "multiple_h1_heuristic", "missing_product_jsonld_heuristic",
+})
 
 
 class SingleHostRedirect(HTTPRedirectHandler):
@@ -200,6 +206,10 @@ def inspect_metadata(html: str, page_url: str,
         product_offer |= offer
     if not product_schema:
         flags.add("missing_product_jsonld_heuristic")
+    # A malformed script can coexist with valid Product structured data.
+    # Surface this objective syntax failure without overstating SEO effects.
+    if malformed_jsonld:
+        flags.add("malformed_jsonld_script")
 
     return {
         "url": page_url,
@@ -345,6 +355,14 @@ def run(origin: str, limit: int, delay: float, opener=None,
             errors.append({"url": url, "error": type(exc).__name__})
     issue_counts = Counter(flag for page in pages for flag in page["flags"])
     duplicate_title_count = len(pages) - len(set(p["title"].casefold() for p in pages))
+    observed_conditions = {k: v for k, v in sorted(issue_counts.items())
+                           if k not in HEURISTIC_FLAGS}
+    review_heuristics = {k: v for k, v in sorted(issue_counts.items())
+                         if k in HEURISTIC_FLAGS}
+    parity_mismatches = {
+        "title": issue_counts.get("rendered_title_differs_from_admin", 0),
+        "description": issue_counts.get("rendered_description_differs_from_admin", 0),
+    }
     return {
         "audit": "public_html_metadata_with_admin_parity" if expected is not None else "public_html_metadata_only",
         "origin": origin,
@@ -358,11 +376,17 @@ def run(origin: str, limit: int, delay: float, opener=None,
         "products_with_offers_jsonld": sum(int(p["product_offer_jsonld"]) for p in pages),
         "duplicate_title_count_in_sample": duplicate_title_count,
         "flags": dict(sorted(issue_counts.items())),
+        "observed_markup_conditions": observed_conditions,
+        "review_heuristics": review_heuristics,
+        "admin_parity_checked": len(pages) if expected is not None else 0,
+        "admin_parity_mismatches": parity_mismatches if expected is not None else None,
         "errors": errors,
         "pages": pages,
         "caveats": [
             "Only publicly reachable product HTML; NOT an authenticated Shopify merchant audit.",
             "Metadata-length flags are screening heuristics, not Google's ranking rules.",
+            "Objective markup conditions require review; a malformed JSON-LD block does not prove Google ignores a separate valid Product block.",
+            "Page title length includes any theme-appended brand suffix.",
             "Passing technical indexing signals is NOT evidence of inclusion in Google's index.",
             "Expected metadata, when supplied, must come from the same merchant's read-only Admin API.",
             "No crawl, indexation, traffic, revenue, or Search Console claims are inferred.",

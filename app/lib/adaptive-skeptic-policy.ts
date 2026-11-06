@@ -1,4 +1,5 @@
 import type {BenchmarkLabel} from "./swarm-benchmark-policy";
+import {trustedQuestionTruth} from "./swarm-verified-question";
 import type {VerifiedShopifySnapshot} from "./swarm-evidence.server";
 import type {BoundedModelAnswer} from "./swarm-execution-policy";
 
@@ -8,7 +9,8 @@ export type AdaptiveReason=
   "EXTERNAL_OUTCOME_UNVERIFIED"|"MERCHANT_ACTION_PROPOSED"|
   "NONFINAL_OR_ABSTAINING_ANSWER"|"NO_VERIFIED_FACT_REFERENCED"|
   "MODEL_CITES_UNVERIFIED_URL"|"UNSUBSTANTIATED_CAUSALITY"|
-  "COVERAGE_INCOMPLETE"|"MISSING_FALSIFIER"|"STORE_FACT_CONFLICT";
+  "COVERAGE_INCOMPLETE"|"MISSING_FALSIFIER"|"STORE_FACT_CONFLICT"|
+  "NO_MECHANICALLY_VERIFIED_ANSWER"|"ANSWER_CONFLICTS_WITH_SHOPIFY_CHECK";
 
 export type AdaptiveRoutingDecision={
   policy:typeof ADAPTIVE_POLICY_VERSION;
@@ -73,6 +75,21 @@ export function routeAdaptiveSkeptic(input:{
     return new RegExp("\\b"+value+"\\b","i").test(tail);
   });
   if(!typedMatch&&!proseMatch)reasons.push("NO_VERIFIED_FACT_REFERENCED");
+  // A matching source field alone does not prove the yes/no inference.
+  // Only exact, reviewed questions have an independent machine oracle.
+  // All arbitrary free-form questions escalate by default, not just those
+  // that fail citation formatting.
+  const trusted=trustedQuestionTruth(input.title,snapshot);
+  if(!trusted||trusted.label==="INSUFFICIENT"){
+    reasons.push("NO_MECHANICALLY_VERIFIED_ANSWER");
+  }else if(label!==trusted.label){
+    reasons.push("ANSWER_CONFLICTS_WITH_SHOPIFY_CHECK");
+  }
+  if(trusted&&answer.sourceFact&&
+    (answer.sourceFact.field!==trusted.sourceFact.field||
+     answer.sourceFact.value!==trusted.sourceFact.value)){
+    reasons.push("STORE_FACT_CONFLICT");
+  }
   // Detect a particularly dangerous false attribution independently of the
   // model's chosen ANSWER label.
   if(snapshot.publishedActiveProductsInSample>0&&

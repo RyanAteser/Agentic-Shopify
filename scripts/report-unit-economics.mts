@@ -7,7 +7,7 @@
  */
 import {readFileSync} from "node:fs";
 import {loadObservedUsage} from "../app/lib/unit-economics.server";
-import {evaluatePlan,PLAN_SCENARIOS,type ObservedUsage,type ScenarioAssumptions} from "../app/lib/unit-economics";
+import {allowableServiceSpend,evaluatePlan,PLAN_SCENARIOS,type ObservedUsage,type ScenarioAssumptions} from "../app/lib/unit-economics";
 
 function args(argv:string[]){
   if(argv.length%2!==0||argv.length<4)throw new Error(
@@ -52,6 +52,13 @@ async function main(){
     report.projections=Object.fromEntries(
       (Object.keys(PLAN_SCENARIOS) as (keyof typeof PLAN_SCENARIOS)[]).map(plan=>
         [plan,evaluatePlan(plan,usage,assumptions)])
+    );
+    report.budgetCaps70Pct=Object.fromEntries(
+      (Object.keys(PLAN_SCENARIOS) as (keyof typeof PLAN_SCENARIOS)[]).map(plan=>
+        [plan,allowableServiceSpend(plan,{
+          targetContributionMarginPct:70,processingRate:assumptions.processingRate,
+          revenueShareRate:assumptions.revenueShareRate
+        })])
     );
     report.projectionStatus="hypothetical tier sensitivity; NOT invoices or realized merchant subscriptions";
   }

@@ -43,3 +43,9 @@ The developer desktop currently lacks Docker and an n8n executable, so the repro
 5. Genuine merchant installation and approval workflow, Shopify subscription entitlement and privacy validation.
 
 The pinned engine version was the latest stable release on November 9, 2026. Changing the version requires an intentional compatibility review.
+
+## Compatibility regression found in real n8n
+
+The first actual n8n 2.46.7 smoke returned HTTP 404 after a successful CLI import and publish. This exposed a missing stable webhookId on the original inactive Blog Agent webhook node. On n8n 2.x, API/CLI-imported webhook nodes without a webhookId can register legacy prefixed routes rather than the configured short path. A stable RFC 4122 UUID is now part of the original source node and required by the safe fixture generator and regression tests.
+
+This is a previously untested compatibility fix, not evidence that any live customer webhook was broken: the workflow has never been activated for a public merchant. The next real-engine CI run must confirm HTTP 202 before this test is considered complete.

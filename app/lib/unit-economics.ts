@@ -27,6 +27,7 @@ export type TokenRate={
 export type ScenarioAssumptions={
   rates:Record<string,TokenRate>; // exact key "provider/model"
   unobservedCallReserveCents:number;
+  unmeteredBlogAllowanceCentsPerJob:number;
   externalResearchCents:number;
   infrastructureCents:number;
   supportCents:number;
@@ -94,7 +95,7 @@ export function modelCostEstimate(
 
 export type ContributionScenario={
   plan:string;grossCents:number;processingCents:number;revenueShareCents:number;
-  quotedModelCents:number;unknownCallReserveCents:number;externalResearchCents:number;
+  quotedModelCents:number;unknownCallReserveCents:number;unmeteredBlogAllowanceCents:number;externalResearchCents:number;
   infrastructureCents:number;supportCents:number;workflowLicenseCents:number;
   modeledContributionCents:number|null;modeledMarginPct:number|null;
   observedUnpricedCalls:number;observedUncertainCalls:number;
@@ -112,7 +113,10 @@ export function evaluatePlan(
     throw new Error("Invalid platform fee rates");
   for(const key of ["externalResearchCents","infrastructureCents","supportCents",
     "workflowLicenseCents"] as const) validMoney(assumptions[key],key);
+  validMoney(assumptions.unmeteredBlogAllowanceCentsPerJob,"blog generation allowance");
   const model=modelCostEstimate(usage.invocations,assumptions.rates,assumptions.unobservedCallReserveCents);
+  const unmeteredBlogAllowanceCents=usage.generationJobs*assumptions.unmeteredBlogAllowanceCentsPerJob;
+  if(!Number.isSafeInteger(unmeteredBlogAllowanceCents))throw new Error("Unreasonable blog allowance");
   const processingCents=Math.ceil(p.priceCents*assumptions.processingRate);
   const revenueShareCents=Math.ceil(p.priceCents*assumptions.revenueShareRate);
   const unknowns:string[]=[];
@@ -120,14 +124,16 @@ export function evaluatePlan(
   if(model.uncertainCalls)unknowns.push(model.uncertainCalls+" provider calls have uncertain billing outcomes");
   if(usage.generationJobs>0)unknowns.push("Blog/n8n generation token and provider billing are not metered in this ledger");
   unknowns.push("Infrastructure, external APIs, licensing, support and Shopify fees are user-supplied assumptions, not reconciled bills");
-  const completeModeledCost=model.quotedCents+model.unknownCostCents+
+  const completeModeledCost=model.quotedCents+model.unknownCostCents+unmeteredBlogAllowanceCents+
     assumptions.externalResearchCents+assumptions.infrastructureCents+
     assumptions.supportCents+assumptions.workflowLicenseCents+
     processingCents+revenueShareCents;
-  const valid=!(model.unpricedCalls||model.uncertainCalls&&assumptions.unobservedCallReserveCents===0);
+  const valid=!(model.unpricedCalls||model.uncertainCalls&&assumptions.unobservedCallReserveCents===0||
+    usage.generationJobs>0&&assumptions.unmeteredBlogAllowanceCentsPerJob===0);
   const modeledContributionCents=valid?p.priceCents-completeModeledCost:null;
   return {plan:p.name,grossCents:p.priceCents,processingCents,revenueShareCents,
     quotedModelCents:model.quotedCents,unknownCallReserveCents:model.unknownCostCents,
+    unmeteredBlogAllowanceCents,
     externalResearchCents:assumptions.externalResearchCents,
     infrastructureCents:assumptions.infrastructureCents,
     supportCents:assumptions.supportCents,

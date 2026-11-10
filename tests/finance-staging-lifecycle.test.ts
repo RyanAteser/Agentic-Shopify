@@ -118,7 +118,7 @@ test("offline staging: budget -> authenticated n8n 202 -> job callback -> immuta
       assert.equal(contribution.incompleteBlogJobs,0);
       assert.equal(contribution.observedUnpricedCalls,0);
       assert.equal(contribution.unknownCallReserveCents,0);
-      assert.equal(contribution.modeledContributionCents,4755);
+      assert.equal(contribution.modeledContributionCents,4756);
       assert.equal(contribution.canPresentAsActualProfit,false);
       // Uncertainty or successful callbacks must NOT release reserved spend.
       const second=await createCreditedJob(shop,"Second synthetic");

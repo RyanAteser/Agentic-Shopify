@@ -68,6 +68,13 @@ if [[ "$ready" != true ]]; then
   docker logs --tail 70 "$server" >&2
   exit 1
 fi
+# n8n 2.x can mark a CLI-imported workflow published before the HTTP
+# process has applied the webhook registration. Trigger the isolated
+# publication lifecycle AFTER the process is healthy, then allow its
+# built-in publication reconciler to apply the new version.
+docker exec "$server" n8n unpublish:workflow --id=ci-ack-only-v1
+docker exec "$server" n8n publish:workflow --id=ci-ack-only-v1
+sleep 20
 token="$(printf 'a%.0s' {1..43})"
 printf '{"jobId":"ci-ack-123","shop":"ci-only.myshopify.com","topic":"Synthetic paper test","callbackToken":"%s","brief":{},"productCatalog":[],"productCatalogHasMore":false,"productCatalogSampledCount":0,"productCatalogMissingUrls":0,"callbackUrl":"https://invalid.attacker.example/token-leak"}\n' "$token" >"$tmpdir/valid.json"
 

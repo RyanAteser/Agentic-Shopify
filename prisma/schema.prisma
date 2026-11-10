@@ -345,3 +345,32 @@ model BlogGenerationUsage {
   @@unique([shop, jobId, stage])
   @@index([shop, reportedAt])
 }
+
+/** Owner-configured prospective exposure limit; NOT Shopify subscription billing. */
+model BlogBudgetPolicy {
+  shop                String   @id
+  enabled             Boolean  @default(false)
+  monthlyCapCents     Int
+  perJobReserveCents  Int
+  updatedAt           DateTime @updatedAt
+}
+
+/** Claimed upper-bound allowances, not invoice-backed actual spend. */
+model BlogBudgetMonth {
+  shop              String
+  month             String
+  committedCents    Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  @@id([shop, month])
+}
+
+/** Immutable claim tied to one original generation job. */
+model BlogBudgetClaim {
+  jobId             String   @id
+  shop              String
+  month             String
+  reservedCents     Int
+  createdAt         DateTime @default(now())
+  @@index([shop, month])
+}

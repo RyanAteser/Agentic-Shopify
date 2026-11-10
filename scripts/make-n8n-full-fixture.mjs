@@ -6,8 +6,12 @@
  */
 import {readFileSync,writeFileSync} from "node:fs";
 
-const [src,dest]=process.argv.slice(2);
-if(!src||!dest||process.argv.length!==4)throw new Error("Usage: source.json ci-fixture.json");
+const [src,dest,mode]=process.argv.slice(2);
+if(!src||!dest||!([4,5].includes(process.argv.length))||
+   (mode!==undefined&&mode!=="--credentialed-webhook")){
+  throw new Error("Usage: source.json ci-fixture.json [--credentialed-webhook]");
+}
+const credentialed=mode==="--credentialed-webhook";
 const input=JSON.parse(readFileSync(src,"utf8"));
 if(input.active!==false)throw new Error("Original paid workflow must remain INACTIVE");
 const expected=[
@@ -44,7 +48,14 @@ if(webhook.parameters.authentication!=="headerAuth"||
   !/^[0-9a-f-]{36}$/.test(webhook.webhookId??"")){
   throw new Error("Production webhook specification changed");
 }
-webhook.parameters.authentication="none"; // CI ONLY; production headerAuth retained.
+if(credentialed){
+  // n8n CLI imports this test credential separately. This workflow carries
+  // only the reference ID, never an inline secret or actual merchant key.
+  webhook.credentials={httpHeaderAuth:{id:"ci-inbound-header-v1",name:"CI ONLY inbound header auth"}};
+  // Do NOT disable the production headerAuth parser on credentialed runs.
+}else{
+  webhook.parameters.authentication="none"; // Legacy offline fixture only.
+}
 webhook.parameters.path="ci-only-blog-full";
 const ack=byName.get("Acknowledge Job Acceptance");
 if(ack.parameters.options?.responseCode!==202||ack.parameters.respondWith!=="json")
@@ -88,7 +99,11 @@ const fixture={
 };
 const serialized=JSON.stringify(fixture,null,2)+"\n";
 if(/api\.openai\.com|YOUR-PUBLISHED-SHOPIFY-APP|sk-proj-|shpat_/.test(serialized)||
-   fixture.nodes.some(n=>n.credentials||n.type.includes("scheduleTrigger"))||
+   fixture.nodes.some(n=>n.type.includes("scheduleTrigger")||
+      (n.credentials!==undefined&&(!credentialed||n!==webhook||
+      JSON.stringify(n.credentials)!==JSON.stringify({httpHeaderAuth:{
+        id:"ci-inbound-header-v1",name:"CI ONLY inbound header auth"
+      }}))))||
    fixture.nodes.filter(n=>n.type==="n8n-nodes-base.httpRequest").some(n=>!n.parameters.url.startsWith(fakeBase+"/"))){
   throw new Error("Unsafe CI fixture: external destinations, secrets or scheduling");
 }

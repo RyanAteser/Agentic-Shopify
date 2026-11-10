@@ -328,3 +328,20 @@ model SwarmUsageMonth {
   @@id([shop, month])
   @@index([shop, month])
 }
+
+
+/** n8n worker-reported OpenAI token usage, NOT an independently verified invoice. */
+model BlogGenerationUsage {
+  id             String   @id @default(cuid())
+  shop           String
+  jobId          String
+  stage          String
+  provider       String   @default("openai-chat-completions")
+  model          String
+  inputTokens    Int
+  outputTokens   Int
+  responseIdHash String?
+  reportedAt     DateTime @default(now())
+  @@unique([shop, jobId, stage])
+  @@index([shop, reportedAt])
+}

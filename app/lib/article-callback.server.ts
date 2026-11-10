@@ -1,6 +1,6 @@
 import db from "../db.server";
 import { evaluateArticle } from "./content-quality.server";
-import {parseBlogUsage, InvalidBlogUsageError} from "./blog-usage";
+import {parseBlogUsage} from "./blog-usage";
 
 export class ArticleCallbackRejectedError extends Error {
   constructor(message: string, public readonly status: 400 | 404 | 409) {

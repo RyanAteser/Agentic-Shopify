@@ -80,7 +80,10 @@ export function modelCostEstimate(
       uncertainCalls++;continue;
     }
     const rate=rates[call.provider+"/"+call.model];
-    if(!rate){unpricedCalls++;continue;}
+    if(!rate||call.inputTokens+call.outputTokens===0){
+      // A successful model call with no usable token telemetry is not free.
+      unpricedCalls++;continue;
+    }
     assertRate(rate);
     pricedCalls++;tokenInput+=call.inputTokens;tokenOutput+=call.outputTokens;
     rawCents+=costCents(call.inputTokens,rate.inputUsdPerMillion)

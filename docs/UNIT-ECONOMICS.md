@@ -61,3 +61,18 @@ The example license allocation of $0 is deliberately an **unknown placeholder**,
 7. Stress-test each plan at high usage/support volume and reject plans with negative contribution.
 
 This feature adds no HTTP cost reporting route, Shopify write, billing entitlement, provider call or merchant-facing financial claim.
+
+
+## 70% target contribution margin: maximum service expense per merchant
+
+Assuming an eligible 0% Shopify revenue share and a 2.9% processing fee, the **entire** allowance for model tokens, external data, workflow software, infrastructure, support, and unmetered retries is:
+
+| Proposed tier | Subscription | Maximum service expense at 70% contribution |
+| --- | ---: | ---: |
+| Starter | $49 | **$13.27 / month** |
+| Growth | $149 | **$40.37 / month** |
+| Operator | $399 | **$108.12 / month** |
+
+If Shopify's developer revenue share were 15%, those limits would instead be **$5.92, $18.02 and $48.27**. These are arithmetic pricing constraints, NOT observed business costs. The eligible revenue-share tier is not assumed for an actual merchant without Shopify verification. Every subscription plan must enforce its own worst-case spend and support limits.
+
+The example assumptions file uses $0 allocated workflow license even though commercial licensing is unresolved. Therefore the example must not be interpreted as a launch-ready contribution claim. Actual invoices and subscription payouts determine realized results.

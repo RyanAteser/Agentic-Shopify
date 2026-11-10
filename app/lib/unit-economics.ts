@@ -149,3 +149,29 @@ export function evaluatePlan(
 export function dollars(cents:number|null){
   return cents===null?"unknown":(cents/100).toFixed(2);
 }
+
+/**
+ * Maximum discretionary per-merchant monthly COGS available after Shopify fees.
+ * This is a pricing guardrail, not an assertion of subscription payout or profit.
+ */
+export function allowableServiceSpend(plan:PlanKey,input:{
+  targetContributionMarginPct:number;processingRate:number;revenueShareRate:number;
+}){
+  const p=PLAN_SCENARIOS[plan];
+  if(!p)throw new Error("Unknown plan scenario");
+  if(!Number.isFinite(input.targetContributionMarginPct)||input.targetContributionMarginPct<0||
+    input.targetContributionMarginPct>100||
+    !Number.isFinite(input.processingRate)||input.processingRate<0||input.processingRate>1||
+    !Number.isFinite(input.revenueShareRate)||input.revenueShareRate<0||input.revenueShareRate>1){
+    throw new Error("Invalid margin or platform rate");
+  }
+  const maxAllVariableCents=Math.floor(p.priceCents*(1-input.targetContributionMarginPct/100));
+  const processingCents=Math.ceil(p.priceCents*input.processingRate);
+  const revenueShareCents=Math.ceil(p.priceCents*input.revenueShareRate);
+  return {
+    plan:p.name,targetContributionMarginPct:input.targetContributionMarginPct,
+    maxAllVariableCents,platformFeesCents:processingCents+revenueShareCents,
+    maxServiceCOGSCents:Math.max(0,maxAllVariableCents-processingCents-revenueShareCents),
+    feasibleAfterPlatformFees:maxAllVariableCents>=processingCents+revenueShareCents
+  };
+}

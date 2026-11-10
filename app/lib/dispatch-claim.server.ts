@@ -26,7 +26,8 @@ export type DispatchConfigSnapshot = {
  * so a preflight from an old browser/worker cannot dispatch an obsolete brief.
  */
 export async function claimQueuedDispatch(
-  shop: string, jobId: string, expectedConfig?: DispatchConfigSnapshot, at = new Date()
+  shop: string, jobId: string, expectedConfig?: DispatchConfigSnapshot,
+  at = new Date(), env:Record<string,string|undefined>=process.env
 ): Promise<void> {
   await db.$transaction(async tx => {
     // Serialize with merchant preference changes and privacy redaction.
@@ -67,7 +68,7 @@ export async function claimQueuedDispatch(
     // The same serialized transaction fences an optional prospective dollar
     // allowance BEFORE running status or any remote n8n request. Any rejection
     // rolls back this allowance and leaves the job queued.
-    await reserveBlogDispatchAllowance(tx,shop,jobId,at);
+    await reserveBlogDispatchAllowance(tx,shop,jobId,at,env);
     const result = await tx.contentJob.updateMany({
       where: { id: jobId, shop, status: "queued" },
       data: { status: "running" }

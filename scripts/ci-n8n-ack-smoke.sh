@@ -20,6 +20,9 @@ trap cleanup EXIT
 
 # Derive a separate THREE-NODE workflow and reject any paid HTTP steps.
 node scripts/make-n8n-ack-fixture.mjs n8n/shopify-blog-writer.json "$tmpdir/ci-only.json"
+# Docker executes as a non-root n8n user. Only this credential-free synthetic
+# fixture is made world-readable for its read-only bind mount.
+chmod 644 "$tmpdir/ci-only.json"
 docker network create --internal "$network" >/dev/null
 docker volume create "$volume" >/dev/null
 docker pull "$image" >/dev/null

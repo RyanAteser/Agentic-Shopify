@@ -384,3 +384,43 @@ test("writer distinguishes no storefront URLs from a genuinely empty published c
   assert.throws(() => run({ ...base, productCatalogSampledCount: -1 }),
     /Inconsistent Shopify product sample counts/);
 });
+
+test("writer and editor pass authentic model usage via the one-job callback, with absent usage left unknown",()=>{
+  const workflow=load("n8n/shopify-blog-writer.json");
+  const nodes=workflow.nodes as Array<NodeShape&{parameters:{jsCode?:string;jsonBody?:string}}>;
+  const get=(name:string)=>{
+    const n=nodes.find(n=>n.name===name);assert.ok(n);return n;
+  };
+  const prepared={jobId:"job1",shop:"sample.myshopify.com",callbackToken:"c".repeat(43)};
+  const response=(stage:string)=>({
+    id:"chatcmpl_"+stage+"_12345",model:"gpt-4.1-mini-2025-04-14",
+    usage:{prompt_tokens:1500,completion_tokens:600},
+    choices:[{finish_reason:"stop",message:{content:JSON.stringify({
+      title:"A useful article",summary:"Practical summary",body:"<p>Content</p>"
+    })}}]
+  });
+  const parseDraft=get("Parse Draft").parameters.jsCode!;
+  const draft=runInNewContext("(() => {"+parseDraft+"})()",{
+    $input:{first:()=>({json:response("writer")})},
+    $:()=>({first:()=>({json:prepared})})
+  }) as Array<{json:Record<string,unknown>}>;
+  assert.equal((draft[0].json.writerUsage as any).inputTokens,1500);
+  const parsed=runInNewContext("(() => {"+get("Parse Reviewed Article").parameters.jsCode+"})()",{
+    $input:{first:()=>({json:response("editor")})},
+    $:(name:string)=>({first:()=>({json:name==="Parse Draft"?draft[0].json:prepared})})
+  }) as Array<{json:Record<string,unknown>}>;
+  assert.equal((parsed[0].json.usage as any[]).length,2);
+  assert.deepEqual((parsed[0].json.usage as any[]).map(x=>x.stage),["writer","editor"]);
+  const expr=get("Return Secure Draft").parameters.jsonBody!;
+  assert.ok(expr.startsWith("={{ ")&&expr.endsWith(" }}"));
+  const payload=JSON.parse(runInNewContext(expr.slice(3,-3),{
+    $json:parsed[0].json
+  }) as string);
+  assert.equal(payload.usage.length,2);
+  assert.equal(payload.callbackToken,undefined);
+  const missing=runInNewContext("(() => {"+parseDraft+"})()",{
+    $input:{first:()=>({json:{choices:response("writer").choices}})},
+    $:()=>({first:()=>({json:prepared})})
+  }) as Array<{json:Record<string,unknown>}>;
+  assert.equal(missing[0].json.writerUsage,null);
+});

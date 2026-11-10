@@ -15,6 +15,7 @@ export type InvocationObservation={
 };
 export type ObservedUsage={
   shop:string;month:string;invocations:InvocationObservation[];
+  blogUsageReceipts:InvocationObservation[];completeBlogJobs:number;
   generationJobs:number;drafts:number;publishedDrafts:number;
   editorialDecisions:number;reviewMinutesTotal:number;reviewMinutesReported:number;
   rankingSnapshots:number;
@@ -98,7 +99,7 @@ export function modelCostEstimate(
 
 export type ContributionScenario={
   plan:string;grossCents:number;processingCents:number;revenueShareCents:number;
-  quotedModelCents:number;unknownCallReserveCents:number;unmeteredBlogAllowanceCents:number;externalResearchCents:number;
+  quotedModelCents:number;unknownCallReserveCents:number;unmeteredBlogAllowanceCents:number;incompleteBlogJobs:number;externalResearchCents:number;
   infrastructureCents:number;supportCents:number;workflowLicenseCents:number;
   modeledContributionCents:number|null;modeledMarginPct:number|null;
   observedUnpricedCalls:number;observedUncertainCalls:number;
@@ -117,26 +118,33 @@ export function evaluatePlan(
   for(const key of ["externalResearchCents","infrastructureCents","supportCents",
     "workflowLicenseCents"] as const) validMoney(assumptions[key],key);
   validMoney(assumptions.unmeteredBlogAllowanceCentsPerJob,"blog generation allowance");
-  const model=modelCostEstimate(usage.invocations,assumptions.rates,assumptions.unobservedCallReserveCents);
-  const unmeteredBlogAllowanceCents=usage.generationJobs*assumptions.unmeteredBlogAllowanceCentsPerJob;
+  for(const label of ["generationJobs","completeBlogJobs","drafts","publishedDrafts",
+    "editorialDecisions","reviewMinutesTotal","reviewMinutesReported","rankingSnapshots"] as const)
+    assertInt(usage[label],label);
+  if(usage.completeBlogJobs>usage.generationJobs)throw new Error("Blog usage cohort is inconsistent");
+  const model=modelCostEstimate([...usage.invocations,...usage.blogUsageReceipts],
+    assumptions.rates,assumptions.unobservedCallReserveCents);
+  const incompleteBlogJobs=usage.generationJobs-usage.completeBlogJobs;
+  const unmeteredBlogAllowanceCents=incompleteBlogJobs*assumptions.unmeteredBlogAllowanceCentsPerJob;
   if(!Number.isSafeInteger(unmeteredBlogAllowanceCents))throw new Error("Unreasonable blog allowance");
   const processingCents=Math.ceil(p.priceCents*assumptions.processingRate);
   const revenueShareCents=Math.ceil(p.priceCents*assumptions.revenueShareRate);
   const unknowns:string[]=[];
   if(model.unpricedCalls)unknowns.push(model.unpricedCalls+" committed model calls lack an exact price card");
   if(model.uncertainCalls)unknowns.push(model.uncertainCalls+" provider calls have uncertain billing outcomes");
-  if(usage.generationJobs>0)unknowns.push("Blog/n8n generation token and provider billing are not metered in this ledger");
+  if(incompleteBlogJobs>0)unknowns.push(incompleteBlogJobs+" Blog Agent jobs lack complete worker-reported writer/editor usage");
+  if(usage.blogUsageReceipts.length)unknowns.push("Blog token reports are n8n worker claims, not provider invoice reconciliation");
   unknowns.push("Infrastructure, external APIs, licensing, support and Shopify fees are user-supplied assumptions, not reconciled bills");
   const completeModeledCost=model.quotedCents+model.unknownCostCents+unmeteredBlogAllowanceCents+
     assumptions.externalResearchCents+assumptions.infrastructureCents+
     assumptions.supportCents+assumptions.workflowLicenseCents+
     processingCents+revenueShareCents;
   const valid=!(model.unpricedCalls||model.uncertainCalls&&assumptions.unobservedCallReserveCents===0||
-    usage.generationJobs>0&&assumptions.unmeteredBlogAllowanceCentsPerJob===0);
+    incompleteBlogJobs>0&&assumptions.unmeteredBlogAllowanceCentsPerJob===0);
   const modeledContributionCents=valid?p.priceCents-completeModeledCost:null;
   return {plan:p.name,grossCents:p.priceCents,processingCents,revenueShareCents,
     quotedModelCents:model.quotedCents,unknownCallReserveCents:model.unknownCostCents,
-    unmeteredBlogAllowanceCents,
+    unmeteredBlogAllowanceCents,incompleteBlogJobs,
     externalResearchCents:assumptions.externalResearchCents,
     infrastructureCents:assumptions.infrastructureCents,
     supportCents:assumptions.supportCents,

@@ -76,3 +76,18 @@ Assuming an eligible 0% Shopify revenue share and a 2.9% processing fee, the **e
 If Shopify's developer revenue share were 15%, those limits would instead be **$5.92, $18.02 and $48.27**. These are arithmetic pricing constraints, NOT observed business costs. The eligible revenue-share tier is not assumed for an actual merchant without Shopify verification. Every subscription plan must enforce its own worst-case spend and support limits.
 
 The example assumptions file uses $0 allocated workflow license even though commercial licensing is unresolved. Therefore the example must not be interpreted as a launch-ready contribution claim. Actual invoices and subscription payouts determine realized results.
+
+
+## Blog Agent token receipt integration (Nov 10)
+
+The job-scoped article completion callback now carries up to two optional OpenAI token usage records, one from the writer and one from the editor. The inactive n8n workflow reads Chat Completions model identity, prompt tokens, completion tokens, and response ID. Only bounded token counts, model names and a SHA-256 digest of the response ID are stored, not prompts or API keys.
+
+The existing per-job HMAC callback capability authenticates shop/job identity. Usage validation, deduplication by stage, and article completion happen in one tenant-serialized transaction. Completed jobs cannot acquire or replace receipts from replayed callbacks. The shared merchant privacy deletion removes these records.
+
+The read-only finance report joins token receipts to their original job-creation UTC month, including later arrivals. When both stages have bounded token observations, an explicit model/version price card supplies a cost quote. A job missing one or both stages retains the FULL assumed unmetered-job allowance, alongside any observed stage, deliberately conservative. If the cost allowance is zero, it refuses a numeric contribution estimate.
+
+Worker-reported tokens are NOT provider invoices. Incomplete callbacks, cached-token discounts, response timeouts, batch discounts, regional charges, hidden vendor fees and subscription payouts still require reconciliation. Official OpenAI GPT-4.1 mini public price card: https://developers.openai.com/api/docs/models/gpt-4.1-mini .
+
+The workflows remain inactive; no merchant billing or model request was initiated by this change.
+
+Still required: live n8n staging run, provider invoice matching, externally measured SEO data charges, per-tenant dollar budgets, and subscription payout reconciliation.

@@ -15,6 +15,10 @@ test("owner economics report reads only exact tenant and calendar month",async()
       const draft=await db.articleDraft.create({data:{shop:s,jobId:job.id,topic:"Audit",
         title:"Safe draft",summary:"Summary",body:"<p>Body</p>",
         status:"published",createdAt:date,publishedAt:date}});
+      await db.blogGenerationUsage.createMany({data:[
+        {shop:s,jobId:job.id,stage:"writer",model:"gpt-4.1-mini",inputTokens:800,outputTokens:500},
+        {shop:s,jobId:job.id,stage:"editor",model:"gpt-4.1-mini",inputTokens:1000,outputTokens:500}
+      ]});
       await db.editorialReview.create({data:{shop:s,draftId:draft.id,decision:"approved",
         reviewedAt:date,reviewMinutes:12}});
       await db.seoRankObservation.create({data:{shop:s,keyword:"repair",position:3,
@@ -33,6 +37,8 @@ test("owner economics report reads only exact tenant and calendar month",async()
     assert.equal(report.invocations.length,2);
     assert.equal(report.invocations.find(x=>x.status==="committed")?.inputTokens,200);
     assert.equal(report.generationJobs,1);
+    assert.equal(report.completeBlogJobs,1);
+    assert.equal(report.blogUsageReceipts.length,2);
     assert.equal(report.drafts,1);
     assert.equal(report.publishedDrafts,1);
     assert.equal(report.editorialDecisions,1);
@@ -50,6 +56,7 @@ test("owner economics report reads only exact tenant and calendar month",async()
       await db.swarmExecution.deleteMany({where:{shop:s}});
       await db.seoRankObservation.deleteMany({where:{shop:s}});
       await db.editorialReview.deleteMany({where:{shop:s}});
+      await db.blogGenerationUsage.deleteMany({where:{shop:s}});
       await db.articleDraft.deleteMany({where:{shop:s}});
       await db.contentJob.deleteMany({where:{shop:s}});
     }

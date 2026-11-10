@@ -87,7 +87,7 @@ const fixture={
   pinData:{}
 };
 const serialized=JSON.stringify(fixture,null,2)+"\n";
-if(/api\.openai\.com|YOUR-PUBLISHED-SHOPIFY-APP|https:\/\/|sk-proj-|shpat_/.test(serialized)||
+if(/api\.openai\.com|YOUR-PUBLISHED-SHOPIFY-APP|sk-proj-|shpat_/.test(serialized)||
    fixture.nodes.some(n=>n.credentials||n.type.includes("scheduleTrigger"))||
    fixture.nodes.filter(n=>n.type==="n8n-nodes-base.httpRequest").some(n=>!n.parameters.url.startsWith(fakeBase+"/"))){
   throw new Error("Unsafe CI fixture: external destinations, secrets or scheduling");

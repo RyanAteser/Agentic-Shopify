@@ -7,6 +7,7 @@
     }
   },
   "unobservedCallReserveCents": 25,
+  "unmeteredBlogAllowanceCentsPerJob": 500,
   "externalResearchCents": 700,
   "infrastructureCents": 600,
   "supportCents": 1500,

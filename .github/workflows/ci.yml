@@ -80,3 +80,17 @@ jobs:
         with:
           node-version: '22'
       - run: bash scripts/ci-n8n-ack-smoke.sh
+
+  n8n-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # All 8 nodes use deterministic local mock HTTP endpoints. The private
+    # Docker network disallows outbound provider/API access.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: bash scripts/ci-n8n-full-smoke.sh

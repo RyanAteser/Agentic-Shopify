@@ -94,3 +94,17 @@ jobs:
         with:
           node-version: '22'
       - run: bash scripts/ci-n8n-full-smoke.sh
+
+  n8n-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Synthetic credential stored in disposable n8n encrypted credential
+    # storage; no merchant or OpenAI credentials and no external egress.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: CI_N8N_WEBHOOK_HEADER_AUTH=true bash scripts/ci-n8n-full-smoke.sh

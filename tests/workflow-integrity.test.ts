@@ -410,7 +410,7 @@ test("writer and editor pass authentic model usage via the one-job callback, wit
     $:(name:string)=>({first:()=>({json:name==="Parse Draft"?draft[0].json:prepared})})
   }) as Array<{json:Record<string,unknown>}>;
   assert.equal((parsed[0].json.usage as any[]).length,2);
-  assert.deepEqual((parsed[0].json.usage as any[]).map(x=>x.stage),["writer","editor"]);
+  assert.deepEqual(Array.from(parsed[0].json.usage as any[],x=>x.stage),["writer","editor"]);
   const expr=get("Return Secure Draft").parameters.jsonBody!;
   assert.ok(expr.startsWith("={{ ")&&expr.endsWith(" }}"));
   const payload=JSON.parse(runInNewContext(expr.slice(3,-3),{

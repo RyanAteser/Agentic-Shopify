@@ -49,3 +49,15 @@ The pinned engine version was the latest stable release on November 9, 2026. Cha
 The first actual n8n 2.46.7 smoke returned HTTP 404 after a successful CLI import and publish. This exposed a missing stable webhookId on the original inactive Blog Agent webhook node. On n8n 2.x, API/CLI-imported webhook nodes without a webhookId can register legacy prefixed routes rather than the configured short path. A stable RFC 4122 UUID is now part of the original source node and required by the safe fixture generator and regression tests.
 
 This is a previously untested compatibility fix, not evidence that any live customer webhook was broken: the workflow has never been activated for a public merchant. The next real-engine CI run must confirm HTTP 202 before this test is considered complete.
+
+## Verified real-engine result
+
+GitHub Actions run #42887310260 passed every job. The n8n-ack job imported and published the three-node fixture in **n8n 2.46.7**, exercised the real HTTP webhook, observed exact job/shop-scoped **HTTP 202**, and verified malformed capability input was not accepted. The application, PostgreSQL, and container checks also passed.
+
+An important issue was exposed before that result: the original export had no stable webhookId. This has been fixed in the inactive original workflow, and the regression tests now require a valid ID.
+
+A separate operational behavior was confirmed: a workflow could have an active published version while the ephemeral instance's webhook registration table remained empty. CI now performs an isolated unpublish/publish after n8n starts and allows its publication service to process the change, rather than mistaking the active flag alone for live webhook readiness. This is part of the test harness, **not** a production activation instruction.
+
+Evidence: https://github.com/RyanAteser/Agentic-Shopify/actions/runs/42887310260
+
+**Still unverified:** credential-backed production webhook authentication, full writer/editor calls, actual provider charges, commercial n8n licensing, Shopify OAuth and paid merchant plan entitlements.

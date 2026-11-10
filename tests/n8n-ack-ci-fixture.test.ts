@@ -29,6 +29,9 @@ test("real-n8n CI fixture contains only the original safe first three workflow n
       "Only CI's isolated copy may bypass production header authentication");
     const originalWorkflow=JSON.parse(untouched);
     assert.equal(originalWorkflow.nodes[0].parameters.authentication,"headerAuth");
+    assert.match(originalWorkflow.nodes[0].webhookId,/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    assert.equal(f.nodes[0].webhookId,originalWorkflow.nodes[0].webhookId);
+
     assert.equal(f.nodes[0].parameters.path,"ci-only-blog-ack");
     assert.equal(f.nodes[2].parameters.options.responseCode,202);
     assert.equal(Object.keys(f.connections).length,2);

@@ -7,6 +7,7 @@
  */
 import {readFileSync} from "node:fs";
 import {loadObservedUsage} from "../app/lib/unit-economics.server";
+import {loadBudgetExposure} from "../app/lib/budget-exposure.server";
 import {allowableServiceSpend,evaluatePlan,PLAN_SCENARIOS,type ObservedUsage,type ScenarioAssumptions} from "../app/lib/unit-economics";
 
 function args(argv:string[]){
@@ -24,6 +25,7 @@ function args(argv:string[]){
 async function main(){
   const a=args(process.argv.slice(2));
   const usage:ObservedUsage=await loadObservedUsage(a.get("--shop")!,a.get("--month")!);
+  const budgetExposure=await loadBudgetExposure(usage.shop,usage.month);
   const report:Record<string,unknown>={
     status:"owner_read_only_observation",
     source:"tenant-scoped SQLite or PostgreSQL local database; no provider invoices",
@@ -44,6 +46,7 @@ async function main(){
       reviewMinutesTotal:usage.reviewMinutesTotal,
       rankingSnapshots:usage.rankingSnapshots,
     },
+    prospectiveDispatchBudget:budgetExposure,
     actualNetProfit:null,
     reason:"No actual subscription payout, vendor invoice, licensing allocation or support payroll reconciliation."
   };

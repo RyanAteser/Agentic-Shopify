@@ -1,0 +1,16 @@
+{
+  "rates": {
+    "gemini-generate-content/gemini-2.5-flash-lite": {
+      "inputUsdPerMillion": 0.1,
+      "outputUsdPerMillion": 0.4,
+      "source": "Illustrative public Google Gemini API 2.5 Flash-Lite standard text rates; verify against current account invoices and price table."
+    }
+  },
+  "unobservedCallReserveCents": 25,
+  "externalResearchCents": 700,
+  "infrastructureCents": 600,
+  "supportCents": 1500,
+  "workflowLicenseCents": 0,
+  "processingRate": 0.029,
+  "revenueShareRate": 0
+}

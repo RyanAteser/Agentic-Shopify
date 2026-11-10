@@ -40,7 +40,7 @@ test("owner economics report reads only exact tenant and calendar month",async()
     assert.equal(report.reviewMinutesTotal,12);
     assert.equal(report.rankingSnapshots,1);
     assert.equal((await loadObservedUsage(shop,"2026-10")).invocations.length,0);
-    assert.throws(()=>loadObservedUsage("elsewhere.evil.tld","2026-11"),/Invalid/);
+    await assert.rejects(loadObservedUsage("elsewhere.evil.tld","2026-11"),/Invalid/);
     await assert.rejects(loadObservedUsage(shop,"2026-13"),/Expected/);
     await db.contentJob.create({data:{shop,topic:"Old work",createdAt:old}});
     assert.equal((await loadObservedUsage(shop,"2026-11")).generationJobs,1);

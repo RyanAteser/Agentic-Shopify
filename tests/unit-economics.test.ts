@@ -7,6 +7,7 @@ const rates={"gemini-generate-content/gemini-2.5-flash-lite":{
 }};
 const sample:ObservedUsage={
   shop:"scenario.myshopify.com",month:"2026-11",
+  blogUsageReceipts:[],completeBlogJobs:0,
   invocations:[
     {provider:"gemini-generate-content",model:"gemini-2.5-flash-lite",
       status:"committed",inputTokens:1_000_000,outputTokens:1_000_000},

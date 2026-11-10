@@ -12,10 +12,10 @@ test("owner economics report reads only exact tenant and calendar month",async()
   try{
     for(const s of [shop,foreign]){
       const job=await db.contentJob.create({data:{shop:s,topic:"Audit",createdAt:date}});
-      await db.articleDraft.create({data:{shop:s,jobId:job.id,topic:"Audit",
+      const draft=await db.articleDraft.create({data:{shop:s,jobId:job.id,topic:"Audit",
         title:"Safe draft",summary:"Summary",body:"<p>Body</p>",
         status:"published",createdAt:date,publishedAt:date}});
-      await db.editorialReview.create({data:{shop:s,draftId:job.id,decision:"approved",
+      await db.editorialReview.create({data:{shop:s,draftId:draft.id,decision:"approved",
         reviewedAt:date,reviewMinutes:12}});
       await db.seoRankObservation.create({data:{shop:s,keyword:"repair",position:3,
         observedAt:date,receivedAt:date}});
@@ -31,7 +31,7 @@ test("owner economics report reads only exact tenant and calendar month",async()
     }
     const report=await loadObservedUsage(shop,"2026-11");
     assert.equal(report.invocations.length,2);
-    assert.equal(report.invocations[0].inputTokens,200);
+    assert.equal(report.invocations.find(x=>x.status==="committed")?.inputTokens,200);
     assert.equal(report.generationJobs,1);
     assert.equal(report.drafts,1);
     assert.equal(report.publishedDrafts,1);

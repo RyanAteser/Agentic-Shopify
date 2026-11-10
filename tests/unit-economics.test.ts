@@ -38,7 +38,7 @@ test("conservative tier model never represents quotes as actual subscriptions",(
   assert.equal(estimate.modeledContributionCents,382);
   assert.equal(estimate.canPresentAsActualProfit,false);
   assert.equal(estimate.requiresProviderInvoices,true);
-  assert.match(estimate.unknowns.join(" "),/Blog\/n8n/);
+  assert.match(estimate.unknowns.join(" "),/Blog Agent jobs/);
   const upper=evaluatePlan("operator",sample,{...assumptions,revenueShareRate:0.15});
   assert.equal(upper.revenueShareCents,5985);
 });

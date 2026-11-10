@@ -34,7 +34,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    const draft = await persistArticleCallback(data.shop, data.jobId, data.article);
+    const draft = await persistArticleCallback(data.shop, data.jobId, data.article, data.usage);
     return Response.json({ ok: true, draftId: draft.draftId, score: draft.score });
   } catch (error) {
     if (error instanceof ArticleCallbackRejectedError) {

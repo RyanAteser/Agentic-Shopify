@@ -34,6 +34,7 @@ export async function eraseMerchantData(shop: string): Promise<void> {
     db.editorialReview.deleteMany({ where: { shop } }),
     db.articleDraft.deleteMany({ where: { shop } }),
     db.seoRankObservation.deleteMany({ where: { shop } }),
+    db.blogGenerationUsage.deleteMany({ where: { shop } }),
     db.contentJob.deleteMany({ where: { shop } }),
   ]);
 }

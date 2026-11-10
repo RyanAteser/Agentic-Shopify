@@ -1,0 +1,27 @@
+{
+  "rates": {
+    "gemini-generate-content/gemini-2.5-flash-lite": {
+      "inputUsdPerMillion": 0.1,
+      "outputUsdPerMillion": 0.4,
+      "source": "Illustrative public Google Gemini API 2.5 Flash-Lite standard text rates; verify against current account invoices and price table."
+    },
+    "openai-chat-completions/gpt-4.1-mini": {
+      "inputUsdPerMillion": 0.4,
+      "outputUsdPerMillion": 1.6,
+      "source": "Illustrative public standard API rate (not an invoice): https://developers.openai.com/api/docs/models/gpt-4.1-mini"
+    },
+    "openai-chat-completions/gpt-4.1-mini-2025-04-14": {
+      "inputUsdPerMillion": 0.4,
+      "outputUsdPerMillion": 1.6,
+      "source": "Illustrative public standard API rate (not an invoice): https://developers.openai.com/api/docs/models/gpt-4.1-mini"
+    }
+  },
+  "unobservedCallReserveCents": 25,
+  "unmeteredBlogAllowanceCentsPerJob": 500,
+  "externalResearchCents": 700,
+  "infrastructureCents": 600,
+  "supportCents": 1500,
+  "workflowLicenseCents": 0,
+  "processingRate": 0.029,
+  "revenueShareRate": 0
+}

@@ -8,7 +8,7 @@
  * No provider API calls, no merchant writes, no billing changes.
  * Never output raw request IDs, provider API credentials or file contents.
  */
-import {readFileSync} from "node:fs";
+import {readFileSync,statSync} from "node:fs";
 import {loadBlogUsageForCohort} from "../app/lib/provider-usage-reconciliation.server";
 import {loadObservedUsage} from "../app/lib/unit-economics.server";
 import {reconcileBlogProviderUsage} from "../app/lib/provider-usage-reconciliation";
@@ -30,11 +30,16 @@ function cli(argv:string[]){
   return args;
 }
 function safeRead(path:string):unknown{
-  // Path is operator-controlled on the trusted local host. Never print it,
-  // nor persist raw provider IDs or any uploaded record.
-  const raw=readFileSync(path,"utf8");
-  if(raw.length>2_000_000)throw new Error("Export exceeds read-only 2MB safety limit");
-  return JSON.parse(raw);
+  // Never log raw file paths, content, provider IDs or credential material.
+  // Check file size BEFORE allocating a buffer for an untrusted export.
+  try {
+    const stat=statSync(path);
+    if(!stat.isFile()||stat.size>2_000_000)
+      throw new Error("Export is not a bounded local file");
+    return JSON.parse(readFileSync(path,"utf8"));
+  } catch {
+    throw new Error("Cannot safely read normalized private export; verify file type, 2MB size and JSON format");
+  }
 }
 async function main(){
   const args=cli(process.argv.slice(2));

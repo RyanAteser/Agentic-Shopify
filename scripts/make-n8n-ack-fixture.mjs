@@ -32,6 +32,9 @@ if(w.connections?.[names[0]]?.main?.[0]?.[0]?.node!==names[1]||
    w.connections?.[names[2]]?.main?.[0]?.[0]?.node!=="Draft Article"){
   throw new Error("Original paid-workflow handoff changed");
 }
+if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(nodes[0].webhookId??"")){
+  throw new Error("Production webhookId is required for stable n8n path registration");
+}
 if(nodes[0].parameters?.httpMethod!=="POST"||
    nodes[0].parameters?.responseMode!=="responseNode"||
    nodes[0].parameters?.authentication!=="headerAuth"||

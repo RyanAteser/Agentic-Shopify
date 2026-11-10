@@ -37,3 +37,9 @@ n8n credential storage and webhook auth correctness are necessary, but actual ve
 **Before enabling real merchant dispatch:** verify a real authorized staging store installation, commercial n8n terms, provider-side project limits, actual writer/editor token usage vs invoice charges, and reimbursement/uncertain-call handling. Record a time-bounded approved spend cap in an operator change log. Never repurpose the CI fixture in production.
 
 References: https://docs.n8n.io/integrations/builtin/credentials/webhook and https://docs.n8n.io/hosting/cli-commands/
+
+## Verified results, November 10, 2026
+
+GitHub Actions [run #42891400703](https://github.com/RyanAteser/Agentic-Shopify/actions/runs/42891400703) passed all six checks: application, PostgreSQL, production container, n8n acknowledgment, full offline workflow, and credential-backed full offline workflow. PostgreSQL passed **517 tests, zero failures**. The actual n8n 2.46.7 output confirms it imported one throwaway Header Auth credential, rejected missing and incorrect request keys with 403 before model calls, and accepted the correctly authenticated request. The writer/editor mock sequence and failure-abstention tests also passed.
+
+This is a real test of n8n's built-in credential processing, **not** a real OpenAI API or provider billing transaction. The source workflow is still inactive, and the only imported secret was randomly generated inside disposable CI.

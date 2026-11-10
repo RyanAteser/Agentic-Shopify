@@ -17,7 +17,7 @@ const sample:ObservedUsage={
   editorialDecisions:1,reviewMinutesReported:1,reviewMinutesTotal:20,rankingSnapshots:5
 };
 const assumptions:ScenarioAssumptions={
-  rates,unobservedCallReserveCents:25,externalResearchCents:700,
+  rates,unobservedCallReserveCents:25,unmeteredBlogAllowanceCentsPerJob:500,externalResearchCents:700,
   infrastructureCents:600,supportCents:1500,workflowLicenseCents:0,
   processingRate:0.029,revenueShareRate:0
 };
@@ -34,7 +34,7 @@ test("conservative tier model never represents quotes as actual subscriptions",(
   assert.equal(estimate.grossCents,4900);
   assert.equal(estimate.processingCents,143);
   assert.equal(estimate.quotedModelCents,50);
-  assert.equal(estimate.modeledContributionCents,1882);
+  assert.equal(estimate.modeledContributionCents,382);
   assert.equal(estimate.canPresentAsActualProfit,false);
   assert.equal(estimate.requiresProviderInvoices,true);
   assert.match(estimate.unknowns.join(" "),/Blog\/n8n/);
@@ -47,6 +47,8 @@ test("missing model pricing or unreserved uncertain call must block numeric prof
   assert.equal(unknown.observedUnpricedCalls,1);
   const ambiguous=evaluatePlan("starter",sample,{...assumptions,unobservedCallReserveCents:0});
   assert.equal(ambiguous.modeledContributionCents,null);
+  const unpricedBlog=evaluatePlan("starter",sample,{...assumptions,unmeteredBlogAllowanceCentsPerJob:0});
+  assert.equal(unpricedBlog.modeledContributionCents,null);
 });
 test("reject malformed or unbelievable price cards, fees and token totals",()=>{
   assert.throws(()=>modelCostEstimate(sample.invocations,rates,-1),/Invalid/);

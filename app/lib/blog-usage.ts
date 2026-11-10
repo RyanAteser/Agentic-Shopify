@@ -13,6 +13,13 @@ export type BlogUsageReceipt={
 export class InvalidBlogUsageError extends Error {
   constructor(){super("Invalid blog model usage report");this.name="InvalidBlogUsageError";}
 }
+export function hashOpenAiResponseId(responseId:string):string {
+  if(typeof responseId!=="string"||!/^[A-Za-z0-9_-]{8,128}$/.test(responseId))
+    throw new InvalidBlogUsageError();
+  // Keep the established purpose-separated hash compatible with stored receipts.
+  return createHash("sha256").update("openai-request:v1\0")
+    .update(responseId).digest("hex");
+}
 export function parseBlogUsage(raw:unknown):BlogUsageReceipt[]{
   if(raw===undefined||raw===null)return [];
   if(!Array.isArray(raw)||raw.length>2)throw new InvalidBlogUsageError();
@@ -37,8 +44,7 @@ export function parseBlogUsage(raw:unknown):BlogUsageReceipt[]{
     if(id!==undefined&&id!==null&&
        (typeof id!=="string"||!/^[A-Za-z0-9_-]{8,128}$/.test(id)))
       throw new InvalidBlogUsageError();
-    const responseIdHash=typeof id==="string"?
-      createHash("sha256").update("openai-request:v1\0").update(id).digest("hex"):null;
+    const responseIdHash=typeof id==="string"?hashOpenAiResponseId(id):null;
     receipts.push({stage,model,inputTokens,outputTokens,responseIdHash});
   }
   return receipts;

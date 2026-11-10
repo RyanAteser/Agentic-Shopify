@@ -5,6 +5,7 @@ set -euo pipefail
 
 image="docker.n8n.io/n8nio/n8n:2.46.7"
 curlimage="curlimages/curl:8.11.1"
+pythonimage="python:3.13-alpine"
 suffix="ci-$$"
 network="ci-n8n-offline-$suffix"
 volume="ci-n8n-data-$suffix"
@@ -28,6 +29,7 @@ docker network create --internal "$network" >/dev/null
 docker volume create "$volume" >/dev/null
 docker pull "$image" >/dev/null
 docker pull "$curlimage" >/dev/null
+docker pull "$pythonimage" >/dev/null
 
 # Import & publish only the safe fixture into ephemeral SQLite state.
 docker run --rm --network "$network" \
@@ -75,6 +77,9 @@ status="${result##*$'\n'}"
 printf '%s' "${result%$'\n'*}" >"$tmpdir/ack.json"
 if [[ "$status" != "202" ]]; then
   echo "Real n8n did not return job-scoped HTTP 202 (got $status)" >&2
+  echo "Synthetic response: $result" >&2
+  # Read only the ephemeral n8n database. No secrets or merchant data exist.
+  docker run --rm --network "$network" -v "$volume:/data:ro" "$pythonimage" python3 -c 'import sqlite3; d=sqlite3.connect("file:/data/database.sqlite?mode=ro",uri=True); print("REGISTERED WEBHOOKS:",d.execute("select webhookPath, method, workflowId from webhook_entity").fetchall()); print("WORKFLOW STATUS:",d.execute("select id, active, activeVersionId from workflow_entity").fetchall())' >&2 || true
   docker logs --tail 70 "$server" >&2
   exit 1
 fi

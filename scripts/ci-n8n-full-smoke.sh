@@ -6,6 +6,10 @@ set -euo pipefail
 n8n_image="docker.n8n.io/n8nio/n8n:2.46.7"
 curl_image="curlimages/curl:8.11.1"
 node_image="node:22-alpine"
+header_auth="${CI_N8N_WEBHOOK_HEADER_AUTH:-false}"
+if [[ "$header_auth" != "false" && "$header_auth" != "true" ]]; then
+  echo "Unrecognized CI auth mode" >&2; exit 1
+fi
 suffix="ci-$$"
 network="ci-full-n8n-$suffix"
 volume="ci-full-data-$suffix"
@@ -21,7 +25,26 @@ cleanup(){
 }
 trap cleanup EXIT
 
-node scripts/make-n8n-full-fixture.mjs n8n/shopify-blog-writer.json "$tmp/full-fixture.json"
+if [[ "$header_auth" == "true" ]]; then
+  node scripts/make-n8n-full-fixture.mjs n8n/shopify-blog-writer.json "$tmp/full-fixture.json" --credentialed-webhook
+  # Ephemeral synthetic key: NO merchant/provider credentials. The importer
+  # encrypts the fixture credential in the disposable n8n database.
+  python3 - "$tmp" <<'PY'
+import json,os,secrets,sys
+folder=sys.argv[1]
+value=secrets.token_urlsafe(36)
+credential={"id":"ci-inbound-header-v1","name":"CI ONLY inbound header auth",
+  "type":"httpHeaderAuth","data":{"name":"X-Agent-Key","value":value}}
+with open(os.path.join(folder,"header-credential.json"),"w",encoding="utf8") as f:
+  json.dump([credential],f)
+with open(os.path.join(folder,"header-secret"),"w",encoding="utf8") as f:
+  f.write(value)
+os.chmod(os.path.join(folder,"header-credential.json"),0o644)
+os.chmod(os.path.join(folder,"header-secret"),0o600)
+PY
+else
+  node scripts/make-n8n-full-fixture.mjs n8n/shopify-blog-writer.json "$tmp/full-fixture.json"
+fi
 chmod 644 "$tmp/full-fixture.json"
 docker pull "$n8n_image" >/dev/null
 docker pull "$curl_image" >/dev/null
@@ -45,6 +68,13 @@ if [[ "$code" != "200" ]]; then
   exit 1
 fi
 
+if [[ "$header_auth" == "true" ]]; then
+  docker run --rm --network "$network" \
+    -v "$volume:/home/node/.n8n" -v "$tmp/header-credential.json:/tmp/ci-header.json:ro" \
+    -e N8N_DIAGNOSTICS_ENABLED=false "$n8n_image" \
+    import:credentials --input=/tmp/ci-header.json
+  rm -f "$tmp/header-credential.json"
+fi
 docker run --rm --network "$network" \
   -v "$volume:/home/node/.n8n" -v "$tmp/full-fixture.json:/tmp/full-fixture.json:ro" \
   -e N8N_DIAGNOSTICS_ENABLED=false "$n8n_image" \
@@ -84,10 +114,21 @@ sleep 20
 printf '{"jobId":"ci-full-pass","shop":"ci-only.myshopify.com","topic":"Synthetic ecommerce products","callbackToken":"%s","brief":{},"productCatalog":[],"productCatalogHasMore":false,"productCatalogSampledCount":0,"productCatalogMissingUrls":0,"callbackUrl":"https://attacker.example.invalid/ignore"}\n' "$(printf 'a%.0s' {1..43})" >"$tmp/happy.json"
 webhook="$url/webhook/ci-only-blog-full"
 post(){
-  local input="$1"
+  local input="$1" auth="${2:-valid}"
+  local headers=()
+  if [[ "$header_auth" == "true" ]]; then
+    case "$auth" in
+      valid) headers=(-H "X-Agent-Key: $(cat "$tmp/header-secret")");;
+      wrong) headers=(-H 'X-Agent-Key: definitely-wrong-test-key');;
+      missing) headers=();;
+      *) echo "Unknown test auth mode" >&2;return 1;;
+    esac
+  elif [[ "$auth" != "valid" ]]; then
+    echo "Negative auth probe only makes sense with Header Auth" >&2;return 1
+  fi
   docker run --rm --network "$network" -v "$input:/ci/request.json:ro" \
     "$curl_image" -s --show-error --max-time 12 \
-    -w '\n%{http_code}' -H 'Content-Type: application/json' \
+    -w '\n%{http_code}' -H 'Content-Type: application/json' "${headers[@]}" \
     --data-binary @/ci/request.json "$webhook"
 }
 status_of(){ printf '%s\n' "$1" | tail -n 1; }
@@ -101,6 +142,20 @@ diagnose(){
   state >&2 || true
   docker logs --tail 65 "$server" >&2 || true
 }
+
+# Only the credentialed run may claim to test inbound authentication.
+# Missing/wrong headers must be denied BEFORE any model request occurs.
+if [[ "$header_auth" == "true" ]]; then
+  for unauthorized in missing wrong; do
+    denied="$(post "$tmp/happy.json" "$unauthorized" || true)"
+    if [[ "$(status_of "$denied")" != "403" ]]; then
+      echo "Real n8n did not reject $unauthorized Header Auth with HTTP 403" >&2
+      diagnose;exit 1
+    fi
+  done
+  observed="$(state)"
+  printf '%s' "$observed" | python3 -c 'import json,sys; x=json.load(sys.stdin); assert (x["writerRequests"],x["editorRequests"],x["callbacks"])==(0,0,0),x'
+fi
 
 happy="$(post "$tmp/happy.json")"
 if [[ "$(status_of "$happy")" != "202" ]]; then
@@ -156,5 +211,8 @@ if [[ "$(status_of "$invalid")" == "202" ]]; then
 fi
 observed="$(state)"
 printf '%s' "$observed" | python3 -c 'import json,sys; x=json.load(sys.stdin); assert (x["writerRequests"],x["editorRequests"],x["callbacks"],x["validCallbacks"],x["modelPolicyViolations"])==(2,2,1,1,0),x'
+if [[ "$header_auth" == "true" ]]; then
+  echo "PASS actual n8n inbound httpHeaderAuth: missing/incorrect keys rejected before model calls; credentialed job accepted."
+fi
 echo "PASS real n8n 2.46.7: all eight nodes hit only the local mock; good callback, editor failure abstention and malformed input denial."
 echo "NO OpenAI/Shopify requests, actual merchant credentials, real bills, live publishes or merchant writes."

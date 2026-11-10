@@ -45,6 +45,11 @@ test("missing model pricing or unreserved uncertain call must block numeric prof
   const unknown=evaluatePlan("growth",sample,{...assumptions,rates:{}});
   assert.equal(unknown.modeledContributionCents,null);
   assert.equal(unknown.observedUnpricedCalls,1);
+  const zeroTokens=evaluatePlan("growth",{...sample,invocations:[{
+    provider:"gemini-generate-content",model:"gemini-2.5-flash-lite",status:"committed",
+    inputTokens:0,outputTokens:0
+  }]},assumptions);
+  assert.equal(zeroTokens.modeledContributionCents,null);
   const ambiguous=evaluatePlan("starter",sample,{...assumptions,unobservedCallReserveCents:0});
   assert.equal(ambiguous.modeledContributionCents,null);
   const unpricedBlog=evaluatePlan("starter",sample,{...assumptions,unmeteredBlogAllowanceCentsPerJob:0});

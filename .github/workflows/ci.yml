@@ -66,3 +66,17 @@ jobs:
           persist-credentials: false
       - run: docker build --pull --tag agentic-shopify:ci .
       - run: bash scripts/ci-container-smoke.sh agentic-shopify:ci
+
+  n8n-ack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Actual n8n 2.46.7 on an egress-isolated Docker network, no credentials,
+    # no Shopify install and NO workflow nodes capable of paid API calls.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: bash scripts/ci-n8n-ack-smoke.sh

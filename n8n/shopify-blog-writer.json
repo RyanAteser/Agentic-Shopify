@@ -3,6 +3,7 @@
   "nodes": [
     {
       "id": "receive-draft-request",
+      "webhookId": "f08f96f2-b6dc-4ab6-b940-81c952f418cb",
       "name": "Receive Draft Request",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,

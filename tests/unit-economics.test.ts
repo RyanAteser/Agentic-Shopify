@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {evaluatePlan,modelCostEstimate,type ObservedUsage,type ScenarioAssumptions} from "../app/lib/unit-economics";
+import {allowableServiceSpend,evaluatePlan,modelCostEstimate,type ObservedUsage,type ScenarioAssumptions} from "../app/lib/unit-economics";
 
 const rates={"gemini-generate-content/gemini-2.5-flash-lite":{
   inputUsdPerMillion:0.10,outputUsdPerMillion:0.40,source:"Test fixture, not an invoice"
@@ -54,6 +54,21 @@ test("missing model pricing or unreserved uncertain call must block numeric prof
   assert.equal(ambiguous.modeledContributionCents,null);
   const unpricedBlog=evaluatePlan("starter",sample,{...assumptions,unmeteredBlogAllowanceCentsPerJob:0});
   assert.equal(unpricedBlog.modeledContributionCents,null);
+});
+test("target-margin budgets reserve Shopify fee before AI or service spend",()=>{
+  const a=allowableServiceSpend("starter",{
+    targetContributionMarginPct:70,processingRate:0.029,revenueShareRate:0
+  });
+  assert.equal(a.maxAllVariableCents,1470);
+  assert.equal(a.platformFeesCents,143);
+  assert.equal(a.maxServiceCOGSCents,1327);
+  const higher=allowableServiceSpend("starter",{
+    targetContributionMarginPct:70,processingRate:0.029,revenueShareRate:0.15
+  });
+  assert.equal(higher.maxServiceCOGSCents,592);
+  assert.throws(()=>allowableServiceSpend("growth",{
+    targetContributionMarginPct:105,processingRate:0.029,revenueShareRate:0
+  }),/Invalid/);
 });
 test("reject malformed or unbelievable price cards, fees and token totals",()=>{
   assert.throws(()=>modelCostEstimate(sample.invocations,rates,-1),/Invalid/);

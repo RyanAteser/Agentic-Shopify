@@ -72,7 +72,12 @@ export function routeAdaptiveSkeptic(input:{
     // Stay within this source-field clause; tolerate "is explicitly set to".
     const tail=answer.text.slice(position+field.length,position+field.length+96)
       .split(/[.;\n]/)[0];
-    return new RegExp("\\b"+value+"\\b","i").test(tail);
+    const hit=new RegExp("\\b"+value+"\\b","i").exec(tail);
+    if(!hit)return false;
+    // A negated fact is not affirmative evidence, even if the number matches.
+    const prefix=tail.slice(0,hit.index);
+    if(/\b(?:not|never|isn't|wasn't|doesn't|cannot|can't|instead\s+of)\b/i.test(prefix))return false;
+    return true;
   });
   if(!typedMatch&&!proseMatch)reasons.push("NO_VERIFIED_FACT_REFERENCED");
   // A matching source field alone does not prove the yes/no inference.

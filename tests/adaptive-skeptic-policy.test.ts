@@ -113,3 +113,15 @@ test("legacy prose-only verified fact handles explicit modifiers and numbers",()
     assert.equal(x.escalate,false,item.text);
   }
 });
+
+test("negated source fact cannot suppress skeptic escalation",()=>{
+  for(const text of [
+    "ANSWER: NO\npublishedActiveProductsInSample is NOT 13.",
+    "ANSWER: NO\npublishedActiveProductsInSample is never 13.",
+    "ANSWER: NO\npublishedActiveProductsInSample is 0 instead of 13."
+  ]){
+    const decision=routeAdaptiveSkeptic({...context,answer:answer(text)});
+    assert.equal(decision.escalate,true,text);
+    assert.ok(decision.reasons.includes("NO_VERIFIED_FACT_REFERENCED"),text);
+  }
+});

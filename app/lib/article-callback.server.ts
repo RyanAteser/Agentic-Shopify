@@ -1,5 +1,6 @@
 import db from "../db.server";
 import { evaluateArticle } from "./content-quality.server";
+import {parseBlogUsage} from "./blog-usage";
 
 export class ArticleCallbackRejectedError extends Error {
   constructor(message: string, public readonly status: 400 | 404 | 409) {
@@ -16,10 +17,12 @@ export class ArticleCallbackRejectedError extends Error {
  * loads), then StoreConfig, before removing drafts and jobs. No network calls
  * occur inside this transaction. A late callback cannot recreate drafts.
  */
-export async function persistArticleCallback(shop: string, jobId: string, rawArticle: unknown) {
+export async function persistArticleCallback(shop: string, jobId: string, rawArticle: unknown, rawUsage?: unknown) {
   let checked: ReturnType<typeof evaluateArticle>;
+  let receipts:ReturnType<typeof parseBlogUsage>;
   try {
     checked = evaluateArticle(rawArticle);
+    receipts = parseBlogUsage(rawUsage);
   } catch (error) {
     throw new ArticleCallbackRejectedError(
       error instanceof Error ? error.message : "Invalid article payload", 400
@@ -66,6 +69,12 @@ export async function persistArticleCallback(shop: string, jobId: string, rawArt
       },
       update: {} // never overwrite merchant edits or an existing draft
     });
+    if(receipts.length){
+      await tx.blogGenerationUsage.createMany({data:receipts.map(row=>({
+        shop,jobId,stage:row.stage,model:row.model,inputTokens:row.inputTokens,
+        outputTokens:row.outputTokens,responseIdHash:row.responseIdHash
+      }))});
+    }
     await tx.contentJob.updateMany({
       where: { id: jobId, shop, status: { in: ["running", "dispatch_uncertain"] } },
       data: { status: "completed" }

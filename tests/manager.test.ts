@@ -43,7 +43,7 @@ test("manager ranks factual SEO findings, editorial drafts and comparable rank d
    {keyword:"boots",position:9,observedAt:new Date("2026-10-22"),country:"US",device:"desktop",engine:"google",targetUrl:"https://store.example/boots"},
    {keyword:"boots",position:4,observedAt:new Date("2026-10-20"),country:"US",device:"desktop",engine:"google",targetUrl:"https://store.example/boots"},
    {keyword:"boots",position:1,observedAt:new Date("2026-10-24"),country:"CA",device:"desktop",engine:"google",targetUrl:"https://store.example/boots"},
- ]);
+ ],new Date("2026-10-26T12:00:00Z"));
  assert.equal(ranked.length,1);
  assert.equal(buildRankTasks([
    {keyword:"old keyword",position:12,observedAt:new Date("2026-07-01"),country:"US",device:"desktop",engine:"google",targetUrl:"https://store.example/a"},

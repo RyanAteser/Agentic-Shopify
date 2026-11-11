@@ -1,4 +1,5 @@
 import db from "../db.server";
+import {reserveBlogDispatchAllowance} from "./blog-budget.server";
 
 /**
  * A job can be dispatched at most once. An uncertain HTTP outcome is NOT a
@@ -25,7 +26,8 @@ export type DispatchConfigSnapshot = {
  * so a preflight from an old browser/worker cannot dispatch an obsolete brief.
  */
 export async function claimQueuedDispatch(
-  shop: string, jobId: string, expectedConfig?: DispatchConfigSnapshot
+  shop: string, jobId: string, expectedConfig?: DispatchConfigSnapshot,
+  at = new Date(), env:Record<string,string|undefined>=process.env
 ): Promise<void> {
   await db.$transaction(async tx => {
     // Serialize with merchant preference changes and privacy redaction.
@@ -63,6 +65,10 @@ export async function claimQueuedDispatch(
       // a fresh brief; no n8n request has been made.
       throw new DispatchAlreadyClaimedError();
     }
+    // The same serialized transaction fences an optional prospective dollar
+    // allowance BEFORE running status or any remote n8n request. Any rejection
+    // rolls back this allowance and leaves the job queued.
+    await reserveBlogDispatchAllowance(tx,shop,jobId,at,env);
     const result = await tx.contentJob.updateMany({
       where: { id: jobId, shop, status: "queued" },
       data: { status: "running" }

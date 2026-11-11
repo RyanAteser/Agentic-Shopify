@@ -3,6 +3,7 @@
   "nodes": [
     {
       "id": "receive-draft-request",
+      "webhookId": "f08f96f2-b6dc-4ab6-b940-81c952f418cb",
       "name": "Receive Draft Request",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -87,7 +88,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const choice = $input.first().json.choices?.[0];\nif (choice?.finish_reason !== 'stop') throw new Error('Draft completion did not finish normally; operator reconciliation required');\nconst ctx = $('Prepare Brief').first().json;\nconst first = JSON.parse(choice?.message?.content ?? '{}');\nif (!first.title || !first.body) throw new Error('Model returned invalid article');\nreturn [{json:{...ctx,first}}];"
+        "jsCode": "const choice = $input.first().json.choices?.[0];\nif (choice?.finish_reason !== 'stop') throw new Error('Draft completion did not finish normally; operator reconciliation required');\nconst ctx = $('Prepare Brief').first().json;\nconst first = JSON.parse(choice?.message?.content ?? '{}');\nif (!first.title || !first.body) throw new Error('Model returned invalid article');\nconst api=$input.first().json;\nconst usage=api.usage;\nconst writerUsage=usage?{\n  stage:'writer',model:api.model,\n  inputTokens:usage.prompt_tokens,outputTokens:usage.completion_tokens,responseId:api.id\n}:null;\nreturn [{json:{...ctx,first,writerUsage}}];"
       }
     },
     {
@@ -128,7 +129,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const choice = $input.first().json.choices?.[0];\nif (choice?.finish_reason !== 'stop') throw new Error('Editorial completion did not finish normally; operator reconciliation required');\nconst ctx = $('Prepare Brief').first().json;\nconst article = JSON.parse(choice?.message?.content ?? '{}');\nif (!article.title || !article.body || !article.summary) throw new Error('Editor did not return a complete article');\nreturn [{json:{jobId:ctx.jobId,shop:ctx.shop,callbackToken:ctx.callbackToken,article}}];"
+        "jsCode": "const choice = $input.first().json.choices?.[0];\nif (choice?.finish_reason !== 'stop') throw new Error('Editorial completion did not finish normally; operator reconciliation required');\nconst ctx = $('Prepare Brief').first().json;\nconst article = JSON.parse(choice?.message?.content ?? '{}');\nif (!article.title || !article.body || !article.summary) throw new Error('Editor did not return a complete article');\nconst api=$input.first().json;\nconst usage=api.usage;\nconst editorUsage=usage?{\n  stage:'editor',model:api.model,\n  inputTokens:usage.prompt_tokens,outputTokens:usage.completion_tokens,responseId:api.id\n}:null;\nconst earlier=$('Parse Draft').first().json.writerUsage;\nreturn [{json:{jobId:ctx.jobId,shop:ctx.shop,callbackToken:ctx.callbackToken,\n  article,usage:[earlier,editorUsage].filter(Boolean)}}];"
       }
     },
     {
@@ -146,7 +147,7 @@
         "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({jobId:$json.jobId,shop:$json.shop,article:$json.article}) }}",
+        "jsonBody": "={{ JSON.stringify({jobId:$json.jobId,shop:$json.shop,article:$json.article,usage:$json.usage}) }}",
         "options": {
           "timeout": 30000,
           "redirect": {

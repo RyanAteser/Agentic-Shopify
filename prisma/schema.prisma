@@ -222,3 +222,155 @@ model EditorialReview {
   @@unique([shop, draftId])
   @@index([shop, reviewedAt])
 }
+
+
+/** Merchant-owned, persistent specialist slots and required skeptics. */
+model SwarmAgent {
+  id        String   @id @default(cuid())
+  shop      String
+  role      String
+  kind      String
+  label     String
+  specialty String @default("")
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([shop, role, kind, status])
+  @@index([shop, status])
+}
+
+/** A bounded research case, never an authorization to mutate the merchant store. */
+model SwarmCase {
+  id            String   @id @default(cuid())
+  shop          String
+  role          String
+  title         String
+  hypothesis    String
+  metric        String
+  rejectionRule String
+  participantsJson String @default("[]")
+  reviewRound  Int @default(0)
+  status        String   @default("queued")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@index([shop, status, createdAt])
+  @@index([shop, role, createdAt])
+}
+
+/** Append-only inter-agent envelopes; sender identity checked server-side. */
+model SwarmMessage {
+  id           String   @id @default(cuid())
+  shop         String
+  caseId       String
+  senderId     String
+  recipientId  String?
+  kind         String
+  body         String
+  evidenceJson String   @default("[]")
+  falsifier    String?
+  verdict      String?
+  reviewRound Int @default(0)
+  createdAt    DateTime @default(now())
+  @@index([shop, caseId, createdAt])
+  @@index([shop, senderId])
+}
+
+
+/** A single bounded attempt per case. No automatic replay after a network call. */
+model SwarmExecution {
+  id            String   @id @default(cuid())
+  shop          String
+  caseId        String   @unique
+  status        String   @default("reserved")
+  provider      String
+  model         String
+  plan          String
+  usageMonth    String
+  maxCalls      Int
+  callsStarted  Int      @default(0)
+  callsFinished Int      @default(0)
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  leaseToken    String?
+  leaseExpiresAt DateTime?
+  errorCode     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@index([shop, status, createdAt])
+}
+
+/** Charge exactly once at attempt claim. Unknown HTTP delivery remains charged. */
+model SwarmInvocation {
+  id          String   @id @default(cuid())
+  shop        String
+  executionId String
+  ordinal     Int
+  agentId     String
+  phase       String
+  status      String   @default("attempted")
+  inputTokens Int      @default(0)
+  outputTokens Int     @default(0)
+  outputHash  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@unique([executionId, ordinal])
+  @@index([shop, status, createdAt])
+}
+
+/** Bounded monthly reservations; all values are model-request units, not dollars. */
+model SwarmUsageMonth {
+  shop       String
+  month      String
+  reserved   Int      @default(0)
+  consumed   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@id([shop, month])
+  @@index([shop, month])
+}
+
+
+/** n8n worker-reported OpenAI token usage, NOT an independently verified invoice. */
+model BlogGenerationUsage {
+  id             String   @id @default(cuid())
+  shop           String
+  jobId          String
+  stage          String
+  provider       String   @default("openai-chat-completions")
+  model          String
+  inputTokens    Int
+  outputTokens   Int
+  responseIdHash String?
+  reportedAt     DateTime @default(now())
+  @@unique([shop, jobId, stage])
+  @@index([shop, reportedAt])
+}
+
+/** Owner-configured prospective exposure limit; NOT Shopify subscription billing. */
+model BlogBudgetPolicy {
+  shop                String   @id
+  enabled             Boolean  @default(false)
+  monthlyCapCents     Int
+  perJobReserveCents  Int
+  updatedAt           DateTime @updatedAt
+}
+
+/** Claimed upper-bound allowances, not invoice-backed actual spend. */
+model BlogBudgetMonth {
+  shop              String
+  month             String
+  committedCents    Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  @@id([shop, month])
+}
+
+/** Immutable claim tied to one original generation job. */
+model BlogBudgetClaim {
+  jobId             String   @id
+  shop              String
+  month             String
+  reservedCents     Int
+  createdAt         DateTime @default(now())
+  @@index([shop, month])
+}
